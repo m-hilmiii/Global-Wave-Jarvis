@@ -1,0 +1,22 @@
+# Global-Wave / JARVIS Core Dependencies
+
+# Web & API Server
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+python-multipart>=0.0.9
+pydantic>=2.0.0
+requests>=2.31.0
+
+# Audio Processing, STT & TTS
+faster-whisper>=1.0.0
+kokoro-onnx>=0.6.0
+soundfile>=0.12.1
+edge-tts>=7.0.0
+
+# Image & Video Processing
+pillow>=10.0.0
+
+# Google & YouTube Data API v3
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0

@@ -1,6 +1,7 @@
 """
 Global Wave - SQLite3 Checkpoint & Persistence Engine (Crash Survival)
 Stores task states, checkpoints, scene metadata, and YouTube upload history in app.db.
+Dynamic multi-platform path resolution (zero hardcoded OS paths).
 """
 import sqlite3
 import json
@@ -8,7 +9,8 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-DB_DIR = Path(r"C:\Users\unalm\OneDrive\Masaüstü\Global-Wawe\config")
+BASE_DIR = Path(__file__).resolve().parent.parent
+DB_DIR = BASE_DIR / "config"
 DB_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DB_DIR / "app.db"
 

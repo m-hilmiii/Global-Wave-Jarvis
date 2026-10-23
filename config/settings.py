@@ -1,6 +1,6 @@
 """
 Global Wave - Configuration & Token Manager
-Handles API keys, paths, and system discovery without requiring manual code edits.
+Handles API keys, paths, and system discovery without hardcoded credentials.
 """
 import os
 import json
@@ -20,16 +20,17 @@ TEMP_WORKSPACE.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_CONFIG = {
-    "pexels_api_key": "gcL9CKTL3CQw8XmOr8gnis0glhcTBvfLmBUX1VsmEN0uks6KZDxysbd0",
-    "ollama_host": "http://127.0.0.1:11434",
+    # Credentials are loaded from tokens.json or environment variables, NEVER hardcoded in source
+    "pexels_api_key": os.environ.get("PEXELS_API_KEY", ""),
+    "ollama_host": os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434"),
     "default_model": "qwen3:14b",
     "fast_model": "qwen3:8b",
     "german_model": "mistral-nemo:12b",
-    # Optional services for Phase 2 / Phase 3
-    "elevenlabs_api_key": "",
-    "replicate_api_key": "",
-    "supabase_url": "",
-    "supabase_key": "",
+    # Optional services
+    "elevenlabs_api_key": os.environ.get("ELEVENLABS_API_KEY", ""),
+    "replicate_api_key": os.environ.get("REPLICATE_API_KEY", ""),
+    "supabase_url": os.environ.get("SUPABASE_URL", ""),
+    "supabase_key": os.environ.get("SUPABASE_KEY", ""),
     "adspower_port": 50325,
     # Video & Render Defaults
     "fps": 30,
@@ -77,7 +78,13 @@ def load_settings() -> dict:
 def save_settings(new_settings: dict) -> dict:
     """Save new settings to tokens.json securely."""
     current = load_settings() if TOKENS_FILE.exists() else DEFAULT_CONFIG.copy()
-    current.update(new_settings)
+    
+    # Ignore masked values (e.g. '****') so existing credentials are not erased
+    for k, v in new_settings.items():
+        if isinstance(v, str) and (v.startswith("****") or v.endswith("****")):
+            continue
+        current[k] = v
+
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(TOKENS_FILE, "w", encoding="utf-8") as f:
         json.dump(current, f, indent=2, ensure_ascii=False)

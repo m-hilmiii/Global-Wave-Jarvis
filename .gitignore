@@ -57,3 +57,6 @@ data/whatsapp_inbox.json
 
 # Large font packs (>50MB)
 assets/fonts/*.ttc
+
+# Personal Contacts
+data/contacts.json

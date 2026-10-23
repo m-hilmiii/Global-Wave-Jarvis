@@ -1,0 +1,32 @@
+{
+  "contacts": [
+    {
+      "id": "c_owner",
+      "name": "Sistem Sahibi",
+      "phone": "+905550000001",
+      "relationship": "Sistem Sahibi",
+      "notes": "Test Hattı"
+    },
+    {
+      "id": "c_annem",
+      "name": "Annem",
+      "phone": "+905550001122",
+      "relationship": "Anne",
+      "notes": "Annem"
+    },
+    {
+      "id": "c_babam",
+      "name": "Babam",
+      "phone": "+905550003344",
+      "relationship": "Baba",
+      "notes": "Babam"
+    },
+    {
+      "id": "c_1",
+      "name": "Ahmet",
+      "phone": "+905551234567",
+      "relationship": "Arkadaş",
+      "notes": "Tasarımcı"
+    }
+  ]
+}

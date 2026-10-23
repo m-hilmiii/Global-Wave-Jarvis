@@ -70,7 +70,7 @@ KİMLİK VE TANITIM KURALLARI (ÇOK KESİN VE ÖNEMLİ):
    Sen kullanıcının asıl niyetini sez ve mesajı buna göre kusursuz kaleme al.
 5. ASLA ONAYSIZ MESAJ GÖNDERME (Human-in-the-Loop):
    Kullanıcı birine mesaj atmanı istediğinde doğrudan gönderme; karşı tarafa iletilecek şık ve uygun mesaj taslağını oluştur ve kullanıcının onayına sun.
-6. Adem Bey'e (+905538412761) rahatsızlık vermemek için test mesajı ASLA GÖNDERME. Testler daima Sayın Hilmi'nin kendi numarasına (+905518477838) iletilir.
+6. Rehberdeki kişilere rahatsızlık vermemek için test ve deneme mesajları daima sistem sahibinin kendi numarasına yönlendirilir.
 """
 
 class JarvisBrain:
@@ -87,10 +87,11 @@ class JarvisBrain:
             return {"reply": reply, "speak_text": speak_text, "action_taken": "no_draft"}
 
         draft = self.pending_draft
-        self.pending_draft = None
 
         res = whatsapp_tool.send_message_to_phone(draft["phone"], draft["message"], recipient_name=draft["recipient"])
         if res.get("success"):
+            # Only discard pending draft upon verified successful dispatch
+            self.pending_draft = None
             reply = (
                 f"Mesajınız WhatsApp üzerinden başarıyla iletildi efendim! ✅\n\n"
                 f"📱 **Alıcı:** {draft['recipient']} ({draft['phone']})\n"
@@ -101,8 +102,12 @@ class JarvisBrain:
             self._record_turn("Mesajı onayla ve gönder", reply)
             return {"reply": reply, "speak_text": speak_text, "action_taken": "whatsapp_dispatched", "details": res}
         else:
-            reply = f"Efendim, mesaj iletimi sırasında bir aksaklık oluştu: {res.get('error')}"
-            speak_text = "Mesaj iletimi sırasında bir hata oluştu efendim."
+            # Retain draft in state on failure so user can retry safely
+            reply = (
+                f"Efendim, mesaj iletimi sırasında bir aksaklık oluştu: {res.get('error')}\n\n"
+                f"Taslak korunuyor. Yeniden göndermemi ister misiniz?"
+            )
+            speak_text = "Mesaj iletimi sırasında bir hata oluştu efendim. Taslak korunuyor, tekrar deneyelim mi?"
             self._record_turn("Mesajı onayla ve gönder", reply)
             return {"reply": reply, "speak_text": speak_text, "action_taken": "whatsapp_error", "details": res}
 
@@ -140,8 +145,8 @@ GÖREVİN: Kullanıcının mesajını analiz et ve JSON formatında karar üret:
 
 İŞLEM TİPLERİ (action):
 1. "draft_whatsapp": Kullanıcı birine WhatsApp'tan mesaj göndermek istiyorsa.
-   - recipient: Rehberdeki kişi adı veya telefon numarası (Örn: "Babam", "Annem", "Emre", "Mücahit Hilmi", "05518477838").
-     * Eğer kullanıcı "kendime", "bana", "test mesajı" derse alıcı: "Mücahit Hilmi" (+905518477838).
+   - recipient: Rehberdeki kişi adı veya telefon numarası (Örn: "Babam", "Annem", "Emre", "Mücahit Hilmi", "05551234567").
+     * Eğer kullanıcı "kendime", "bana", "test mesajı" derse alıcı: "Mücahit Hilmi".
      * ASLA Adem'e test mesajı gönderme.
    - message_body: Karşı tarafa WhatsApp üzerinden iletilecek NİHAİ şık mesaj metni.
      * Kullanıcı talimat veya dağınık cümle kurduysa (Örn: "Emre, hali hatru, keyfi yerinde mi bunu merak ediyorum ona böyle bir mesaj üründür"):
@@ -512,11 +517,13 @@ JSON ŞEMASI:
             msg_body = re.sub(r'\bSayın Babam\b', 'Yaşar Amca', msg_body, flags=re.IGNORECASE)
             msg_body = re.sub(r'\bSayın Annem\b', 'Efendim', msg_body, flags=re.IGNORECASE)
 
-            # Prevent accidental test messages to Adem
-            if any(term in target.lower() for term in ["adem", "05538412761"]) and any(k in q_lower for k in ["test", "deneme"]):
+            # Prevent accidental test messages to external contacts
+            owner_contact = contacts_mgr.find_contact("Mücahit Hilmi") or contacts_mgr.find_contact("owner")
+            owner_phone = owner_contact.get("phone", "") if owner_contact else ""
+            if "adem" in target.lower() and any(k in q_lower for k in ["test", "deneme"]):
                 reply = (
                     "Efendim, talimatınız doğrultusunda Adem Bey'i rahatsız etmemek adına test mesajlarını durdurdum. "
-                    "Testleri kendi numaranız olan **+905518477838** üzerinden gerçekleştirelim mi?"
+                    f"Testleri kendi numaranız ({owner_phone or 'sistem hattınız'}) üzerinden gerçekleştirelim mi?"
                 )
                 speak_text = "Adem Bey'e rahatsızlık vermemek için test mesajını durdurdum efendim. Kendi numaranız üzerinden test edelim mi?"
                 self._record_turn(user_text, reply)

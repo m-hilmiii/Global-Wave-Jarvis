@@ -18,8 +18,13 @@ class ContactsManager:
     def _ensure_file(self):
         if not self.file_path.exists():
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.file_path, "w", encoding="utf-8-sig") as f:
-                json.dump({"contacts": []}, f, indent=2, ensure_ascii=False)
+            example_file = self.file_path.parent / "contacts.example.json"
+            if example_file.exists():
+                import shutil
+                shutil.copy(example_file, self.file_path)
+            else:
+                with open(self.file_path, "w", encoding="utf-8-sig") as f:
+                    json.dump({"contacts": []}, f, indent=2, ensure_ascii=False)
 
     def get_all(self) -> List[Dict]:
         try:

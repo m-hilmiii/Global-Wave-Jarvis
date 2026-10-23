@@ -37,7 +37,22 @@ from db.database import (
 )
 
 app = FastAPI(title="Global Wave AI Agency OS")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Security: Restrict CORS to trusted local origins to mitigate cross-origin attacks & DNS rebinding
+ALLOWED_ORIGINS = [
+    "http://127.0.0.1:7860",
+    "http://localhost:7860",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 WEB_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
@@ -194,12 +209,38 @@ async def serve_hud():
     with open(template_path, "r", encoding="utf-8") as f:
         return f.read()
 
+SENSITIVE_KEYS = {
+    "pexels_api_key",
+    "pixabay_api_key",
+    "elevenlabs_api_key",
+    "replicate_api_key",
+    "supabase_key",
+    "openai_api_key",
+    "anthropic_api_key",
+    "gemini_api_key",
+}
+
+def mask_key(val: str) -> str:
+    if not val or not isinstance(val, str):
+        return ""
+    if len(val) <= 8:
+        return "********"
+    return val[:4] + "*" * (len(val) - 8) + val[-4:]
+
+def get_safe_settings() -> dict:
+    raw = load_settings()
+    safe = dict(raw)
+    for k in SENSITIVE_KEYS:
+        if k in safe and safe[k]:
+            safe[k] = mask_key(str(safe[k]))
+    return safe
+
 @app.get("/api/config")
 async def get_config():
-    settings = load_settings()
+    safe_settings = get_safe_settings()
     yt_profile = get_channel_profile()
     return {
-        "settings": settings,
+        "settings": safe_settings,
         "is_setup_complete": is_setup_complete(),
         "personas": PERSONAS,
         "youtube": yt_profile
@@ -208,8 +249,20 @@ async def get_config():
 @app.post("/api/config")
 async def update_config(request: Request):
     data = await request.json()
-    saved = save_settings(data)
-    return {"status": "success", "settings": saved, "is_setup_complete": is_setup_complete()}
+    current = load_settings()
+    merged = {}
+    for k, v in data.items():
+        # Preserve active secrets if masked or empty in incoming payload
+        if k in SENSITIVE_KEYS and isinstance(v, str) and ("*" in v or not v.strip()):
+            merged[k] = current.get(k, "")
+        else:
+            merged[k] = v
+    saved = save_settings(merged)
+    safe_saved = dict(saved)
+    for k in SENSITIVE_KEYS:
+        if k in safe_saved and safe_saved[k]:
+            safe_saved[k] = mask_key(str(safe_saved[k]))
+    return {"status": "success", "settings": safe_saved, "is_setup_complete": is_setup_complete()}
 
 # =========================================================================
 # MODÜL 1: 100% REAL LIVE CHANNELS
