@@ -44,29 +44,34 @@ class VRAMGuard:
             swap_used_pct = round(((stat.ullTotalPageFile - stat.ullAvailPageFile) / max(1, stat.ullTotalPageFile)) * 100, 1)
 
             return {
+                "metrics_available": True,
                 "ram_total_gb": total_ram_gb,
                 "ram_available_gb": avail_ram_gb,
                 "ram_used_pct": used_pct,
                 "swap_total_gb": total_swap_gb,
                 "swap_used_pct": swap_used_pct,
-                "cpu_percent": 15,  # nominal baseline
+                "cpu_percent": None,  # Not simulated: requires external PDH/psutil counter
                 "safe_for_diffusion": used_pct < self.ram_threshold_pct
             }
         except Exception as e:
             logger.warning(f"Failed to read native memory status: {e}")
             return {
-                "ram_total_gb": 16.0,
-                "ram_available_gb": 8.0,
-                "ram_used_pct": 50,
-                "swap_total_gb": 32.0,
-                "swap_used_pct": 10,
-                "cpu_percent": 10,
-                "safe_for_diffusion": True
+                "metrics_available": False,
+                "ram_total_gb": None,
+                "ram_available_gb": None,
+                "ram_used_pct": None,
+                "swap_total_gb": None,
+                "swap_used_pct": None,
+                "cpu_percent": None,
+                "safe_for_diffusion": False
             }
 
     def check_safe_state(self) -> bool:
-        """Checks if memory is healthy enough to start a heavy job."""
+        """Checks if memory is healthy enough to start a heavy job (fail-closed if metrics unavailable)."""
         metrics = self.get_system_metrics()
+        if not metrics.get("metrics_available") or metrics.get("ram_used_pct") is None:
+            logger.warning("[RAM Guard] System telemetry unavailable; failing closed for safety.")
+            return False
         if metrics["ram_used_pct"] > self.ram_threshold_pct:
             logger.warning(
                 f"[GUARD ALERT] RAM usage is high ({metrics['ram_used_pct']}%). "

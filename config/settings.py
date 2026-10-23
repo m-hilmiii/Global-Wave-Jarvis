@@ -75,19 +75,81 @@ def load_settings() -> dict:
     except Exception:
         return DEFAULT_CONFIG.copy()
 
+from urllib.parse import urlparse
+
+ALLOWED_SETTING_KEYS = {
+    "pexels_api_key",
+    "pixabay_api_key",
+    "ollama_host",
+    "default_model",
+    "fast_model",
+    "german_model",
+    "elevenlabs_api_key",
+    "replicate_api_key",
+    "supabase_url",
+    "supabase_key",
+    "adspower_port",
+    "fps",
+    "width",
+    "height",
+    "bgm_volume",
+    "enable_bgm",
+    "font_name",
+    "allow_remote_ollama"
+}
+
+def validate_ollama_host(host_url: str, allow_remote: bool = False) -> str:
+    """Validate that ollama_host is safe and restricted to localhost unless remote is explicitly allowed."""
+    if not host_url or not isinstance(host_url, str):
+        return "http://127.0.0.1:11434"
+    clean = host_url.strip().rstrip("/")
+    if not (clean.startswith("http://") or clean.startswith("https://")):
+        clean = "http://" + clean
+    parsed = urlparse(clean)
+    hostname = parsed.hostname or ""
+    if not allow_remote and hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise ValueError(f"Güvenlik kısıtlaması: ollama_host varsayılan olarak yalnızca yerel makineye (127.0.0.1/localhost) yönlendirilebilir. Uzak sunucu ({hostname}) için 'allow_remote_ollama: true' belirtilmelidir.")
+    return clean
+
 def save_settings(new_settings: dict) -> dict:
-    """Save new settings to tokens.json securely."""
+    """Save new settings to tokens.json with strict schema validation and atomic write."""
     current = load_settings() if TOKENS_FILE.exists() else DEFAULT_CONFIG.copy()
-    
-    # Ignore masked values (e.g. '****') so existing credentials are not erased
+    allow_remote = bool(new_settings.get("allow_remote_ollama", current.get("allow_remote_ollama", False)))
+
     for k, v in new_settings.items():
-        if isinstance(v, str) and (v.startswith("****") or v.endswith("****")):
+        if k not in ALLOWED_SETTING_KEYS:
             continue
-        current[k] = v
+        if isinstance(v, str) and ("*" in v or v.startswith("****") or v.endswith("****")):
+            continue
+            
+        if k == "ollama_host":
+            current[k] = validate_ollama_host(str(v), allow_remote=allow_remote)
+        elif k in ["fps", "width", "height", "adspower_port"]:
+            try:
+                val = int(v)
+                if k == "fps" and not (15 <= val <= 60):
+                    continue
+                if k in ["width", "height"] and not (240 <= val <= 3840):
+                    continue
+                current[k] = val
+            except (ValueError, TypeError):
+                continue
+        elif k == "bgm_volume":
+            try:
+                val = float(v)
+                current[k] = max(0.0, min(1.0, val))
+            except (ValueError, TypeError):
+                continue
+        elif k in ["enable_bgm", "allow_remote_ollama"]:
+            current[k] = bool(v)
+        else:
+            current[k] = str(v).strip()
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(TOKENS_FILE, "w", encoding="utf-8") as f:
+    tmp_file = TOKENS_FILE.with_suffix(".tmp")
+    with open(tmp_file, "w", encoding="utf-8") as f:
         json.dump(current, f, indent=2, ensure_ascii=False)
+    tmp_file.replace(TOKENS_FILE)
     return current
 
 def is_setup_complete() -> bool:

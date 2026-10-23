@@ -1,5 +1,30 @@
-// Security Helpers: Safe Fetch with Local Session Token
+let localSessionToken = "";
+let sessionAuthPromise = null;
+
+async function initSessionAuth() {
+    if (!sessionAuthPromise) {
+        sessionAuthPromise = (async () => {
+            try {
+                const res = await fetch("/api/session/token");
+                const data = await res.json();
+                if (data.status === "success" && data.token) {
+                    localSessionToken = data.token;
+                    return data.token;
+                }
+            } catch (e) {
+                console.warn("Session token handshake failed:", e);
+            }
+            return "";
+        })();
+    }
+    return sessionAuthPromise;
+}
+
+// Security Helpers: Safe Fetch with Local Session Token (Awaits session token if not yet loaded)
 async function authFetch(url, options = {}) {
+    if (!localSessionToken) {
+        await initSessionAuth();
+    }
     options.headers = options.headers || {};
     if (localSessionToken && !options.headers["X-Local-Token"]) {
         options.headers["X-Local-Token"] = localSessionToken;
@@ -30,18 +55,7 @@ function sanitizeUrl(url) {
     return "";
 }
 
-let localSessionToken = "";
-async function initSessionAuth() {
-    try {
-        const res = await fetch("/api/session/token");
-        const data = await res.json();
-        if (data.status === "success" && data.token) {
-            localSessionToken = data.token;
-        }
-    } catch (e) {
-        console.warn("Session token handshake failed:", e);
-    }
-}
+// Session auth initialized at top
 initSessionAuth();
 
 // Global Wave - AI Agency OS Client Logic (100% Live Real YouTube Data & Premium SaaS Terminal)
@@ -245,7 +259,7 @@ document.addEventListener("DOMContentLoaded", () => {
     async function initApp() {
         try {
             // Load base configuration & personas
-            const res = await fetch("/api/config");
+            const res = await authFetch("/api/config");
             const data = await res.json();
             personasData = data.personas || {};
             renderStudioPersonas(personasData);
@@ -371,7 +385,7 @@ document.addEventListener("DOMContentLoaded", () => {
             authPollingInterval = setInterval(async () => {
                 attempts++;
                 try {
-                    const cRes = await fetch("/api/channels");
+                    const cRes = await authFetch("/api/channels");
                     const channels = await cRes.json();
                     if (channels && channels.length > 0 && channels[0].is_connected) {
                         clearInterval(authPollingInterval);
@@ -449,7 +463,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Fetch and bind 100% Real YouTube Channels
     async function loadChannels() {
         try {
-            const res = await fetch("/api/channels");
+            const res = await authFetch("/api/channels");
             channelsData = await res.json();
             renderDashboardChannels(channelsData);
 
@@ -629,7 +643,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Video Library Loader & Active Studio Picker Binding
     async function loadVideoLibrary() {
         try {
-            const res = await fetch("/api/videos");
+            const res = await authFetch("/api/videos");
             videoLibrary = await res.json();
             if (dashTotalVideos) dashTotalVideos.textContent = `${videoLibrary.length} Video`;
             if (studioVideoCountBadge) studioVideoCountBadge.textContent = `${videoLibrary.length} Video`;
@@ -883,7 +897,7 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Onarılıyor...';
 
         try {
-            const res = await fetch(`/api/tasks/${activeTaskId}/regenerate_scene`, {
+            const res = await authFetch(`/api/tasks/${activeTaskId}/regenerate_scene`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -940,7 +954,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const thumbPresetEl = document.getElementById("studioThumbPreset");
 
             try {
-                const response = await fetch("/api/generate", {
+                const response = await authFetch("/api/generate", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -975,7 +989,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function listenToTaskEvents(taskId) {
-        const evtSource = new EventSource(`/api/events/${taskId}`);
+        const evtSource = new EventSource(`/api/events/${taskId}?token=${encodeURIComponent(localSessionToken || '')}`);
 
         evtSource.onmessage = (event) => {
             try {
@@ -1040,7 +1054,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================================================
     async function loadAnalyticsData() {
         try {
-            const res = await fetch("/api/analytics/default");
+            const res = await authFetch("/api/analytics/default");
             const data = await res.json();
 
             if (anTotalViews) anTotalViews.textContent = (data.total_views || 0).toLocaleString();
@@ -1179,7 +1193,7 @@ document.addEventListener("DOMContentLoaded", () => {
             tr.className = "hover:bg-slate-800/30 transition-colors";
             const isYt = Boolean(v.youtube_url);
             tr.innerHTML = `
-                <td class="py-3 text-white font-medium max-w-xs truncate">${v.topic || "Otonom Shorts"}</td>
+                <td class="py-3 text-white font-medium max-w-xs truncate">${escapeHtml(v.topic || "Otonom Shorts")}</td>
                 <td><span class="px-2 py-0.5 rounded bg-dark-950 text-cyan-400 border border-slate-800">1080p FHD</span></td>
                 <td>${isYt ? '1' : '0 (Arşiv)'}</td>
                 <td>${isYt ? '0' : '0'}</td>
@@ -1195,7 +1209,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================================================
     async function loadFeedbackReport(channelId) {
         try {
-            const res = await fetch(`/api/feedback/report/${channelId}`);
+            const res = await authFetch(`/api/feedback/report/${channelId}`);
             const report = await res.json();
             renderFeedbackReportUI(report);
         } catch (e) {
@@ -1208,7 +1222,7 @@ document.addEventListener("DOMContentLoaded", () => {
             feedbackDemandsList.innerHTML = report.audience_demands.map(d => `
                 <li class="flex items-start space-x-2 p-2 rounded bg-dark-950/60 border border-slate-800/80">
                     <i class="fa-solid fa-check text-cyan-400 mt-0.5"></i>
-                    <span class="text-slate-200">${d}</span>
+                    <span class="text-slate-200">${escapeHtml(d)}</span>
                 </li>
             `).join("");
         }
@@ -1217,7 +1231,7 @@ document.addEventListener("DOMContentLoaded", () => {
             feedbackWeaknessesList.innerHTML = report.weaknesses_to_avoid.map(w => `
                 <li class="flex items-start space-x-2 p-2 rounded bg-dark-950/60 border border-slate-800/80">
                     <i class="fa-solid fa-xmark text-yt-red mt-0.5"></i>
-                    <span class="text-slate-300">${w}</span>
+                    <span class="text-slate-300">${escapeHtml(w)}</span>
                 </li>
             `).join("");
         }
@@ -1233,7 +1247,7 @@ document.addEventListener("DOMContentLoaded", () => {
             runAiAnalysisBtn.disabled = true;
             runAiAnalysisBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Qwen 14B Analiz Ediyor...';
             try {
-                const res = await fetch("/api/feedback/analyze/default", { method: "POST" });
+                const res = await authFetch("/api/feedback/analyze/default", { method: "POST" });
                 const data = await res.json();
                 if (data.report) {
                     renderFeedbackReportUI(data.report);
@@ -1415,7 +1429,7 @@ document.addEventListener("DOMContentLoaded", () => {
             nicheAnalyzeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Analiz Ediliyor...';
 
             try {
-                const res = await fetch("/api/niche/analyze", {
+                const res = await authFetch("/api/niche/analyze", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ channel: channel })
@@ -1465,7 +1479,7 @@ document.addEventListener("DOMContentLoaded", () => {
             nicheDiscoverBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Taranıyor...';
 
             try {
-                const res = await fetch("/api/niche/discover", {
+                const res = await authFetch("/api/niche/discover", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ keyword: kw, country: country })
@@ -1480,15 +1494,15 @@ document.addEventListener("DOMContentLoaded", () => {
                             <div class="flex justify-between items-start">
                                 <div>
                                     <h5 class="text-xs font-bold text-white flex items-center space-x-1.5">
-                                        <span>${n.flag}</span>
-                                        <span>${n.niche_name}</span>
+                                        <span>${escapeHtml(n.flag)}</span>
+                                        <span>${escapeHtml(n.niche_name)}</span>
                                     </h5>
-                                    <span class="text-[10px] text-amber-400 font-mono font-bold">${n.cpm_tier} RPM • Skor: ${n.opportunity_score}/10</span>
+                                    <span class="text-[10px] text-amber-400 font-mono font-bold">${escapeHtml(n.cpm_tier)} RPM • Skor: ${escapeHtml(n.opportunity_score)}/10</span>
                                 </div>
-                                <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono">${n.competition_level}</span>
+                                <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono">${escapeHtml(n.competition_level)}</span>
                             </div>
-                            <p class="text-[11px] text-slate-300 font-mono"><span class="text-slate-500">Örnek Konu:</span> "${n.breakout_sample}"</p>
-                            <p class="text-[10px] text-slate-400 font-sans">${n.why_it_works}</p>
+                            <p class="text-[11px] text-slate-300 font-mono"><span class="text-slate-500">Örnek Konu:</span> "${escapeHtml(n.breakout_sample)}"</p>
+                            <p class="text-[10px] text-slate-400 font-sans">${escapeHtml(n.why_it_works)}</p>
                             <button data-niche="${escapeHtml(n.breakout_sample)}" onclick="window.useNicheTopic(this.getAttribute('data-niche'))" class="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 font-mono flex items-center space-x-1 pt-1">
                                 <span>Bu Konuyla Video Üret</span>
                                 <i class="fa-solid fa-arrow-right text-[10px]"></i>
@@ -1540,7 +1554,7 @@ document.addEventListener("DOMContentLoaded", () => {
             thumbGenerateStandaloneBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Kapak Üretiliyor...';
 
             try {
-                const res = await fetch("/api/thumbnail/generate", {
+                const res = await authFetch("/api/thumbnail/generate", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -1773,7 +1787,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (meta.fromMe && meta.messageId) {
                 actionBtnHtml = `
                     <div class="mt-1 flex items-center justify-end space-x-1 opacity-0 hover:opacity-100 transition-opacity">
-                        <button onclick="window.deleteSingleMessage('${meta.jid}', '${meta.messageId}', true)" title="Herkesten Sil" class="text-[10px] text-rose-400/80 hover:text-rose-300 px-1.5 py-0.5 rounded bg-rose-950/40 border border-rose-500/30">
+                        <button data-jid="${escapeHtml(meta.jid)}" data-mid="${escapeHtml(meta.messageId)}" onclick="window.deleteSingleMessage(this.dataset.jid, this.dataset.mid, true)" title="Herkesten Sil" class="text-[10px] text-rose-400/80 hover:text-rose-300 px-1.5 py-0.5 rounded bg-rose-950/40 border border-rose-500/30">
                             <i class="fa-solid fa-trash-can mr-1"></i>Herkesten Sil
                         </button>
                     </div>
@@ -1807,7 +1821,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // --- Load & Render Contacts Sidebar ---
         async function loadChatsList() {
             try {
-                const res = await fetch("/api/jarvis/chats");
+                const res = await authFetch("/api/jarvis/chats");
                 const data = await res.json();
                 if (data.status === "success" && Array.isArray(data.chats)) {
                     allContacts = data.chats;
@@ -1953,7 +1967,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // Mark as read on server
                 try {
-                    await fetch(`/api/jarvis/chats/${encodeURIComponent(chatObj.short_name)}/read`, { method: "POST" });
+                    await authFetch(`/api/jarvis/chats/${encodeURIComponent(chatObj.short_name)}/read`, { method: "POST" });
                     chatObj.unread_count = 0;
                     renderContactsList(allContacts);
                 } catch(e) {}
@@ -1977,7 +1991,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
             `;
             try {
-                const res = await fetch(`/api/jarvis/chats/${encodeURIComponent(contactQuery)}/messages`);
+                const res = await authFetch(`/api/jarvis/chats/${encodeURIComponent(contactQuery)}/messages`);
                 const data = await res.json();
                 feedEl.innerHTML = "";
 
@@ -2253,7 +2267,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                             if (inputEl) inputEl.placeholder = "Ses analiz ediliyor (Faster-Whisper)...";
                             try {
-                                const resp = await fetch("/api/jarvis/transcribe", {
+                                const resp = await authFetch("/api/jarvis/transcribe", {
                                     method: "POST",
                                     body: formData
                                 });
@@ -2283,7 +2297,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // --- Live WhatsApp Inbound Message Poller (Every 3.5s) ---
         async function checkInboundMessages() {
             try {
-                const res = await fetch(`/api/jarvis/inbox/check_new?since=${lastPolledTimestamp}`);
+                const res = await authFetch(`/api/jarvis/inbox/check_new?since=${lastPolledTimestamp}`);
                 const data = await res.json();
                 if (data.status === "success") {
                     if (Array.isArray(data.new_messages) && data.new_messages.length > 0) {
@@ -2314,7 +2328,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Hardware & VRAM Telemetry Loop
         async function updateTelemetry() {
             try {
-                const r = await fetch("/api/jarvis/telemetry");
+                const r = await authFetch("/api/jarvis/telemetry");
                 const d = await r.json();
                 if (d.status === "success" && d.metrics) {
                     const el = document.getElementById("jarvisVramText");

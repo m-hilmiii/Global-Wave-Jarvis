@@ -21,18 +21,33 @@ sys.path.insert(0, str(BASE_DIR))
 from config.settings import get_ffmpeg_bin, load_settings, is_setup_complete
 
 def ensure_ollama_running():
-    """Ensure Ollama local server is responding, auto-launch if not."""
+    """Ensure Ollama local server is responding, auto-launch and verify actual readiness."""
+    settings = load_settings()
+    ollama_url = settings.get("ollama_host", "http://127.0.0.1:11434")
+    tags_url = f"{ollama_url.rstrip('/')}/api/tags"
+    
     try:
-        urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=2)
-        print("[1/4] Ollama Service: Active and Ready")
+        urllib.request.urlopen(tags_url, timeout=2)
+        print(f"[1/4] Ollama Servisi: Aktif ve Hazır ({ollama_url})")
+        return True
     except Exception:
-        print("[1/4] Ollama Service: Starting in background...")
+        print("[1/4] Ollama Servisi: Arka planda başlatılıyor...")
         try:
             subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            time.sleep(2)
-            print("      Ollama started successfully!")
+            # Poll up to 6 times (6 seconds) for verified readiness
+            for attempt in range(1, 7):
+                time.sleep(1)
+                try:
+                    urllib.request.urlopen(tags_url, timeout=1.5)
+                    print(f"      Ollama başarıyla yanıt vermeye başladı! ({ollama_url})")
+                    return True
+                except Exception:
+                    pass
+            print("      Bilgi: Ollama arka planda tetiklendi, yanıt bekleniyor.")
+            return False
         except Exception as e:
-            print(f"      Warning: Could not auto-launch Ollama: {e}")
+            print(f"      Uyarı: Ollama otomatik başlatılamadı: {e}")
+            return False
 
 def main():
     print("=" * 60)

@@ -114,19 +114,60 @@ def query_pixabay_api(query_str: str, pixabay_api_key: str = None, orientation: 
         print(f"[WARN] Pixabay query error for '{query_str}': {e}")
         return None
 
+from urllib.parse import urlparse
+
+ALLOWED_VIDEO_DOMAINS = (
+    "pexels.com",
+    "pixabay.com",
+    "akamaized.net",
+    "cloudfront.net",
+    "images.pexels.com",
+    "player.vimeo.com"
+)
+MAX_CLIP_BYTES = 50 * 1024 * 1024  # 50MB max limit per B-roll clip
+
 def download_video_cached(url: str, keyword: str, force_refresh: bool = False, orientation: str = "portrait") -> str:
+    """Downloads a video clip safely with domain validation, size bounding, and atomic file write."""
+    # 1. URL Domain validation
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
+    if not any(hostname == d or hostname.endswith("." + d) for d in ALLOWED_VIDEO_DOMAINS):
+        raise ValueError(f"Güvenlik kısıtlaması: Onaylanmamış medya CDN alan adı ({hostname}) üzerinden indirme engellendi.")
+
     orient_prefix = "land" if orientation in ["landscape", "horizontal"] else "port"
+    clean_kw = re.sub(r'[^a-zA-Z0-9_]', '_', sanitize_keyword(keyword))[:25]
     url_hash = str(abs(hash(url)))[:10]
-    out_path = CACHE_DIR / f"clip_{orient_prefix}_{sanitize_keyword(keyword).replace(' ', '_')}_{url_hash}.mp4"
+    out_path = CACHE_DIR / f"clip_{orient_prefix}_{clean_kw}_{url_hash}.mp4"
     
-    if out_path.exists() and not force_refresh:
+    if out_path.exists() and not force_refresh and out_path.stat().st_size > 1024:
         return str(out_path)
-        
-    resp = requests.get(url, stream=True, timeout=20)
+
+    # 2. Stream with byte bounding
+    resp = requests.get(url, stream=True, timeout=25)
     resp.raise_for_status()
-    with open(out_path, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=1024 * 512):
-            f.write(chunk)
+    
+    # Check Content-Length if present
+    cl = resp.headers.get("content-length")
+    if cl and int(cl) > MAX_CLIP_BYTES:
+        raise ValueError(f"Medya dosyası boyutu ({int(cl)/(1024*1024):.1f}MB) maksimum sınırı (50MB) aşıyor.")
+
+    tmp_out = out_path.with_suffix(".tmp")
+    downloaded = 0
+    try:
+        with open(tmp_out, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=1024 * 128):
+                if chunk:
+                    downloaded += len(chunk)
+                    if downloaded > MAX_CLIP_BYTES:
+                        raise ValueError("Medya dosyası akış sırasında 50MB sınırını aştı; indirme durduruldu.")
+                    f.write(chunk)
+        tmp_out.replace(out_path)
+    finally:
+        if tmp_out.exists():
+            try:
+                tmp_out.unlink()
+            except Exception:
+                pass
             
     return str(out_path)
 

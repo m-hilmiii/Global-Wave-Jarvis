@@ -21,7 +21,7 @@ class TelegramTool:
 
     def send_message(self, text: str) -> Dict[str, Any]:
         if not self.is_configured():
-            logger.warning(f"[Telegram Standby] (Token not configured): {text}")
+            logger.info("[Telegram Standby] Message dispatch skipped - Telegram bot not configured.")
             return {
                 "success": False,
                 "status": "not_configured",
@@ -48,6 +48,9 @@ class TelegramTool:
                 resp = requests.post(url, data={"chat_id": self.chat_id, "caption": caption}, files={"video": f}, timeout=60)
             return {"success": resp.status_code == 200, "response": resp.json()}
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            err_msg = str(e)
+            if self.token:
+                err_msg = err_msg.replace(self.token, "********")
+            return {"success": False, "error": f"Telegram video dispatch error: {err_msg}"}
 
 telegram_tool = TelegramTool()

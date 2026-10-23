@@ -109,7 +109,7 @@ def inject_subtle_typo(text: str) -> str:
 
     return text
 
-def generate_rage_bait(script_data: dict, persona_id: str = "us_hustler", inject_typo: bool = True) -> dict:
+def generate_rage_bait(script_data: dict, persona_id: str = "us_hustler", inject_typo: bool = False) -> dict:
     """
     Enhances a script JSON with comment bait, provocative questions, and an optional subtitle typo.
     """

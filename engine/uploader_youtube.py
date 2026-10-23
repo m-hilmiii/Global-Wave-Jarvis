@@ -263,11 +263,13 @@ def set_thumbnail(video_id: str, thumbnail_path: str) -> bool:
         print(f"[WARN] Failed to set thumbnail for {video_id}: {e}")
         return False
 
-def schedule_publish(video_id: str, delay_hours: int = 3) -> bool:
+def schedule_publish(video_id: str, delay_hours: int) -> bool:
     """
     Schedules a private video to go public automatically after delay_hours.
-    This gives YouTube algorithm time to scan Content-ID, encode 1080p/4K, and index tags.
+    Explicit delay_hours (> 0) is mandatory; no unsafe silent default.
     """
+    if delay_hours <= 0:
+        raise ValueError("Zamanlanmış yayınlama için açık bir pozitif gecikme (delay_hours > 0) belirtilmelidir.")
     try:
         service = get_youtube_service()
         pub_time = datetime.now(timezone.utc) + timedelta(hours=delay_hours)
@@ -348,9 +350,11 @@ def upload_short_video(
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
         
-    can_upload, today_count = check_daily_upload_limit(max_per_day=4)
-    if not can_upload:
-        raise RuntimeError(f"Günlük maksimum güvenli yükleme sınırına ({today_count}/4) ulaşıldı. Kanal güvenliği ve spam koruması için işlem durduruldu.")
+    # Atomically verify limit and reserve slot before upload begins
+    with UPLOAD_LOCK:
+        can_upload, today_count = check_daily_upload_limit(max_per_day=4)
+        if not can_upload:
+            raise RuntimeError(f"Günlük maksimum güvenli yükleme sınırına ({today_count}/4) ulaşıldı. Kanal güvenliği ve spam koruması için işlem durduruldu.")
 
     service = get_youtube_service()
     

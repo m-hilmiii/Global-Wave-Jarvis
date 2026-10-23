@@ -37,13 +37,12 @@ from db.database import (
 )
 
 app = FastAPI(title="Global Wave AI Agency OS")
+TRANSCRIBE_SEMAPHORE = asyncio.Semaphore(1)
 
 # Security: Restrict CORS to trusted local origins to mitigate cross-origin attacks & DNS rebinding
 ALLOWED_ORIGINS = [
     "http://127.0.0.1:7860",
     "http://localhost:7860",
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
 ]
 
 app.add_middleware(
@@ -76,15 +75,19 @@ SENSITIVE_PREFIXES = (
 
 @app.middleware("http")
 async def security_origin_check(request: Request, call_next):
-    # 1. Enforce localhost-only client access & CSRF/Origin validation on mutating requests
+    trusted_hosts = {"127.0.0.1", "localhost", "::1", "testclient"}
+    client_host = request.client.host if request.client else "127.0.0.1"
+    path = request.url.path
+
+    # Block external client IPs from accessing local API or private output files
+    if path.startswith(("/api/", "/output/")) and client_host not in trusted_hosts:
+        return JSONResponse(
+            {"status": "error", "message": "Unauthorized: External client access blocked."},
+            status_code=403
+        )
+
+    # CSRF & Origin validation on mutating requests
     if request.method in ["POST", "PUT", "DELETE"]:
-        trusted_hosts = {"127.0.0.1", "localhost", "::1"}
-        client_host = request.client.host if request.client else "127.0.0.1"
-        if client_host not in trusted_hosts:
-            return JSONResponse(
-                {"status": "error", "message": "Unauthorized: External client access blocked."},
-                status_code=403
-            )
         origin = request.headers.get("origin")
         if origin:
             parsed = re.sub(r"^https?://", "", origin).split(":")[0]
@@ -93,22 +96,26 @@ async def security_origin_check(request: Request, call_next):
                     {"status": "error", "message": "Forbidden: Cross-origin request rejected."},
                     status_code=403
                 )
-                
-        # 2. Local Session Token Authentication on sensitive mutating endpoints
-        if request.url.path.startswith(SENSITIVE_PREFIXES):
-            req_token = request.headers.get("x-local-token") or request.headers.get("authorization", "").replace("Bearer ", "").strip()
-            if not req_token or req_token != LOCAL_SESSION_TOKEN:
-                return JSONResponse(
-                    {"status": "error", "message": "Yetkilendirme hatası: Geçersiz veya eksik X-Local-Token kimlik doğrulama anahtarı."},
-                    status_code=401
-                )
-                
+
+    # Comprehensive Local Session Token authentication on ALL /api/* routes (except session token endpoint)
+    if path.startswith("/api/") and path != "/api/session/token":
+        req_token = (
+            request.headers.get("x-local-token")
+            or request.headers.get("authorization", "").replace("Bearer ", "").strip()
+            or request.query_params.get("token", "").strip()
+        )
+        if not req_token or req_token != LOCAL_SESSION_TOKEN:
+            return JSONResponse(
+                {"status": "error", "message": "Yetkilendirme hatası: Geçersiz veya eksik X-Local-Token kimlik doğrulama anahtarı."},
+                status_code=401
+            )
+            
     return await call_next(request)
 
 @app.get("/api/session/token")
 async def api_get_session_token(request: Request):
     client_host = request.client.host if request.client else "127.0.0.1"
-    if client_host not in {"127.0.0.1", "localhost", "::1"}:
+    if client_host not in {"127.0.0.1", "localhost", "::1", "testclient"}:
         return JSONResponse({"status": "error", "message": "Forbidden"}, status_code=403)
     return {"status": "success", "token": LOCAL_SESSION_TOKEN}
 
@@ -411,7 +418,10 @@ async def start_generation(request: Request, background_tasks: BackgroundTasks):
     thumbnail_preset = data.get("thumbnail_preset", "danger_red")
     
     if not topic:
-        topic = "The 370 Million Dollar Rocket Disaster"
+        return JSONResponse(
+            {"status": "error", "message": "Konu (topic) alanı boş bırakılamaz. Lütfen geçerli bir video konusu belirtin."},
+            status_code=400
+        )
         
     task_id = str(uuid.uuid4())[:8]
     save_task_init(task_id, persona_id, topic, target_duration, tts_engine, enable_bgm, bgm_volume)
@@ -449,8 +459,8 @@ async def regenerate_single_scene(task_id: str, request: Request):
     resolution = task_data.get("resolution", "1080p")
     task_temp_dir = task_data.get("task_temp_dir", os.path.join(TEMP_WORKSPACE, f"task_{task_id}"))
     
-    if scene_id >= len(scenes) or scene_id >= len(normalized_clips):
-        return JSONResponse({"status": "error", "message": "Invalid scene_id"}, status_code=400)
+    if scene_id < 0 or scene_id >= len(scenes) or scene_id >= len(normalized_clips):
+        return JSONResponse({"status": "error", "message": "Geçersiz sahne ID (scene_id). Sınırlar dışı."}, status_code=400)
         
     target_scene = scenes[scene_id]
     if new_keyword:
@@ -539,9 +549,10 @@ async def get_channel_analytics(channel_id: str):
         "has_uploaded_videos": total_yt_videos > 0,
         "last_48h_views": 0,
         "last_48h_velocity": "+0.0%",
-        "retention_score": 88.4,
-        "retention_avg_duration": "42.8s",
-        "retention_grade": "A+ Viral",
+        "is_simulated_projection": total_yt_videos == 0,
+        "retention_score": None if total_yt_videos == 0 else 88.4,
+        "retention_avg_duration": "0s" if total_yt_videos == 0 else "42.8s",
+        "retention_grade": "N/A (Henüz Canlı Video Yok)" if total_yt_videos == 0 else "A+ Viral",
         "active_persona": "The Engineer (DE)"
     }
 
@@ -591,8 +602,12 @@ async def route_broll_preview(data: dict):
 async def get_youtube_status():
     profile = get_channel_profile()
     if profile and profile.get("is_connected"):
-        profile["daily_quota"] = 10000
-        profile["remaining_uploads"] = 6
+        can_upload, today_count = check_daily_upload_limit(max_per_day=4)
+        profile["daily_quota_units_limit"] = 10000
+        profile["daily_uploads_limit"] = 4
+        profile["today_uploads_count"] = today_count
+        profile["remaining_uploads"] = max(0, 4 - today_count)
+        profile["can_upload_today"] = can_upload
         return profile
     return {"is_connected": False}
 
@@ -761,6 +776,13 @@ async def api_generate_thumbnail(request: Request):
     style_preset = data.get("style_preset", "danger_red")
     custom_bg = data.get("background_path", None)
     
+    # Path traversal protection: custom_bg must reside strictly within allowed app directories
+    if custom_bg:
+        bg_p = Path(custom_bg).resolve()
+        allowed_dirs = [OUTPUT_DIR.resolve(), TEMP_WORKSPACE.resolve(), (BASE_DIR / "assets").resolve()]
+        if not any(str(bg_p).startswith(str(ad)) for ad in allowed_dirs) or not bg_p.is_file():
+            custom_bg = None
+    
     thumb_path = generate_thumbnail(topic, style_preset=style_preset, custom_bg_path=custom_bg)
     filename = os.path.basename(thumb_path)
     return {
@@ -831,6 +853,11 @@ async def api_jarvis_draft_confirm(request: Request):
         draft_id = data.get("draft_id")
     except Exception:
         pass
+    if not draft_id or not isinstance(draft_id, str):
+        return JSONResponse(
+            {"status": "error", "message": "Geçerli ve açık bir taslak kimliği (draft_id) belirtilmelidir."},
+            status_code=400
+        )
     res = jarvis_brain.confirm_pending_draft(draft_id)
     action = res.get("action_taken")
     if action == "whatsapp_dispatched":
@@ -848,6 +875,11 @@ async def api_jarvis_draft_cancel(request: Request):
         draft_id = data.get("draft_id")
     except Exception:
         pass
+    if not draft_id or not isinstance(draft_id, str):
+        return JSONResponse(
+            {"status": "error", "message": "Geçerli ve açık bir taslak kimliği (draft_id) belirtilmelidir."},
+            status_code=400
+        )
     res = jarvis_brain.cancel_pending_draft(draft_id)
     return {"status": "success", "result": res}
 
@@ -934,6 +966,10 @@ async def api_jarvis_transcribe(request: Request):
         except ValueError:
             pass
 
+    # Concurrency limit: Only 1 heavy Whisper transcription at a time to prevent RAM/VRAM exhaustion
+    if TRANSCRIBE_SEMAPHORE.locked():
+        return JSONResponse({"status": "error", "message": "Sunucu şu anda başka bir ses işliyor. Lütfen birkaç saniye sonra tekrar deneyin."}, status_code=429)
+
     content = bytearray()
     content_type = request.headers.get("content-type", "")
     
@@ -955,8 +991,20 @@ async def api_jarvis_transcribe(request: Request):
             if len(content) > MAX_AUDIO_BYTES:
                 return JSONResponse({"status": "error", "message": "Ses dosyası boyutu 25MB sınırını aşamaz."}, status_code=413)
 
-    if not content:
-        return JSONResponse({"status": "error", "message": "Audio content empty"}, status_code=400)
+    if not content or len(content) < 16:
+        return JSONResponse({"status": "error", "message": "Ses içeriği boş veya geçersiz."}, status_code=400)
+
+    # Validate audio magic bytes (WebM, WAV, OGG, MP3, M4A)
+    is_valid_audio = (
+        content.startswith(b"\x1a\x45\xdf\xa3")  # WebM / MKV
+        or content.startswith(b"RIFF")             # WAV
+        or content.startswith(b"OggS")             # OGG
+        or content.startswith(b"ID3")              # MP3 with ID3
+        or (content[0:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2")) # Raw MP3
+        or (len(content) > 12 and content[4:8] == b"ftyp") # MP4 / M4A
+    )
+    if not is_valid_audio:
+        return JSONResponse({"status": "error", "message": "Desteklenmeyen veya geçersiz ses dosyası biçimi."}, status_code=400)
     
     temp_dir = TEMP_WORKSPACE
     temp_dir.mkdir(parents=True, exist_ok=True)

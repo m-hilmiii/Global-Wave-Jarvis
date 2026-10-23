@@ -114,18 +114,36 @@ class JarvisBrain:
             self.latest_draft_id = draft_id
 
     def confirm_pending_draft(self, draft_id: Optional[str] = None) -> Dict[str, Any]:
-        """Dispatches the specified pending draft with thread-safe atomic status transition (pending -> sending -> sent/failed)."""
-        target_id = draft_id or self.latest_draft_id
-        if not target_id:
-            reply = "Efendim, onaylanacak mesaj için geçerli bir taslak kimliği (draft_id) belirtilmedi."
-            speak_text = "Geçerli bir taslak kimliği belirtilmedi efendim."
-            return {"reply": reply, "speak_text": speak_text, "action_taken": "invalid_draft_id"}
-
+        """Dispatches the specified pending draft with thread-safe atomic status transition (pending -> sending -> sent/failed).
+        Enforces explicit draft_id when multiple drafts exist to prevent ambiguity."""
         with self.draft_lock:
-            if target_id not in self.pending_drafts:
-                reply = "Efendim, onay bekleyen böyle bir aktif mesaj taslağı bulunmuyor."
+            # Clean expired drafts first
+            now = time.time()
+            expired_ids = [d_id for d_id, d in self.pending_drafts.items() if now > d.get("expires_at", float("inf"))]
+            for exp_id in expired_ids:
+                self.pending_drafts.pop(exp_id, None)
+                if self.latest_draft_id == exp_id:
+                    self.latest_draft_id = None
+
+            if not self.pending_drafts:
+                reply = "Efendim, onay bekleyen aktif bir mesaj taslağı bulunmuyor."
                 speak_text = "Onay bekleyen aktif bir mesaj taslağı bulunmuyor efendim."
                 return {"reply": reply, "speak_text": speak_text, "action_taken": "no_draft"}
+
+            if draft_id:
+                if draft_id not in self.pending_drafts:
+                    reply = "Efendim, belirtilen kimliğe ait onay bekleyen bir taslak bulunamadı."
+                    speak_text = "Belirtilen kimliğe ait taslak bulunamadı efendim."
+                    return {"reply": reply, "speak_text": speak_text, "action_taken": "invalid_draft_id"}
+                target_id = draft_id
+            else:
+                # Disambiguation check: if more than 1 draft exists, reject silent fallback
+                if len(self.pending_drafts) > 1:
+                    pending_recipients = ", ".join(f"'{d.get('recipient')}'" for d in self.pending_drafts.values())
+                    reply = f"Efendim, onay bekleyen birden fazla taslağınız var ({pending_recipients}). Hatalı gönderimi önlemek için lütfen hangi kişiye ait taslağı onayladığınızı belirtin."
+                    speak_text = "Birden fazla onay bekleyen taslak var efendim. Lütfen hangi kişiye ait olduğunu belirtin."
+                    return {"reply": reply, "speak_text": speak_text, "action_taken": "ambiguous_draft_id"}
+                target_id = list(self.pending_drafts.keys())[0]
 
             draft = self.pending_drafts[target_id]
             if time.time() > draft.get("expires_at", float("inf")):
@@ -176,20 +194,34 @@ class JarvisBrain:
                 return {"reply": reply, "speak_text": speak_text, "action_taken": "whatsapp_error", "details": res, "draft_id": target_id}
 
     def cancel_pending_draft(self, draft_id: Optional[str] = None) -> Dict[str, Any]:
-        """Cancels and discards the specified (or latest) pending draft."""
-        target_id = draft_id or self.latest_draft_id
-        if not target_id or target_id not in self.pending_drafts:
-            reply = "Efendim, onay bekleyen bir taslak bulunmuyor."
-            speak_text = "Onay bekleyen bir taslak bulunmuyor efendim."
-            return {"reply": reply, "speak_text": speak_text, "action_taken": "no_draft"}
+        """Cancels and discards the specified pending draft with ambiguity guard."""
+        with self.draft_lock:
+            if not self.pending_drafts:
+                reply = "Efendim, onay bekleyen bir taslak bulunmuyor."
+                speak_text = "Onay bekleyen bir taslak bulunmuyor efendim."
+                return {"reply": reply, "speak_text": speak_text, "action_taken": "no_draft"}
 
-        draft = self.pending_drafts.pop(target_id)
-        if self.latest_draft_id == target_id:
-            self.latest_draft_id = None
-        reply = f"Mesaj gönderimi iptal edildi efendim. {draft['recipient']} kişisine herhangi bir mesaj iletilmedi."
-        speak_text = "Mesaj gönderimi iptal edildi efendim. Herhangi bir mesaj iletilmedi."
-        self._record_turn("İptal et", reply)
-        return {"reply": reply, "speak_text": speak_text, "action_taken": "draft_cancelled", "draft_id": target_id}
+            if draft_id:
+                if draft_id not in self.pending_drafts:
+                    reply = "Efendim, iptal edilecek belirtilen kimlikte bir taslak bulunamadı."
+                    speak_text = "İptal edilecek taslak bulunamadı efendim."
+                    return {"reply": reply, "speak_text": speak_text, "action_taken": "invalid_draft_id"}
+                target_id = draft_id
+            else:
+                if len(self.pending_drafts) > 1:
+                    pending_recipients = ", ".join(f"'{d.get('recipient')}'" for d in self.pending_drafts.values())
+                    reply = f"Efendim, birden fazla onay bekleyen taslak var ({pending_recipients}). Lütfen hangisini iptal etmek istediğinizi belirtin."
+                    speak_text = "Birden fazla taslak var efendim. Lütfen hangi taslağı iptal edeceğinizi belirtin."
+                    return {"reply": reply, "speak_text": speak_text, "action_taken": "ambiguous_draft_id"}
+                target_id = list(self.pending_drafts.keys())[0]
+
+            draft = self.pending_drafts.pop(target_id)
+            if self.latest_draft_id == target_id:
+                self.latest_draft_id = None
+            reply = f"Mesaj gönderimi iptal edildi efendim. {draft['recipient']} kişisine herhangi bir mesaj iletilmedi."
+            speak_text = "Mesaj gönderimi iptal edildi efendim. Herhangi bir mesaj iletilmedi."
+            self._record_turn("İptal et", reply)
+            return {"reply": reply, "speak_text": speak_text, "action_taken": "draft_cancelled", "draft_id": target_id}
 
     def _query_qwen_decision(self, user_text: str) -> Dict[str, Any]:
         """Uses local Qwen 3 (8B) via Ollama to intelligently understand intent, recipient, and synthesize messages."""

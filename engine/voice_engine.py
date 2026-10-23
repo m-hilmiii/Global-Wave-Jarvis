@@ -1,3 +1,10 @@
+def escape_ffmpeg_concat_path(path_str: str) -> str:
+    """Escapes file paths for safe inclusion in FFmpeg concat list files."""
+    clean = str(path_str).replace("\\", "/")
+    clean = clean.replace("'", "'\\''")
+    clean = clean.replace("\n", "").replace("\r", "")
+    return clean
+
 """
 Global Wave - Audio Engine with Dual TTS (Kokoro Local & Edge-TTS Cloud) + Whisper Word Karaoke
 Features:
@@ -150,8 +157,8 @@ def concatenate_audios(audio_chunks: list, master_mp3_path: str) -> float:
     
     with open(concat_list_file, "w", encoding="utf-8") as f:
         for chunk in audio_chunks:
-            p = chunk["mp3_path"].replace("\\", "/")
-            f.write(f"file '{p}'\n")
+            escaped_p = escape_ffmpeg_concat_path(chunk["mp3_path"])
+            f.write(f"file '{escaped_p}'\n")
             
     cmd = [
         ffmpeg_bin, "-y", "-f", "concat", "-safe", "0",

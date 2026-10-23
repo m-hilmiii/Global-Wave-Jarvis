@@ -1,3 +1,10 @@
+def escape_ffmpeg_concat_path(path_str: str) -> str:
+    """Escapes file paths for safe inclusion in FFmpeg concat list files."""
+    clean = str(path_str).replace("\\", "/")
+    clean = clean.replace("'", "'\\''")
+    clean = clean.replace("\n", "").replace("\r", "")
+    return clean
+
 """
 Global Wave - 2-Stage FFmpeg Video Engine with Resolution (720p/1080p) & Micro SFX
 """
@@ -117,8 +124,8 @@ def render_master_video(
     concat_list_file = os.path.join(task_temp_dir, "video_concat_list.txt")
     with open(concat_list_file, "w", encoding="utf-8") as f:
         for clip_path in clips_to_stitch:
-            p = clip_path.replace("\\", "/")
-            f.write(f"file '{p}'\n")
+            escaped_p = escape_ffmpeg_concat_path(clip_path)
+            f.write(f"file '{escaped_p}'\n")
             
     temp_visuals = os.path.join(task_temp_dir, "stitched_visuals.mp4")
     cmd_concat = [
