@@ -71,18 +71,22 @@ ALLOWED_SETTING_KEYS = {
 }
 
 def parse_bool(v) -> bool:
-    """Safely parse boolean values without string 'false' evaluating to True."""
+    """Safely parse boolean values. Rejects unrecognized or ambiguous values with ValueError."""
     if isinstance(v, bool):
         return v
+    if isinstance(v, (int, float)):
+        if v == 1:
+            return True
+        elif v == 0:
+            return False
+        raise ValueError(f"Gecersiz boolean sayisal degeri: {v}. Yalnizca 1 veya 0 kabul edilir.")
     if isinstance(v, str):
         clean = v.strip().lower()
         if clean in ("true", "1", "yes", "on"):
             return True
-        if clean in ("false", "0", "no", "off", ""):
+        if clean in ("false", "0", "no", "off"):
             return False
-    if isinstance(v, (int, float)):
-        return bool(v)
-    return False
+    raise ValueError(f"Gecersiz boolean degeri: '{v}'. Yalnizca true/false, 1/0, yes/no kabul edilir.")
 
 def get_ffmpeg_bin() -> str:
     """Resolve ffmpeg binary across WinGet, PATH, or system locations."""
@@ -114,7 +118,7 @@ def validate_ollama_host(host_url: str, allow_remote: bool = False) -> str:
     parsed = urlparse(clean)
     hostname = parsed.hostname or ""
     if not allow_remote and hostname not in {"127.0.0.1", "localhost", "::1"}:
-        raise ValueError(f"Güvenlik kısıtlaması: ollama_host varsayılan olarak yalnızca yerel makineye (127.0.0.1/localhost) yönlendirilebilir. Uzak sunucu ({hostname}) için 'allow_remote_ollama: true' belirtilmelidir.")
+        raise ValueError(f"Guvenlik kisitlamasi: ollama_host varsayilan olarak yalnizca yerel makineye (127.0.0.1/localhost) yonlendirilebilir. Uzak sunucu ({hostname}) icin 'allow_remote_ollama: true' belirtilmelidir.")
     return clean
 
 def load_settings() -> dict:
@@ -126,24 +130,51 @@ def load_settings() -> dict:
         try:
             with open(TOKENS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                if not isinstance(data, dict):
+                    return DEFAULT_CONFIG.copy()
                 merged = DEFAULT_CONFIG.copy()
+                
+                # Check allow_remote_ollama first so host validation uses correct permission
+                allow_remote = False
+                if "allow_remote_ollama" in data:
+                    try:
+                        allow_remote = parse_bool(data["allow_remote_ollama"])
+                        merged["allow_remote_ollama"] = allow_remote
+                    except ValueError:
+                        pass
+
                 for k, v in data.items():
-                    if k not in ALLOWED_SETTING_KEYS:
+                    if k not in ALLOWED_SETTING_KEYS or k == "allow_remote_ollama":
                         continue
-                    if k in ["enable_bgm", "allow_remote_ollama", "strict_local"]:
-                        merged[k] = parse_bool(v)
+                    if k in ["enable_bgm", "strict_local"]:
+                        try:
+                            merged[k] = parse_bool(v)
+                        except ValueError as ve:
+                            print(f"[WARN] Ayar '{k}' gecersiz boolean: {ve}. Varsayilan kullaniliyor.")
+                    elif k == "ollama_host":
+                        try:
+                            merged[k] = validate_ollama_host(str(v), allow_remote=allow_remote)
+                        except ValueError as ve:
+                            print(f"[WARN] Ayar 'ollama_host' guvenlik denetiminden gecemedi ({ve}). Varsayilana donuluyor.")
+                            merged[k] = DEFAULT_CONFIG["ollama_host"]
                     elif k in ["fps", "width", "height", "adspower_port"]:
                         try:
-                            merged[k] = int(v)
+                            val = int(v)
+                            if k == "fps" and (15 <= val <= 60):
+                                merged[k] = val
+                            elif k in ["width", "height"] and (240 <= val <= 3840):
+                                merged[k] = val
+                            elif k == "adspower_port" and (1024 <= val <= 65535):
+                                merged[k] = val
                         except (ValueError, TypeError):
                             pass
                     elif k == "bgm_volume":
                         try:
-                            merged[k] = float(v)
+                            merged[k] = max(0.0, min(1.0, float(v)))
                         except (ValueError, TypeError):
                             pass
                     else:
-                        merged[k] = v
+                        merged[k] = str(v).strip()
                 return merged
         except Exception:
             return DEFAULT_CONFIG.copy()
@@ -152,10 +183,16 @@ def save_settings(new_settings: dict) -> dict:
     """Save new settings to tokens.json with strict schema validation and atomic write."""
     with SETTINGS_LOCK:
         current = load_settings() if TOKENS_FILE.exists() else DEFAULT_CONFIG.copy()
-        allow_remote = parse_bool(new_settings.get("allow_remote_ollama", current.get("allow_remote_ollama", False)))
+        
+        # Check allow_remote_ollama strictly first
+        if "allow_remote_ollama" in new_settings:
+            allow_remote = parse_bool(new_settings["allow_remote_ollama"])
+            current["allow_remote_ollama"] = allow_remote
+        else:
+            allow_remote = current.get("allow_remote_ollama", False)
 
         for k, v in new_settings.items():
-            if k not in ALLOWED_SETTING_KEYS:
+            if k not in ALLOWED_SETTING_KEYS or k == "allow_remote_ollama":
                 continue
             if isinstance(v, str) and ("*" in v or v.startswith("****") or v.endswith("****")):
                 continue
@@ -163,22 +200,20 @@ def save_settings(new_settings: dict) -> dict:
             if k == "ollama_host":
                 current[k] = validate_ollama_host(str(v), allow_remote=allow_remote)
             elif k in ["fps", "width", "height", "adspower_port"]:
-                try:
-                    val = int(v)
-                    if k == "fps" and not (15 <= val <= 60):
-                        continue
-                    if k in ["width", "height"] and not (240 <= val <= 3840):
-                        continue
-                    current[k] = val
-                except (ValueError, TypeError):
-                    continue
+                val = int(v)
+                if k == "fps" and not (15 <= val <= 60):
+                    raise ValueError(f"FPS degeri 15-60 arasinda olmalidir, alinan: {val}")
+                if k in ["width", "height"] and not (240 <= val <= 3840):
+                    raise ValueError(f"{k} degeri 240-3840 arasinda olmalidir, alinan: {val}")
+                if k == "adspower_port" and not (1024 <= val <= 65535):
+                    raise ValueError(f"adspower_port 1024-65535 arasinda olmalidir, alinan: {val}")
+                current[k] = val
             elif k == "bgm_volume":
-                try:
-                    val = float(v)
-                    current[k] = max(0.0, min(1.0, val))
-                except (ValueError, TypeError):
-                    continue
-            elif k in ["enable_bgm", "allow_remote_ollama", "strict_local"]:
+                val = float(v)
+                if not (0.0 <= val <= 1.0):
+                    raise ValueError(f"bgm_volume 0.0 ile 1.0 arasinda olmalidir, alinan: {val}")
+                current[k] = val
+            elif k in ["enable_bgm", "strict_local"]:
                 current[k] = parse_bool(v)
             else:
                 current[k] = str(v).strip()

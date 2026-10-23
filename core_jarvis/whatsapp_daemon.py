@@ -459,7 +459,7 @@ class WhatsAppDaemon:
                                     json.dump(inbox, f, ensure_ascii=False, indent=2)
                             except Exception:
                                 pass
-                    return {"success": True, "message": "Mesaj WhatsApp'ta herkesten başarıyla silindi.", "request_id": request_id}
+                    return {"success": True, "status": "delete_requested", "message": "Silme talebi WhatsApp sunucusuna iletildi (delete_requested).", "request_id": request_id}
                 elif result and not result.get("success"):
                     return {"success": False, "error": f"WhatsApp silme hatası: {result.get('error')}", "request_id": request_id}
                 else:
@@ -515,13 +515,22 @@ class WhatsAppDaemon:
                 m_sender = str(m.get("sender_name", "")).lower()
                 m_jid = str(m.get("chat_jid", "")) + str(m.get("sender_jid", ""))
 
-                phone_matched = bool(c_phone and m_phone and len(c_phone) >= 7 and len(m_phone) >= 7 and (c_phone.endswith(m_phone) or m_phone.endswith(c_phone)))
-                target_jid = f"{c_phone}@s.whatsapp.net" if c_phone else ""
-                jid_matched = bool(target_jid and (target_jid in m_jid))
-                lid_matched = bool(c_lid and len(c_lid) >= 5 and c_lid in m_jid)
-                name_matched = bool(c_name and len(c_name) >= 3 and (c_name == m_sender or c_name in m_sender.split()))
+                # Strict identity resolution: normalized phone, exact JID, or exact LID
+                # Suffix matching and fuzzy substrings are eliminated to prevent cross-contact leaks
+                norm_c = "".join([x for x in c_phone if x.isdigit()])
+                if norm_c.startswith("0") and len(norm_c) == 11: norm_c = "90" + norm_c[1:]
+                elif len(norm_c) == 10: norm_c = "90" + norm_c
 
-                if phone_matched or jid_matched or lid_matched or name_matched:
+                norm_m = "".join([x for x in m_phone if x.isdigit()])
+                if norm_m.startswith("0") and len(norm_m) == 11: norm_m = "90" + norm_m[1:]
+                elif len(norm_m) == 10: norm_m = "90" + norm_m
+
+                phone_matched = bool(norm_c and norm_m and len(norm_c) >= 10 and len(norm_m) >= 10 and norm_c == norm_m)
+                target_jid = f"{norm_c}@s.whatsapp.net" if norm_c else ""
+                jid_matched = bool(target_jid and (target_jid == str(m.get("chat_jid", "")) or target_jid == str(m.get("sender_jid", ""))))
+                lid_matched = bool(c_lid and len(c_lid) >= 8 and (c_lid in str(m.get("chat_jid", "")) or c_lid in str(m.get("sender_jid", ""))))
+
+                if phone_matched or jid_matched or lid_matched:
                     matched_msgs.append(m)
 
             last_msg = matched_msgs[-1] if matched_msgs else None
@@ -586,13 +595,20 @@ class WhatsAppDaemon:
             m_sender = str(m.get("sender_name", "")).lower()
             m_jid = str(m.get("chat_jid", "")) + str(m.get("sender_jid", ""))
 
-            phone_matched = bool(c_phone and m_phone and len(c_phone) >= 7 and len(m_phone) >= 7 and (c_phone.endswith(m_phone) or m_phone.endswith(c_phone)))
-            target_jid = f"{c_phone}@s.whatsapp.net" if c_phone else ""
-            jid_matched = bool(target_jid and (target_jid in m_jid))
-            lid_matched = bool(c_lid and len(c_lid) >= 5 and c_lid in m_jid)
-            name_matched = bool(c_name and len(c_name) >= 3 and (c_name == m_sender or c_name in m_sender.split()))
+            norm_c = "".join([x for x in c_phone if x.isdigit()])
+            if norm_c.startswith("0") and len(norm_c) == 11: norm_c = "90" + norm_c[1:]
+            elif len(norm_c) == 10: norm_c = "90" + norm_c
 
-            if phone_matched or jid_matched or lid_matched or name_matched:
+            norm_m = "".join([x for x in m_phone if x.isdigit()])
+            if norm_m.startswith("0") and len(norm_m) == 11: norm_m = "90" + norm_m[1:]
+            elif len(norm_m) == 10: norm_m = "90" + norm_m
+
+            phone_matched = bool(norm_c and norm_m and len(norm_c) >= 10 and len(norm_m) >= 10 and norm_c == norm_m)
+            target_jid = f"{norm_c}@s.whatsapp.net" if norm_c else ""
+            jid_matched = bool(target_jid and (target_jid == str(m.get("chat_jid", "")) or target_jid == str(m.get("sender_jid", ""))))
+            lid_matched = bool(c_lid and len(c_lid) >= 8 and (c_lid in str(m.get("chat_jid", "")) or c_lid in str(m.get("sender_jid", ""))))
+
+            if phone_matched or jid_matched or lid_matched:
                 history.append(m)
 
         history.sort(key=lambda x: x.get("timestamp", 0))

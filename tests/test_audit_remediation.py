@@ -1,31 +1,42 @@
-﻿"""
-Global Wave - Audit Remediation Verification Tests
+"""
+Global Wave - Audit Remediation Comprehensive Verification Tests
 Verifies:
-1. Turkish persona routing & strict_local enforcement (no English phonetic garbage or silent cloud leaks).
-2. WhatsApp suffix matching bugfix (empty or short phone numbers never match contacts).
-3. Settings safe boolean parsing ("false" evaluates to False).
-4. Audio duration fail-safe (raises error instead of returning dummy 4.0).
-5. Engagement engine factual integrity ("milyar": "milyon" removed).
+1. Strict local mode enforcement: Blocks ElevenLabs, Edge-TTS, and Kokoro fallbacks before any network call.
+2. Closed whitelist for Kokoro: Both persona and language must be supported; fr-FR, tr-TR, de-DE, es-ES, None are rejected.
+3. Real WhatsApp get_chats_overview and get_chat_history calls: Empty phones and broadcasts never attach to contacts.
+4. Settings schema: parse_bool raises ValueError on invalid values; load_settings validates ollama_host safety.
+5. SSE Single-Use Stream Ticket: Query tokens are rejected; tickets are single-use with TTL.
 """
 
 import unittest
 import sys
+import json
+import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
-from config.settings import parse_bool, save_settings, load_settings
+import config.settings as settings_mod
+from config.settings import parse_bool, save_settings, load_settings, validate_ollama_host
 from engine.voice_kokoro import is_kokoro_supported
 from engine.voice_engine import get_audio_duration, generate_scene_audios
 from engine.engagement_engine import COMMON_TYPO_MAP
 from core_jarvis.whatsapp_daemon import WhatsAppDaemon
+from web.server import app, LOCAL_SESSION_TOKEN, STREAM_TICKETS, STREAM_TICKETS_LOCK
+from fastapi.testclient import TestClient
 
 
 class TestAuditRemediation(unittest.TestCase):
-    def test_settings_safe_boolean_parsing(self):
-        # Strict boolean parsing tests
+    def setUp(self):
+        self.client = TestClient(app)
+
+    # =========================================================================
+    # 1. SETTINGS & SCHEMA VALIDATION TESTS
+    # =========================================================================
+    def test_settings_strict_boolean_parsing(self):
+        # Valid booleans
         self.assertFalse(parse_bool("false"))
         self.assertFalse(parse_bool("False"))
         self.assertFalse(parse_bool("0"))
@@ -39,58 +50,174 @@ class TestAuditRemediation(unittest.TestCase):
         self.assertTrue(parse_bool("yes"))
         self.assertTrue(parse_bool(True))
 
-    def test_kokoro_language_phonetic_guards(self):
-        # Turkish and German must NOT be claimed as supported by Kokoro-82M
-        self.assertFalse(is_kokoro_supported("tr_storyteller", "tr-TR"))
-        self.assertFalse(is_kokoro_supported("de_engineer", "de-DE"))
-        self.assertFalse(is_kokoro_supported("es_narrator", "es-ES"))
+        # Invalid/ambiguous booleans must raise ValueError (not silently convert to False)
+        with self.assertRaises(ValueError):
+            parse_bool("maybe")
+        with self.assertRaises(ValueError):
+            parse_bool("disabled")
+        with self.assertRaises(ValueError):
+            parse_bool("2")
+        with self.assertRaises(ValueError):
+            parse_bool("undefined")
 
-        # English personas must be supported
+    def test_load_settings_enforces_ollama_host_validation(self):
+        # Even if a remote host was pre-saved in tokens.json, load_settings must reject it when allow_remote=False
+        fake_tokens = {
+            "ollama_host": "http://malicious-external-host.com:11434",
+            "allow_remote_ollama": False
+        }
+        with patch.object(Path, "exists", return_value=True), \
+             patch("builtins.open", unittest.mock.mock_open(read_data=json.dumps(fake_tokens))):
+            loaded = load_settings()
+            # Must have fallen back to localhost
+            self.assertEqual(loaded["ollama_host"], "http://127.0.0.1:11434")
+
+    # =========================================================================
+    # 2. STRICT LOCAL MODE TTS TESTS
+    # =========================================================================
+    @patch("engine.voice_engine.synthesize_chunk_elevenlabs")
+    def test_strict_local_blocks_elevenlabs(self, mock_eleven):
+        scenes = [{"scene_id": 0, "text": "Hello world"}]
+        with patch("engine.voice_engine.load_settings", return_value={"strict_local": True}):
+            with self.assertRaises(ValueError) as ctx:
+                generate_scene_audios(scenes, voice="en-US-GuyNeural", persona_id="us_hustler", task_temp_dir=".", tts_engine="elevenlabs")
+            self.assertIn("strict_local", str(ctx.exception))
+            mock_eleven.assert_not_called()
+
+    @patch("engine.voice_engine.generate_scene_audios_edge")
+    def test_strict_local_blocks_edge_tts(self, mock_edge):
+        scenes = [{"scene_id": 0, "text": "Hello world"}]
+        with patch("engine.voice_engine.load_settings", return_value={"strict_local": True}):
+            with self.assertRaises(ValueError) as ctx:
+                generate_scene_audios(scenes, voice="en-US-GuyNeural", persona_id="us_hustler", task_temp_dir=".", tts_engine="edge-tts")
+            self.assertIn("strict_local", str(ctx.exception))
+            mock_edge.assert_not_called()
+
+    @patch("engine.voice_engine.generate_scene_audios_kokoro", side_effect=RuntimeError("Kokoro model missing"))
+    @patch("engine.voice_engine.generate_scene_audios_edge")
+    def test_strict_local_blocks_failed_kokoro_cloud_fallback(self, mock_edge, mock_kokoro):
+        scenes = [{"scene_id": 0, "text": "Hello world"}]
+        with patch("engine.voice_engine.load_settings", return_value={"strict_local": True}):
+            with self.assertRaises(RuntimeError) as ctx:
+                generate_scene_audios(scenes, voice="en-US-GuyNeural", persona_id="us_hustler", task_temp_dir=".", tts_engine="kokoro")
+            self.assertIn("Bulut fallback engellendi", str(ctx.exception))
+            mock_edge.assert_not_called()
+
+    # =========================================================================
+    # 3. KOKORO CLOSED WHITELIST LANGUAGE TESTS
+    # =========================================================================
+    def test_kokoro_closed_whitelist_languages(self):
+        # Supported English personas with explicit supported languages
         self.assertTrue(is_kokoro_supported("us_hustler", "en-US"))
         self.assertTrue(is_kokoro_supported("uk_critic", "en-GB"))
 
-    @patch("engine.voice_engine.generate_scene_audios_edge")
-    def test_turkish_persona_routes_to_neural_edge_tts(self, mock_edge):
-        mock_edge.return_value = [{"scene_id": 0, "mp3_path": "dummy.mp3", "duration": 3.5}]
-        scenes = [{"scene_id": 0, "text": "Tarihin en buyuk gizemi."}]
+        # Explicitly unsupported or foreign languages MUST return False
+        self.assertFalse(is_kokoro_supported("us_hustler", "fr-FR"))
+        self.assertFalse(is_kokoro_supported("us_hustler", "tr-TR"))
+        self.assertFalse(is_kokoro_supported("us_hustler", "de-DE"))
+        self.assertFalse(is_kokoro_supported("us_hustler", "es-ES"))
+        self.assertFalse(is_kokoro_supported("us_hustler", "pt-BR"))
+        self.assertFalse(is_kokoro_supported("us_hustler", None))
 
-        # Requesting kokoro on tr_storyteller should legitimately route to neural Edge-TTS
-        with patch("engine.voice_engine.load_settings", return_value={"strict_local": False}):
-            res = generate_scene_audios(scenes, voice="tr-TR-AhmetNeural", persona_id="tr_storyteller", task_temp_dir=".", tts_engine="kokoro")
-            self.assertEqual(len(res), 1)
-            mock_edge.assert_called_once()
-            args, kwargs = mock_edge.call_args
-            audio_meta = kwargs.get("audio_meta", {})
-            self.assertEqual(audio_meta.get("actual_engine"), "edge-tts")
-            self.assertTrue(audio_meta.get("fallback_used"))
+        # Unsupported personas
+        self.assertFalse(is_kokoro_supported("tr_storyteller", "tr-TR"))
+        self.assertFalse(is_kokoro_supported("de_engineer", "de-DE"))
 
-    def test_strict_local_mode_blocks_unauthorized_cloud_fallback(self):
-        scenes = [{"scene_id": 0, "text": "Tarihin en buyuk gizemi."}]
-        # When strict_local=True, Kokoro on Turkish MUST raise RuntimeError and refuse cloud fallback
-        with patch("engine.voice_engine.load_settings", return_value={"strict_local": True}):
-            with self.assertRaises(RuntimeError) as ctx:
-                generate_scene_audios(scenes, voice="tr-TR-AhmetNeural", persona_id="tr_storyteller", task_temp_dir=".", tts_engine="kokoro")
-            self.assertIn("strict_local", str(ctx.exception))
+    # =========================================================================
+    # 4. REAL WHATSAPP OVERVIEW & HISTORY MATCHING TESTS
+    # =========================================================================
+    def test_whatsapp_overview_and_history_real_matching(self):
+        daemon = WhatsAppDaemon()
 
+        fake_contacts = [
+            {"id": "adem", "name": "Adem", "full_name": "Adem", "phone": "05551112233", "relationship": "Arkadaş"},
+            {"id": "babam", "name": "Babam", "full_name": "Babam", "phone": "05559998877", "relationship": "Aile"}
+        ]
+        fake_inbox = [
+            # Message 1: Empty phone and group JID (MUST NOT MATCH ANY CONTACT)
+            {"id": "m1", "phone": "", "sender_name": "Borsa Duyuru Grubu", "text": "Halka arz duyurusu", "chat_jid": "group99@g.us", "sender_jid": "anon@s.whatsapp.net", "timestamp": 100},
+            # Message 2: Adem's legitimate message
+            {"id": "m2", "phone": "05551112233", "sender_name": "Adem", "text": "Selam nasılsın?", "chat_jid": "905551112233@s.whatsapp.net", "sender_jid": "905551112233@s.whatsapp.net", "timestamp": 200},
+            # Message 3: Unknown spammer
+            {"id": "m3", "phone": "05550000000", "sender_name": "Spam", "text": "Kredi kazandınız", "chat_jid": "905550000000@s.whatsapp.net", "timestamp": 300}
+        ]
+
+        def fake_file_reader(filepath, *args, **kwargs):
+            if "contacts.json" in str(filepath):
+                return unittest.mock.mock_open(read_data=json.dumps({"contacts": fake_contacts}))()
+            if "whatsapp_inbox.json" in str(filepath):
+                return unittest.mock.mock_open(read_data=json.dumps(fake_inbox))()
+            return unittest.mock.mock_open(read_data="{}")()
+
+        with patch.object(Path, "exists", return_value=True), \
+             patch("builtins.open", side_effect=fake_file_reader):
+            # 1. Test get_chats_overview
+            overview = daemon.get_chats_overview()
+            adem_card = next((c for c in overview if c["short_name"] == "Adem"), None)
+            babam_card = next((c for c in overview if c["short_name"] == "Babam"), None)
+
+            self.assertIsNotNone(adem_card)
+            self.assertIsNotNone(babam_card)
+
+            # Adem's latest message must be "Selam nasılsın?"
+            self.assertEqual(adem_card["last_text"], "Selam nasılsın?")
+            # Babam must have NO messages (the empty-phone broadcast was NOT attached!)
+            self.assertEqual(babam_card["last_text"], "Henüz mesaj yok")
+
+            # 2. Test get_chat_history
+            adem_history = daemon.get_chat_history("Adem")
+            babam_history = daemon.get_chat_history("Babam")
+
+            self.assertEqual(len(adem_history), 1)
+            self.assertEqual(adem_history[0]["text"], "Selam nasılsın?")
+
+            self.assertEqual(len(babam_history), 0)
+
+    # =========================================================================
+    # 5. SSE STREAM TICKET TESTS
+    # =========================================================================
+    def test_sse_query_token_rejected_and_ticket_lifecycle(self):
+        # 1. Long-lived session token in query params MUST BE REJECTED
+        res = self.client.get(f"/api/events/task_123?token={LOCAL_SESSION_TOKEN}")
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("stream ticket", res.json().get("message", "").lower())
+
+        # 2. Requesting a ticket without auth header must be rejected
+        res = self.client.post("/api/stream/ticket")
+        self.assertEqual(res.status_code, 401)
+
+        # 3. Requesting a ticket with valid X-Local-Token succeeds
+        res = self.client.post("/api/stream/ticket", headers={"X-Local-Token": LOCAL_SESSION_TOKEN})
+        self.assertEqual(res.status_code, 200)
+        ticket = res.json().get("ticket")
+        self.assertTrue(bool(ticket))
+
+        # 4. Valid single-use ticket connects successfully to SSE endpoint
+        from web.server import TASKS
+        TASKS["task_test"] = {"status": "completed", "percent": 100}
+        with self.client.stream("GET", f"/api/events/task_test?ticket={ticket}") as sse_stream:
+            self.assertEqual(sse_stream.status_code, 200)
+            for line in sse_stream.iter_lines():
+                break
+
+        # 5. Attempting to reuse the same ticket MUST FAIL (single-use consumed)
+        res_reuse = self.client.get(f"/api/events/task_test?ticket={ticket}")
+        self.assertEqual(res_reuse.status_code, 401)
+
+        # 6. Expired ticket MUST FAIL
+        with STREAM_TICKETS_LOCK:
+            STREAM_TICKETS["expired-ticket-test"] = time.time() - 10
+        res_exp = self.client.get("/api/events/task_test?ticket=expired-ticket-test")
+        self.assertEqual(res_exp.status_code, 401)
+
+    # =========================================================================
+    # 6. AUDIO & ENGAGEMENT INTEGRITY
+    # =========================================================================
     def test_audio_duration_fails_safe(self):
-        # Must raise RuntimeError on non-existent audio file instead of returning dummy 4.0
         with self.assertRaises(RuntimeError):
             get_audio_duration("non_existent_audio_file_123456.mp3")
 
-    def test_whatsapp_empty_phone_suffix_bug_fixed(self):
-        # Suffix match logic verification: empty phone must NOT match Adem
-        c_phone = "905551112233"
-        m_phone = ""
-        phone_matched = bool(c_phone and m_phone and len(c_phone) >= 7 and len(m_phone) >= 7 and (c_phone.endswith(m_phone) or m_phone.endswith(c_phone)))
-        self.assertFalse(phone_matched)
-
-        # Non-empty phone with match
-        m_phone_valid = "5551112233"
-        phone_matched_valid = bool(c_phone and m_phone_valid and len(c_phone) >= 7 and len(m_phone_valid) >= 7 and (c_phone.endswith(m_phone_valid) or m_phone_valid.endswith(c_phone)))
-        self.assertTrue(phone_matched_valid)
-
     def test_engagement_engine_factual_integrity(self):
-        # "milyar": "milyon" must be removed to avoid factual error injection
         self.assertNotIn("milyar", COMMON_TYPO_MAP)
 
 

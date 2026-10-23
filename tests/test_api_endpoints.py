@@ -24,7 +24,7 @@ class TestApiSecurityEndpoints(unittest.TestCase):
         # 1. GET /api/config without token must return 401
         res = self.client.get("/api/config")
         self.assertEqual(res.status_code, 401)
-        self.assertIn("Yetkilendirme hatası", res.json().get("message", ""))
+        self.assertIn("Yetkilendirme hatas", res.json().get("message", ""))
 
         # 2. POST /api/generate without token must return 401
         res = self.client.post("/api/generate", json={"topic": "Test"})

@@ -334,7 +334,7 @@ async function main() {
         if (cmd.type === "send" && sock) {
             try {
                 const sentMsg = await sock.sendMessage(cmd.jid, { text: cmd.text });
-                console.log(`[WhatsApp] Mesaj iletildi -> ${cmd.jid}`);
+                console.log(`[WhatsApp] Mesaj sunucuya iletildi (sent) -> ${cmd.jid}`);
                 emit({ type: "sent", jid: cmd.jid, request_id: cmd.request_id, message_id: sentMsg?.key?.id });
             }
             catch (err) {
@@ -350,7 +350,7 @@ async function main() {
                     id: cmd.message_id,
                 };
                 await sock.sendMessage(cmd.jid, { delete: key });
-                console.log(`[WhatsApp] Mesaj herkesten silindi -> ${cmd.message_id}`);
+                console.log(`[WhatsApp] Silme talebi sunucuya iletildi (delete_requested) -> ${cmd.message_id}`);
                 emit({ type: "deleted", jid: cmd.jid, message_id: cmd.message_id, request_id: cmd.request_id });
             }
             catch (err) {

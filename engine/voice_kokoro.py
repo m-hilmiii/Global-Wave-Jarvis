@@ -4,8 +4,8 @@ Global Wave - Kokoro ONNX Local TTS Engine
 No GPU or cloud connection required (uses ~300MB RAM, CPU-optimized).
 
 NOTE: Kokoro-82M strictly supports English ('en-us', 'en-gb') and experimental Japanese.
-It DOES NOT support Turkish phonetics. Attempting Turkish synthesis with Kokoro
-results in English phonetic corruption. For Turkish, route to Neural Edge-TTS or Piper.
+It DOES NOT support Turkish, German, French, Spanish or Portuguese phonetics.
+Strict closed-whitelist verification is enforced to prevent phonetic corruption.
 """
 import os
 import soundfile as sf
@@ -18,6 +18,7 @@ VOICES_BIN_PATH = os.path.join(MODELS_DIR, "voices-v1.0.bin")
 
 _KOKORO_INSTANCE = None
 
+# Kokoro strictly supports English personas
 SUPPORTED_PERSONAS = {
     "us_hustler": "am_adam",
     "uk_critic": "bm_george",
@@ -28,23 +29,27 @@ PERSONA_VOICE_MAP = {
     "uk_critic": "bm_george",
 }
 
-SUPPORTED_LANGUAGES = {"en-us", "en-gb", "en", "ja"}
+# Strict closed whitelist of Kokoro-82M supported language codes
+SUPPORTED_LANGUAGES = {"en-us", "en-gb", "en"}
 
 def is_kokoro_supported(persona_id: str, lang: str = None) -> bool:
-    """Check if persona and language are legitimately supported by Kokoro-82M phonetics."""
-    if lang:
-        clean_lang = lang.lower().strip()
-        if clean_lang.startswith("tr") or clean_lang.startswith("de") or clean_lang.startswith("es") or clean_lang.startswith("pt"):
-            return False
-        if clean_lang in SUPPORTED_LANGUAGES or clean_lang.startswith("en"):
-            return True
-    return persona_id in SUPPORTED_PERSONAS
+    """
+    Check if persona and language are legitimately supported by Kokoro-82M phonetics.
+    Strict closed whitelist: both persona AND language must be explicitly supported.
+    Any unknown, missing, or unsupported language (tr-TR, de-DE, fr-FR, es-ES, etc.) is rejected.
+    """
+    if persona_id not in SUPPORTED_PERSONAS:
+        return False
+    if not lang:
+        return False
+    clean_lang = lang.lower().strip().replace("_", "-")
+    return clean_lang in SUPPORTED_LANGUAGES
 
 def get_kokoro() -> Kokoro:
     global _KOKORO_INSTANCE
     if _KOKORO_INSTANCE is None:
         if not os.path.exists(ONNX_MODEL_PATH) or not os.path.exists(VOICES_BIN_PATH):
-            raise FileNotFoundError(f"Kokoro model dosyaları bulunamadı: {MODELS_DIR}. models/kokoro/kokoro-v1.0.onnx ve voices-v1.0.bin gereklidir.")
+            raise FileNotFoundError(f"Kokoro model dosyalari bulunamadi: {MODELS_DIR}. models/kokoro/kokoro-v1.0.onnx ve voices-v1.0.bin gereklidir.")
         _KOKORO_INSTANCE = Kokoro(ONNX_MODEL_PATH, VOICES_BIN_PATH)
     return _KOKORO_INSTANCE
 
@@ -70,8 +75,8 @@ def synthesize_kokoro_chunk(text: str, voice_name: str, out_wav: str, speed: flo
     return duration
 
 def generate_scene_audios_kokoro(scenes: list, persona_id: str, task_temp_dir: str) -> list:
-    if not is_kokoro_supported(persona_id):
-        raise ValueError(f"Kokoro-82M '{persona_id}' personasını veya bu dili desteklemez. Kokoro yalnızca İngilizce ve Japonca dillerini destekler. Türkçe ve diğer diller için Edge-TTS veya Piper kullanılmalıdır.")
+    if not is_kokoro_supported(persona_id, "en-US"):
+        raise ValueError(f"Kokoro-82M '{persona_id}' personasini veya bu dili desteklemez. Kokoro yalnizca Ingilizce dillerini destekler. Turkce ve diger diller icin Edge-TTS veya Piper kullanilmalidir.")
 
     voice_name = PERSONA_VOICE_MAP.get(persona_id, "am_adam")
     results = []
@@ -84,6 +89,7 @@ def generate_scene_audios_kokoro(scenes: list, persona_id: str, task_temp_dir: s
         results.append({
             "scene_id": sc.get("scene_id", i),
             "mp3_path": out_wav,
+            "audio_path": out_wav,
             "duration": dur,
             "text": text,
             "visual_keyword": sc.get("visual_keyword", "cinematic dark vertical video"),

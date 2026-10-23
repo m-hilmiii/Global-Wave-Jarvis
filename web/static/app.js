@@ -988,8 +988,30 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    function listenToTaskEvents(taskId) {
-        const evtSource = new EventSource(`/api/events/${taskId}?token=${encodeURIComponent(localSessionToken || '')}`);
+    async function listenToTaskEvents(taskId) {
+        let ticket = "";
+        try {
+            const resp = await fetch("/api/stream/ticket", {
+                method: "POST",
+                headers: {
+                    "X-Local-Token": localSessionToken || "",
+                    "Content-Type": "application/json"
+                }
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                ticket = data.ticket || "";
+            }
+        } catch (e) {
+            console.error("[SSE Ticket Error]", e);
+        }
+
+        if (!ticket) {
+            console.error("[SSE Error] Gecerli stream ticket alinamadi.");
+            return;
+        }
+
+        const evtSource = new EventSource(`/api/events/${taskId}?ticket=${encodeURIComponent(ticket)}`);
 
         evtSource.onmessage = (event) => {
             try {

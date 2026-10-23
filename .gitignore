@@ -66,6 +66,3 @@ config/upload_history.json
 # Local Session Keys
 config/session_token.key
 *.key
-
-# Exclude github workflows from personal token push without workflow scope
-.github/

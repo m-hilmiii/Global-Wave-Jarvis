@@ -132,61 +132,77 @@ def generate_scene_audios_edge(scenes: list, voice: str, task_temp_dir: str, aud
 
 def generate_scene_audios(scenes: list, voice: str, persona_id: str, task_temp_dir: str, tts_engine: str = "kokoro") -> list:
     """
-    Unified scene audio generator.
-    Honors persona language phonetics, strict_local constraints, and records full audit metadata.
+    Unified scene audio generator with strict local isolation.
+    If strict_local=True, absolutely zero outbound cloud requests (ElevenLabs or Edge-TTS)
+    are permitted under any circumstance.
     """
     settings = load_settings()
     strict_local = bool(settings.get("strict_local", False))
     persona_data = get_persona(persona_id)
     persona_lang = persona_data.get("language", "en-US")
     resolved_voice = voice or persona_data.get("voice", "tr-TR-AhmetNeural")
+    clean_engine = str(tts_engine).lower().strip()
 
-    # 1. ElevenLabs Premium Cloud synthesis
-    if tts_engine == "elevenlabs":
+    # STRICT LOCAL ENFORCEMENT: Block any cloud engine immediately
+    if strict_local:
+        if clean_engine in ("elevenlabs", "edge-tts", "edge_tts"):
+            raise ValueError(
+                f"strict_local modu etkin: Bulut tabanli TTS motoru ('{tts_engine}') kullanilamaz. "
+                f"Lutfen yerel motor (Kokoro/Piper) kullanin veya strict_local ayarini kapatin."
+            )
+        if clean_engine != "kokoro":
+            raise ValueError(
+                f"strict_local modu etkin: Desteklenmeyen veya yerel olmayan motor '{tts_engine}'. "
+                f"Yalnizca yerel motorlar calistirilabilir."
+            )
+        # In strict_local, Kokoro MUST support the persona and language
+        if not is_kokoro_supported(persona_id, persona_lang):
+            raise RuntimeError(
+                f"strict_local modu etkin: Kokoro-82M '{persona_lang}' dilini ({persona_id}) desteklemez. "
+                f"Kokoro yalnizca Ingilizce fonetikleri ('en-US', 'en-GB') destekler. Cevrimdisi Turkce ses icin "
+                f"yerel Piper modeli kurulmali veya bulut tabanli Edge-TTS icin strict_local ayari kapatilmalidir."
+            )
+        try:
+            print("[VOICE] Synthesizing with Kokoro-82M local ONNX engine (strict_local mode)...")
+            return generate_scene_audios_kokoro(scenes, persona_id, task_temp_dir)
+        except Exception as e:
+            raise RuntimeError(f"strict_local modu etkin ve Kokoro yerel ses uretimi basarisiz oldu: {e}. Bulut fallback engellendi.")
+
+    # NORMAL MODE (strict_local is False):
+    if clean_engine == "elevenlabs":
         eleven_key = settings.get("elevenlabs_api_key", "")
         eleven_voice = settings.get("elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM")
-        if eleven_key:
-            print("[VOICE] Synthesizing with ElevenLabs API...")
-            results = []
-            failed = False
-            for i, sc in enumerate(scenes):
-                out_mp3 = os.path.join(task_temp_dir, f"audio_scene_{i}.mp3")
-                text = sc.get("text", "").strip() or "..."
-                success = synthesize_chunk_elevenlabs(text, out_mp3, eleven_key, eleven_voice)
-                if not success:
-                    failed = True
-                    break
-                dur = get_audio_duration(out_mp3)
-                results.append({
-                    "scene_id": sc.get("scene_id", i),
-                    "mp3_path": out_mp3,
-                    "duration": dur,
-                    "text": text,
-                    "visual_keyword": sc.get("visual_keyword", "cinematic technology"),
-                    "audio_meta": {
-                        "requested_engine": "elevenlabs",
-                        "actual_engine": "elevenlabs",
-                        "language": persona_lang,
-                        "voice_id": eleven_voice,
-                        "fallback_used": False,
-                        "fallback_reason": None
-                    }
-                })
-            if not failed:
-                return results
-            print("[WARN] ElevenLabs batch had errors, falling back...")
+        if not eleven_key:
+            raise ValueError("ElevenLabs motoru secildi fakat 'elevenlabs_api_key' tanimli degil.")
+        print("[VOICE] Synthesizing with ElevenLabs API...")
+        results = []
+        for i, sc in enumerate(scenes):
+            out_mp3 = os.path.join(task_temp_dir, f"audio_scene_{i}.mp3")
+            text = sc.get("text", "").strip() or "..."
+            success = synthesize_chunk_elevenlabs(text, out_mp3, eleven_key, eleven_voice)
+            if not success:
+                raise RuntimeError(f"ElevenLabs API uzerinden sahne {i} icin ses uretilemedi.")
+            dur = get_audio_duration(out_mp3)
+            results.append({
+                "scene_id": sc.get("scene_id", i),
+                "mp3_path": out_mp3,
+                "audio_path": out_mp3,
+                "duration": dur,
+                "text": text,
+                "visual_keyword": sc.get("visual_keyword", "cinematic technology"),
+                "audio_meta": {
+                    "requested_engine": "elevenlabs",
+                    "actual_engine": "elevenlabs",
+                    "language": persona_lang,
+                    "voice_id": eleven_voice,
+                    "fallback_used": False,
+                    "fallback_reason": None
+                }
+            })
+        return results
 
-    # 2. Kokoro-82M Local ONNX synthesis
-    if tts_engine == "kokoro":
-        # Check language support: Kokoro only supports English (and limited ja)
+    if clean_engine == "kokoro":
         if not is_kokoro_supported(persona_id, persona_lang):
-            if strict_local:
-                raise RuntimeError(
-                    f"strict_local modu etkin: Kokoro-82M '{persona_lang}' dilini ({persona_id}) desteklemez. "
-                    f"Kokoro yalnızca İngilizce fonetiklere sahiptir. Çevrimdışı Türkçe ses için yerel Piper modeli "
-                    f"yapılandırılmalı veya bulut tabanlı Edge-TTS için strict_local ayarı kapatılmalıdır."
-                )
-            # Legitimate routing to high-quality neural voice for Turkish/German/Spanish
             print(f"[VOICE] Kokoro-82M '{persona_lang}' dilini desteklemez. Dogal telaffuz icin Neural Edge-TTS ({resolved_voice}) motoruna yonlendiriliyor...")
             meta = {
                 "requested_engine": "kokoro",
@@ -197,16 +213,10 @@ def generate_scene_audios(scenes: list, voice: str, persona_id: str, task_temp_d
                 "fallback_reason": f"Kokoro-82M does not support language '{persona_lang}'; routed to neural Edge-TTS voice"
             }
             return generate_scene_audios_edge(scenes, resolved_voice, task_temp_dir, audio_meta=meta)
-
         try:
             print("[VOICE] Synthesizing with Kokoro-82M local ONNX engine...")
             return generate_scene_audios_kokoro(scenes, persona_id, task_temp_dir)
         except Exception as e:
-            if strict_local:
-                raise RuntimeError(
-                    f"strict_local modu etkin ve Kokoro yerel ses üretimi başarısız oldu: {e}. "
-                    f"Buluta geçilmedi."
-                )
             print(f"[WARN] Kokoro synthesis failed ({e}), falling back to Edge-TTS...")
             meta = {
                 "requested_engine": "kokoro",
@@ -218,17 +228,19 @@ def generate_scene_audios(scenes: list, voice: str, persona_id: str, task_temp_d
             }
             return generate_scene_audios_edge(scenes, resolved_voice, task_temp_dir, audio_meta=meta)
 
-    # 3. Default Edge-TTS synthesis
-    print(f"[VOICE] Synthesizing with Edge-TTS neural engine ({resolved_voice})...")
-    meta = {
-        "requested_engine": "edge-tts",
-        "actual_engine": "edge-tts",
-        "language": persona_lang,
-        "voice_id": resolved_voice,
-        "fallback_used": False,
-        "fallback_reason": None
-    }
-    return generate_scene_audios_edge(scenes, resolved_voice, task_temp_dir, audio_meta=meta)
+    if clean_engine in ("edge-tts", "edge_tts", "default"):
+        print(f"[VOICE] Synthesizing with Edge-TTS neural engine ({resolved_voice})...")
+        meta = {
+            "requested_engine": "edge-tts",
+            "actual_engine": "edge-tts",
+            "language": persona_lang,
+            "voice_id": resolved_voice,
+            "fallback_used": False,
+            "fallback_reason": None
+        }
+        return generate_scene_audios_edge(scenes, resolved_voice, task_temp_dir, audio_meta=meta)
+
+    raise ValueError(f"Gecersiz tts_engine: '{tts_engine}'. Desteklenen motorlar: kokoro, edge-tts, elevenlabs.")
 
 def concatenate_audios(audio_chunks: list, master_mp3_path: str) -> float:
     """Concatenate audio chunks seamlessly using FFmpeg concat."""

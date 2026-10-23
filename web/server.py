@@ -3,6 +3,7 @@ Global Wave - FastAPI AI Agency OS Server (100% Real Live YouTube & SQLite Data)
 """
 import asyncio
 import json
+import time
 import os
 import re
 import shutil
@@ -106,18 +107,37 @@ async def security_origin_check(request: Request, call_next):
                     status_code=403
                 )
 
-    # Comprehensive Local Session Token authentication on ALL /api/* routes (except session token endpoint)
-    if path.startswith("/api/") and path != "/api/session/token":
-        req_token = (
-            request.headers.get("x-local-token")
-            or request.headers.get("authorization", "").replace("Bearer ", "").strip()
-            or request.query_params.get("token", "").strip()
-        )
-        if not req_token or req_token != LOCAL_SESSION_TOKEN:
-            return JSONResponse(
-                {"status": "error", "message": "Yetkilendirme hatası: Geçersiz veya eksik X-Local-Token kimlik doğrulama anahtarı."},
-                status_code=401
+    # Comprehensive Local Session Token authentication on ALL /api/* routes (except session token and ticket endpoints)
+    if path.startswith("/api/") and path not in ("/api/session/token", "/api/stream/ticket"):
+        is_valid_ticket = False
+        if path.startswith("/api/events/"):
+            # ONLY short-lived single-use ticket is permitted in query param for SSE!
+            # Long-lived session token in query params is strictly REJECTED.
+            ticket = request.query_params.get("ticket")
+            if ticket:
+                with STREAM_TICKETS_LOCK:
+                    exp = STREAM_TICKETS.get(ticket)
+                    if exp and exp > time.time():
+                        is_valid_ticket = True
+                        # Consume single-use ticket immediately
+                        STREAM_TICKETS.pop(ticket, None)
+
+            if not is_valid_ticket:
+                return JSONResponse(
+                    {"status": "error", "message": "Unauthorized: Gecersiz, suresi dolmus veya eksik stream ticket. Lutfen POST /api/stream/ticket ile yeni bilet alin."},
+                    status_code=401
+                )
+        else:
+            # Query param tokens are strictly forbidden for all other endpoints
+            req_token = (
+                request.headers.get("x-local-token")
+                or request.headers.get("authorization", "").replace("Bearer ", "").strip()
             )
+            if not req_token or req_token != LOCAL_SESSION_TOKEN:
+                return JSONResponse(
+                    {"status": "error", "message": "Yetkilendirme hatasi: Gecersiz veya eksik X-Local-Token kimlik dogrulama anahtari."},
+                    status_code=401
+                )
             
     return await call_next(request)
 
