@@ -54,6 +54,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def security_origin_check(request: Request, call_next):
+    # Enforce localhost-only client access & CSRF/Origin validation on mutating requests
+    if request.method in ["POST", "PUT", "DELETE"]:
+        trusted_hosts = {"127.0.0.1", "localhost", "::1"}
+        client_host = request.client.host if request.client else "127.0.0.1"
+        if client_host not in trusted_hosts:
+            return JSONResponse(
+                {"status": "error", "message": "Unauthorized: External client access blocked."},
+                status_code=403
+            )
+        origin = request.headers.get("origin")
+        if origin:
+            parsed = re.sub(r"^https?://", "", origin).split(":")[0]
+            if parsed not in trusted_hosts:
+                return JSONResponse(
+                    {"status": "error", "message": "Forbidden: Cross-origin request rejected."},
+                    status_code=403
+                )
+    return await call_next(request)
+
 WEB_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
 app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
@@ -591,7 +612,11 @@ async def upload_to_youtube(request: Request):
     video_path = body.get("video_path")
     title = body.get("title", "Autonomous Viral Short #Shorts")
     description = body.get("description", "")
-    privacy_status = body.get("privacy", "public")
+    # Safe default is private, validated strictly
+    raw_privacy = str(body.get("privacy", "private")).lower().strip()
+    if raw_privacy not in {"private", "unlisted", "public"}:
+        raw_privacy = "private"
+    privacy_status = raw_privacy
     
     if task_id:
         task = get_task(task_id)
@@ -741,13 +766,25 @@ async def api_jarvis_chat(request: Request):
     return {"status": "success", "result": res}
 
 @app.post("/api/jarvis/draft/confirm")
-async def api_jarvis_draft_confirm():
-    res = jarvis_brain.confirm_pending_draft()
+async def api_jarvis_draft_confirm(request: Request):
+    draft_id = None
+    try:
+        data = await request.json()
+        draft_id = data.get("draft_id")
+    except Exception:
+        pass
+    res = jarvis_brain.confirm_pending_draft(draft_id)
     return {"status": "success", "result": res}
 
 @app.post("/api/jarvis/draft/cancel")
-async def api_jarvis_draft_cancel():
-    res = jarvis_brain.cancel_pending_draft()
+async def api_jarvis_draft_cancel(request: Request):
+    draft_id = None
+    try:
+        data = await request.json()
+        draft_id = data.get("draft_id")
+    except Exception:
+        pass
+    res = jarvis_brain.cancel_pending_draft(draft_id)
     return {"status": "success", "result": res}
 
 @app.get("/api/jarvis/telemetry")
@@ -783,6 +820,13 @@ async def api_jarvis_chat_send(identifier: str, request: Request):
     if not text:
         return JSONResponse({"status": "error", "message": "Text required"}, status_code=400)
     
+    # Require explicit confirmation flag to guard direct dispatch endpoint
+    if not data.get("confirm"):
+        return JSONResponse(
+            {"status": "error", "message": "Doğrudan mesaj gönderimi için explicit kullanıcı onayı (confirm: true) gereklidir."},
+            status_code=400
+        )
+    
     from core_jarvis.tools.contacts import contacts_mgr
     from core_jarvis.tools.whatsapp_tool import whatsapp_tool
     contact = contacts_mgr.find_contact(identifier)
@@ -817,6 +861,7 @@ async def api_jarvis_inbox_check_new(since: float = 0):
 
 @app.post("/api/jarvis/transcribe")
 async def api_jarvis_transcribe(request: Request):
+    MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB max limit
     content = b""
     try:
         form = await request.form()
@@ -831,15 +876,18 @@ async def api_jarvis_transcribe(request: Request):
 
     if not content:
         return JSONResponse({"status": "error", "message": "Audio content empty"}, status_code=400)
+
+    if len(content) > MAX_AUDIO_BYTES:
+        return JSONResponse({"status": "error", "message": "Ses dosyası boyutu 25MB sınırını aşamaz."}, status_code=413)
     
     temp_dir = TEMP_WORKSPACE
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_file = temp_dir / f"voice_{uuid.uuid4().hex[:8]}.webm"
     
-    with open(temp_file, "wb") as f:
-        f.write(content)
-        
     try:
+        with open(temp_file, "wb") as f:
+            f.write(content)
+            
         from engine.subtitle_whisper import get_whisper_model
         model = get_whisper_model()
         prompt = "Merhaba JARVIS, Mücahit Hilmi, Global-Wave, WhatsApp üzerinden mesaj gönder, rehbere kişi ekle, halini hatrını sor, nasılsın, iyi misin, ilet, yaz, kontrol et, Emre, Babam, Annem, Adem."
@@ -860,7 +908,8 @@ async def api_jarvis_transcribe(request: Request):
 
         return {"status": "success", "text": text}
     except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+        print(f"[TRANSCRIBE ERROR] {e}")
+        return JSONResponse({"status": "error", "message": "Ses işlenirken bir hata oluştu."}, status_code=500)
     finally:
         if temp_file.exists():
             try:

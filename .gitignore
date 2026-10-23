@@ -60,3 +60,6 @@ assets/fonts/*.ttc
 
 # Personal Contacts
 data/contacts.json
+
+# Runtime History & State
+config/upload_history.json

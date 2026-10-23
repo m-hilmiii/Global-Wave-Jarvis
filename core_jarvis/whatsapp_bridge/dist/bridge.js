@@ -44,6 +44,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const baileys_1 = __importStar(require("@whiskeysockets/baileys"));
 const readline = __importStar(require("readline"));
 const qrcodeTerminal = __importStar(require("qrcode-terminal"));
+const qrcode_1 = __importDefault(require("qrcode"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const pino_1 = __importDefault(require("pino"));
@@ -200,7 +201,7 @@ async function main() {
             keepAliveIntervalMs: 15000,
         });
         sock.ev.on("creds.update", saveCreds);
-        sock.ev.on("connection.update", (update) => {
+        sock.ev.on("connection.update", async (update) => {
             const { connection, lastDisconnect, qr } = update;
             if (qr) {
                 console.log("\n==================================================");
@@ -212,7 +213,8 @@ async function main() {
                 console.log("Tarayicida gormek icin: " + path.join(authDir, "qr.html"));
                 console.log("==================================================\n");
                 try {
-                    const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=" + encodeURIComponent(qr);
+                    // 100% Local QR code rendering (zero external network requests / zero data leakage)
+                    const qrDataUrl = await qrcode_1.default.toDataURL(qr, { margin: 2, scale: 8 });
                     const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -233,7 +235,7 @@ async function main() {
     <h2>JARVIS WhatsApp Baglantisi</h2>
     <p>Telefonunuzdan <b>WhatsApp &gt; Bagli Cihazlar &gt; Cihaz Bagla</b> secenegini acin ve kameranizi asagidaki koda tutun:</p>
     <div class="qr-box">
-      <img src="${qrUrl}" alt="QR Code" width="350" height="350" />
+      <img src="${qrDataUrl}" alt="QR Code" width="350" height="350" />
     </div>
     <p class="sub">Baglanti saglandiktan sonra bu sayfayi kapatabilirsiniz.</p>
   </div>

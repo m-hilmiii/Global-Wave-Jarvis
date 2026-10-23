@@ -21,8 +21,12 @@ class TelegramTool:
 
     def send_message(self, text: str) -> Dict[str, Any]:
         if not self.is_configured():
-            logger.info(f"[Telegram Standby] (Token not configured): {text}")
-            return {"success": True, "note": "Telegram bot standby mode (set TELEGRAM_BOT_TOKEN to go live)"}
+            logger.warning(f"[Telegram Standby] (Token not configured): {text}")
+            return {
+                "success": False,
+                "status": "not_configured",
+                "error": "Telegram bot henüz yapılandırılmamış efendim (TELEGRAM_BOT_TOKEN ortam değişkeni tanımlanmalı)."
+            }
 
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         try:

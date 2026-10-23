@@ -13,6 +13,7 @@ import makeWASocket, {
 } from "@whiskeysockets/baileys";
 import * as readline from "readline";
 import * as qrcodeTerminal from "qrcode-terminal";
+import QRCode from "qrcode";
 import * as fs from "fs";
 import * as path from "path";
 import pino from "pino";
@@ -179,7 +180,7 @@ async function main(): Promise<void> {
 
     sock.ev.on("creds.update", saveCreds);
 
-    sock.ev.on("connection.update", (update) => {
+    sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
@@ -193,7 +194,8 @@ async function main(): Promise<void> {
         console.log("==================================================\n");
 
         try {
-          const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=" + encodeURIComponent(qr);
+          // 100% Local QR code rendering (zero external network requests / zero data leakage)
+          const qrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
           const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
@@ -214,7 +216,7 @@ async function main(): Promise<void> {
     <h2>JARVIS WhatsApp Baglantisi</h2>
     <p>Telefonunuzdan <b>WhatsApp &gt; Bagli Cihazlar &gt; Cihaz Bagla</b> secenegini acin ve kameranizi asagidaki koda tutun:</p>
     <div class="qr-box">
-      <img src="${qrUrl}" alt="QR Code" width="350" height="350" />
+      <img src="${qrDataUrl}" alt="QR Code" width="350" height="350" />
     </div>
     <p class="sub">Baglanti saglandiktan sonra bu sayfayi kapatabilirsiniz.</p>
   </div>

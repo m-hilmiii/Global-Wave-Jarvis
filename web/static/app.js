@@ -1,3 +1,23 @@
+// Security Helpers: DOM XSS Prevention
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function sanitizeUrl(url) {
+    if (!url || typeof url !== "string") return "";
+    const clean = url.trim();
+    if (clean.startsWith("https://") || clean.startsWith("http://") || clean.startsWith("/") || clean.startsWith("data:image/")) {
+        return clean;
+    }
+    return "";
+}
+
 // Global Wave - AI Agency OS Client Logic (100% Live Real YouTube Data & Premium SaaS Terminal)
 document.addEventListener("DOMContentLoaded", () => {
     // State variables
@@ -517,8 +537,8 @@ document.addEventListener("DOMContentLoaded", () => {
                                 ${thumbImg}
                             </div>
                             <div>
-                                <h4 class="font-display font-extrabold text-base text-white tracking-wide">${ch.title}</h4>
-                                <p class="text-xs text-slate-400 font-mono">${ch.custom_url}</p>
+                                <h4 class="font-display font-extrabold text-base text-white tracking-wide">${escapeHtml(ch.title)}</h4>
+                                <p class="text-xs text-slate-400 font-mono">${escapeHtml(ch.custom_url)}</p>
                             </div>
                         </div>
                         ${badgeHtml}
@@ -527,11 +547,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div class="grid grid-cols-3 gap-2 p-3 rounded-lg bg-dark-950/70 border border-slate-800/80 text-center font-mono">
                         <div>
                             <span class="block text-[10px] text-slate-400 uppercase">Canlı Abone</span>
-                            <strong class="text-sm text-white">${ch.subscriber_count}</strong>
+                            <strong class="text-sm text-white">${escapeHtml(ch.subscriber_count)}</strong>
                         </div>
                         <div>
                             <span class="block text-[10px] text-slate-400 uppercase">YouTube Video</span>
-                            <strong class="text-sm text-cyan-400">${ch.video_count}</strong>
+                            <strong class="text-sm text-cyan-400">${escapeHtml(ch.video_count)}</strong>
                         </div>
                         <div>
                             <span class="block text-[10px] text-slate-400 uppercase">Hazır Shorts</span>
@@ -646,17 +666,17 @@ document.addEventListener("DOMContentLoaded", () => {
             card.innerHTML = `
                 <div>
                     <div class="flex justify-between items-center text-[10px] font-mono text-slate-400 mb-1.5">
-                        <span class="px-2 py-0.5 rounded bg-dark-950 text-cyan-400 border border-slate-800">${v.persona_id || "de_engineer"}</span>
-                        <span>${dateStr}</span>
+                        <span class="px-2 py-0.5 rounded bg-dark-950 text-cyan-400 border border-slate-800">${escapeHtml(v.persona_id || "de_engineer")}</span>
+                        <span>${escapeHtml(dateStr)}</span>
                     </div>
-                    <h4 class="font-display font-bold text-sm text-white line-clamp-2">${v.topic || "Otonom Shorts"}</h4>
+                    <h4 class="font-display font-bold text-sm text-white line-clamp-2">${escapeHtml(v.topic || "Otonom Shorts")}</h4>
                 </div>
 
                 <div class="flex justify-between items-center pt-2.5 border-t border-slate-800/80">
                     <span class="text-[11px] font-mono ${isYt ? 'text-emerald-400 font-bold' : 'text-slate-400'}">
                         ${isYt ? '🟢 Yayında' : '📁 Arşivde Hazır'}
                     </span>
-                    <button class="action-bar-btn btn-cinematic-cyan px-3 py-1.5 text-xs" onclick="window.openVideoInStudio('${v.task_id}')">
+                    <button class="action-bar-btn btn-cinematic-cyan px-3 py-1.5 text-xs" onclick="window.openVideoInStudio('${escapeHtml(v.task_id)}')">
                         İzle / Onar
                     </button>
                 </div>
@@ -809,13 +829,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center space-x-2">
                         <span class="text-xs font-mono font-bold text-cyan-400">Sahne ${idx + 1}</span>
-                        <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 uppercase">${sc.role || "narrative"}</span>
+                        <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 uppercase">${escapeHtml(sc.role || "narrative")}</span>
                     </div>
-                    <p class="text-xs text-slate-200 mt-1 truncate" title="${sc.text || ""}">${sc.text || ""}</p>
+                    <p class="text-xs text-slate-200 mt-1 truncate" title="${escapeHtml(sc.text || "")}">${escapeHtml(sc.text || "")}</p>
                 </div>
 
                 <div class="flex items-center space-x-2 flex-shrink-0 w-full md:w-auto">
-                    <input type="text" id="studioKw_${idx}" value="${sc.visual_keyword || ""}" class="bg-dark-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono w-32 focus:border-cyan-400 outline-none">
+                    <input type="text" id="studioKw_${idx}" value="${escapeHtml(sc.visual_keyword || "")}" class="bg-dark-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono w-32 focus:border-cyan-400 outline-none">
                     <button class="action-bar-btn btn-cinematic-cyan px-3 py-1.5 text-xs font-bold" onclick="window.repairStudioScene(${idx})">
                         <i class="fa-solid fa-arrows-rotate mr-1"></i> Değiştir (6s)
                     </button>
@@ -1716,7 +1736,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 ? "bg-gradient-to-r from-blue-900/60 to-cyan-900/50 border border-cyan-500/30 text-slate-100 rounded-tr-sm"
                 : "bg-dark-900/90 border border-slate-700/50 text-slate-200 rounded-tl-sm";
 
-            let formatted = text
+            const safeText = escapeHtml(text);
+            let formatted = safeText
                 .replace(/\*\*(.*?)\*\*/g, '<strong class="text-cyan-300">$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em class="text-slate-300">$1</em>')
                 .replace(/\n/g, "<br>");
@@ -1738,7 +1759,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
                 <div class="${bubbleBg} rounded-2xl p-3.5 max-w-[85%] shadow-md">
                     <div class="flex items-center justify-between space-x-3 mb-1">
-                        <span class="text-xs font-mono font-bold ${isUser ? "text-blue-300" : "text-cyan-400"}">${sender}</span>
+                        <span class="text-xs font-mono font-bold ${isUser ? "text-blue-300" : "text-cyan-400"}">${escapeHtml(sender)}</span>
                         ${meta.time ? `<span class="text-[10px] font-mono text-slate-500">${meta.time}</span>` : ""}
                     </div>
                     <div class="leading-relaxed text-sm">${formatted}</div>
@@ -1797,16 +1818,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 div.innerHTML = `
                     <div class="w-10 h-10 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-slate-200 text-sm font-bold font-mono shrink-0 shadow-sm relative">
-                        <span>${initial}</span>
+                        <span>${escapeHtml(initial)}</span>
                         ${c.unread_count > 0 ? '<span class="w-2.5 h-2.5 rounded-full bg-emerald-400 absolute -top-1 -right-1 border-2 border-dark-950"></span>' : ''}
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center justify-between">
-                            <h4 class="text-xs font-bold text-slate-200 truncate font-sans">${c.name}</h4>
-                            <span class="text-[10px] font-mono text-slate-500 shrink-0">${c.last_time || ""}</span>
+                            <h4 class="text-xs font-bold text-slate-200 truncate font-sans">${escapeHtml(c.name)}</h4>
+                            <span class="text-[10px] font-mono text-slate-500 shrink-0">${escapeHtml(c.last_time || "")}</span>
                         </div>
                         <div class="flex items-center justify-between mt-0.5">
-                            <p class="text-[11px] text-slate-400 truncate max-w-[170px]">${c.last_text || "Henüz mesaj yok"}</p>
+                            <p class="text-[11px] text-slate-400 truncate max-w-[170px]">${escapeHtml(c.last_text || "Henüz mesaj yok")}</p>
                             ${unreadHtml}
                         </div>
                     </div>
@@ -1987,12 +2008,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
                         // If JARVIS generated a draft, render interactive Human-In-The-Loop confirmation card
                         if (data.result.action_taken === "draft_created" || data.result.action_taken === "draft_revised") {
+                            const activeDraftId = data.result.draft ? data.result.draft.draft_id : "";
                             extraHtml = `
                                 <div id="draftActionsBox" class="mt-3 pt-3 border-t border-cyan-500/30 flex items-center gap-2">
-                                    <button onclick="window.confirmJarvisDraft(this)" class="px-3.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm">
+                                    <button onclick="window.confirmJarvisDraft(this, '${activeDraftId}')" class="px-3.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm">
                                         <i class="fa-solid fa-paper-plane text-emerald-400"></i> Onayla ve Gönder
                                     </button>
-                                    <button onclick="window.cancelJarvisDraft(this)" class="px-3.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm">
+                                    <button onclick="window.cancelJarvisDraft(this, '${activeDraftId}')" class="px-3.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm">
                                         <i class="fa-solid fa-xmark text-rose-400"></i> İptal Et
                                     </button>
                                 </div>
@@ -2025,7 +2047,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     const resp = await fetch(`/api/jarvis/chats/${encodeURIComponent(activeChat.short_name)}/send`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ text: msg })
+                        body: JSON.stringify({ text: msg, confirm: true })
                     });
                     const data = await resp.json();
                     if (data.status === "success" && data.result && data.result.success) {
@@ -2283,14 +2305,18 @@ document.addEventListener("DOMContentLoaded", () => {
         switchChat({ id: "jarvis", name: "JARVIS Core", short_name: "JARVIS", isAi: true });
 
         // --- GLOBAL EXPORTS FOR BUTTON ONCLICK CALLS ---
-        window.confirmJarvisDraft = async function(btn) {
+        window.confirmJarvisDraft = async function(btn, draftId = "") {
             const container = btn ? btn.closest("#draftActionsBox") : null;
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Gönderiliyor...';
             }
             try {
-                const res = await fetch("/api/jarvis/draft/confirm", { method: "POST" });
+                const res = await fetch("/api/jarvis/draft/confirm", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ draft_id: draftId })
+                });
                 const data = await res.json();
                 if (data.status === "success" && data.result) {
                     if (container) {
@@ -2316,11 +2342,15 @@ document.addEventListener("DOMContentLoaded", () => {
             scrollToBottom();
         };
 
-        window.cancelJarvisDraft = async function(btn) {
+        window.cancelJarvisDraft = async function(btn, draftId = "") {
             const container = btn ? btn.closest("#draftActionsBox") : null;
             if (btn) btn.disabled = true;
             try {
-                const res = await fetch("/api/jarvis/draft/cancel", { method: "POST" });
+                const res = await fetch("/api/jarvis/draft/cancel", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ draft_id: draftId })
+                });
                 const data = await res.json();
                 if (data.status === "success" && data.result) {
                     if (container) {

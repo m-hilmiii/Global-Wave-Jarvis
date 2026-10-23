@@ -336,7 +336,7 @@ def upload_short_video(
         
     can_upload, today_count = check_daily_upload_limit(max_per_day=4)
     if not can_upload:
-        print(f"[WARN] Daily safe upload limit reached ({today_count} uploads today). Proceeding with caution.")
+        raise RuntimeError(f"Günlük maksimum güvenli yükleme sınırına ({today_count}/4) ulaşıldı. Kanal güvenliği ve spam koruması için işlem durduruldu.")
 
     service = get_youtube_service()
     
