@@ -450,10 +450,8 @@ class WhatsAppDaemon:
                 target = c
                 break
 
-        if not target and overview:
-            target = overview[0]
-
         if not target:
+            # Do NOT fallback to first chat if contact not found; prevent private message leaks
             return []
 
         c_phone = "".join([x for x in target.get("phone", "") if x.isdigit()])

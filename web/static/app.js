@@ -1,3 +1,12 @@
+// Security Helpers: Safe Fetch with Local Session Token
+async function authFetch(url, options = {}) {
+    options.headers = options.headers || {};
+    if (localSessionToken && !options.headers["X-Local-Token"]) {
+        options.headers["X-Local-Token"] = localSessionToken;
+    }
+    return fetch(url, options);
+}
+
 // Security Helpers: DOM XSS Prevention
 function escapeHtml(str) {
     if (str === null || str === undefined) return "";
@@ -12,11 +21,28 @@ function escapeHtml(str) {
 function sanitizeUrl(url) {
     if (!url || typeof url !== "string") return "";
     const clean = url.trim();
-    if (clean.startsWith("https://") || clean.startsWith("http://") || clean.startsWith("/") || clean.startsWith("data:image/")) {
+    if (/^https:\/\/[a-zA-Z0-9_\-\.]+/i.test(clean) || 
+        /^http:\/\/(127\.0\.0\.1|localhost)(:[0-9]+)?(\/.*)?$/i.test(clean) || 
+        /^\/(static|output)\/[a-zA-Z0-9_\-\.\/]+$/i.test(clean) ||
+        /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/i.test(clean)) {
         return clean;
     }
     return "";
 }
+
+let localSessionToken = "";
+async function initSessionAuth() {
+    try {
+        const res = await fetch("/api/session/token");
+        const data = await res.json();
+        if (data.status === "success" && data.token) {
+            localSessionToken = data.token;
+        }
+    } catch (e) {
+        console.warn("Session token handshake failed:", e);
+    }
+}
+initSessionAuth();
 
 // Global Wave - AI Agency OS Client Logic (100% Live Real YouTube Data & Premium SaaS Terminal)
 document.addEventListener("DOMContentLoaded", () => {
@@ -280,7 +306,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Fetch live diagnostic data from backend
         try {
-            const res = await fetch("/api/youtube/diagnostic");
+            const res = await authFetch("/api/youtube/diagnostic");
             const diag = await res.json();
             
             const secretStatus = document.getElementById("diagSecretStatus");
@@ -336,7 +362,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (authLiveStatusText) authLiveStatusText.textContent = "Google onay penceresi açıldı. Hesabınızı seçip izin verin... Otomatik algılanıyor.";
             }
 
-            const res = await fetch("/api/youtube/auth", { method: "POST" });
+            const res = await authFetch("/api/youtube/auth", { method: "POST" });
             const data = await res.json();
 
             // Start polling every 2.5s for successful authentication
@@ -350,7 +376,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (channels && channels.length > 0 && channels[0].is_connected) {
                         clearInterval(authPollingInterval);
                         authPollingInterval = null;
-                        if (authLiveStatusText) authLiveStatusText.innerHTML = `<span class="text-emerald-400 font-bold">🎉 Tebrikler! ${channels[0].title} (${channels[0].custom_url}) Başarıyla Bağlandı!</span>`;
+                        if (authLiveStatusText) authLiveStatusText.innerHTML = `<span class="text-emerald-400 font-bold">🎉 Tebrikler! ${escapeHtml(channels[0].title)} (${escapeHtml(channels[0].custom_url)}) Başarıyla Bağlandı!</span>`;
                         if (authBtnLabel) authBtnLabel.innerHTML = `🟢 Bağlantı Tamamlandı!`;
                         await loadChannels();
                         setTimeout(() => {
@@ -395,7 +421,7 @@ document.addEventListener("DOMContentLoaded", () => {
             reader.onload = async (evt) => {
                 try {
                     const jsonContent = JSON.parse(evt.target.result);
-                    const res = await fetch("/api/youtube/upload-secret", {
+                    const res = await authFetch("/api/youtube/upload-secret", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(jsonContent)
@@ -437,7 +463,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (dashChannelCardBody) {
                         dashChannelCardBody.innerHTML = `
                             <div class="flex items-center justify-between text-xs font-mono">
-                                <span class="text-white font-bold">${c.subscriber_count} Canlı Abone</span>
+                                <span class="text-white font-bold">${escapeHtml(c.subscriber_count)} Canlı Abone</span>
                                 <span class="text-emerald-400 flex items-center font-semibold">
                                     <i class="fa-solid fa-circle-check mr-1.5"></i> Canlı Bağlı
                                 </span>
@@ -525,8 +551,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 ? '<span class="px-2.5 py-1 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">🟢 CANLI YAYINDA</span>'
                 : '<span class="px-2.5 py-1 rounded text-[10px] font-mono font-bold bg-yt-red/10 text-yt-red border border-yt-red/30">🔴 BAĞLANTI GEREKLİ</span>';
 
-            const thumbImg = ch.thumbnail 
-                ? `<img src="${ch.thumbnail}" class="w-full h-full object-cover rounded-lg">` 
+            const safeThumb = sanitizeUrl(ch.thumbnail);
+            const thumbImg = safeThumb 
+                ? `<img src="${safeThumb}" class="w-full h-full object-cover rounded-lg">` 
                 : '<i class="fa-brands fa-youtube text-2xl text-yt-red"></i>';
 
             if (isConn) {
@@ -739,8 +766,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     ${key.substring(0, 2).toUpperCase()}
                 </div>
                 <div class="flex-1 min-w-0">
-                    <h5 class="text-xs font-bold text-white truncate">${p.name}</h5>
-                    <p class="text-[10px] text-slate-400 font-mono truncate">${p.country || "Global"}</p>
+                    <h5 class="text-xs font-bold text-white truncate">${escapeHtml(p.name)}</h5>
+                    <p class="text-[10px] text-slate-400 font-mono truncate">${escapeHtml(p.country || "Global")}</p>
                 </div>
             `;
 
@@ -1258,7 +1285,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const customTitle = ytUploadCustomTitle ? ytUploadCustomTitle.value.trim() : (studioActiveTitle ? studioActiveTitle.textContent : "Autonomous Viral Short #Shorts");
 
             try {
-                const res = await fetch("/api/youtube/upload", {
+                const res = await authFetch("/api/youtube/upload", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -1340,7 +1367,7 @@ document.addEventListener("DOMContentLoaded", () => {
             saveSettingsBtn.disabled = true;
             saveSettingsBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Kaydediliyor...';
             try {
-                const res = await fetch("/api/config", {
+                const res = await authFetch("/api/config", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -1462,7 +1489,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             </div>
                             <p class="text-[11px] text-slate-300 font-mono"><span class="text-slate-500">Örnek Konu:</span> "${n.breakout_sample}"</p>
                             <p class="text-[10px] text-slate-400 font-sans">${n.why_it_works}</p>
-                            <button onclick="window.useNicheTopic('${n.breakout_sample.replace(/'/g, "\\'")}')" class="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 font-mono flex items-center space-x-1 pt-1">
+                            <button data-niche="${escapeHtml(n.breakout_sample)}" onclick="window.useNicheTopic(this.getAttribute('data-niche'))" class="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 font-mono flex items-center space-x-1 pt-1">
                                 <span>Bu Konuyla Video Üret</span>
                                 <i class="fa-solid fa-arrow-right text-[10px]"></i>
                             </button>
@@ -1760,7 +1787,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div class="${bubbleBg} rounded-2xl p-3.5 max-w-[85%] shadow-md">
                     <div class="flex items-center justify-between space-x-3 mb-1">
                         <span class="text-xs font-mono font-bold ${isUser ? "text-blue-300" : "text-cyan-400"}">${escapeHtml(sender)}</span>
-                        ${meta.time ? `<span class="text-[10px] font-mono text-slate-500">${meta.time}</span>` : ""}
+                        ${meta.time ? `<span class="text-[10px] font-mono text-slate-500">${escapeHtml(meta.time)}</span>` : ""}
                     </div>
                     <div class="leading-relaxed text-sm">${formatted}</div>
                     ${extraHtml}
@@ -1915,7 +1942,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (chatModeBadgeEl) {
                     chatModeBadgeEl.className = "flex items-center space-x-1 text-emerald-400 font-semibold";
-                    chatModeBadgeEl.innerHTML = `<i class="fa-brands fa-whatsapp text-[9px]"></i><span>WhatsApp: ${chatObj.short_name}</span>`;
+                    chatModeBadgeEl.innerHTML = `<i class="fa-brands fa-whatsapp text-[9px]"></i><span>WhatsApp: ${escapeHtml(chatObj.short_name)}</span>`;
                 }
                 if (chatTargetHintEl) {
                     chatTargetHintEl.textContent = `Bu kişiye doğrudan WhatsApp mesajı iletilir`;
@@ -1973,12 +2000,12 @@ document.addEventListener("DOMContentLoaded", () => {
                                 <i class="fa-brands fa-whatsapp"></i>
                             </div>
                             <p class="font-bold text-slate-300">Henüz Mesaj Kaydı Yok</p>
-                            <p class="text-slate-500 text-[11px]">Aşağıdaki giriş alanından ${contactQuery} kişisine ilk WhatsApp mesajını iletebilirsiniz.</p>
+                            <p class="text-slate-500 text-[11px]">Aşağıdaki giriş alanından ${escapeHtml(contactQuery)} kişisine ilk WhatsApp mesajını iletebilirsiniz.</p>
                         </div>
                     `;
                 }
             } catch (err) {
-                feedEl.innerHTML = `<div class="p-4 text-center text-rose-400 text-xs">Mesaj geçmişi yüklenemedi: ${err.message}</div>`;
+                feedEl.innerHTML = `<div class="p-4 text-center text-rose-400 text-xs">Mesaj geçmişi yüklenemedi: ${escapeHtml(err.message)}</div>`;
             }
             scrollToBottom();
         }
@@ -1996,7 +2023,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (sendBtn) sendBtn.disabled = true;
                 try {
-                    const resp = await fetch("/api/jarvis/chat", {
+                    const resp = await authFetch("/api/jarvis/chat", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ message: msg })
@@ -2044,7 +2071,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (sendBtn) sendBtn.disabled = true;
 
                 try {
-                    const resp = await fetch(`/api/jarvis/chats/${encodeURIComponent(activeChat.short_name)}/send`, {
+                    const resp = await authFetch(`/api/jarvis/chats/${encodeURIComponent(activeChat.short_name)}/send`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ text: msg, confirm: true })
@@ -2168,7 +2195,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // --- Delete Single Message Implementation ---
         window.deleteSingleMessage = async function(jid, messageId, everyone = true) {
             try {
-                const res = await fetch("/api/jarvis/message/delete", {
+                const res = await authFetch("/api/jarvis/message/delete", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ jid, message_id: messageId, everyone })
@@ -2312,7 +2339,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Gönderiliyor...';
             }
             try {
-                const res = await fetch("/api/jarvis/draft/confirm", {
+                const res = await authFetch("/api/jarvis/draft/confirm", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ draft_id: draftId })
@@ -2336,7 +2363,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             } catch (err) {
                 if (container) {
-                    container.innerHTML = `<div class="text-xs text-rose-400 mt-1">Gönderim hatası: ${err.message}</div>`;
+                    container.innerHTML = `<div class="text-xs text-rose-400 mt-1">Gönderim hatası: ${escapeHtml(err.message)}</div>`;
                 }
             }
             scrollToBottom();
@@ -2346,7 +2373,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const container = btn ? btn.closest("#draftActionsBox") : null;
             if (btn) btn.disabled = true;
             try {
-                const res = await fetch("/api/jarvis/draft/cancel", {
+                const res = await authFetch("/api/jarvis/draft/cancel", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ draft_id: draftId })
@@ -2365,7 +2392,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             } catch (err) {
                 if (container) {
-                    container.innerHTML = `<div class="text-xs text-rose-400 mt-1">İptal hatası: ${err.message}</div>`;
+                    container.innerHTML = `<div class="text-xs text-rose-400 mt-1">İptal hatası: ${escapeHtml(err.message)}</div>`;
                 }
             }
             scrollToBottom();

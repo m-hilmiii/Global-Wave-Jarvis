@@ -1,3 +1,5 @@
+import threading
+UPLOAD_LOCK = threading.Lock()
 """
 Global Wave - Official YouTube Data API v3 Uploader Engine (Faz 2)
 1. Desktop OAuth 2.0 Loopback Flow.
@@ -198,42 +200,52 @@ import random
 
 HISTORY_FILE = CONFIG_DIR / "upload_history.json"
 
-def check_daily_upload_limit(max_per_day: int = 3) -> tuple[bool, int]:
-    """Check how many videos were uploaded today to prevent spam / shadowban."""
-    if not HISTORY_FILE.exists():
-        return True, 0
-    try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            history = json.load(f)
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        todays_uploads = [h for h in history if h.get("date") == today]
-        count = len(todays_uploads)
-        return count < max_per_day, count
-    except Exception:
-        return True, 0
-
-def record_upload(video_id: str, title: str):
-    """Record upload timestamp into local history file."""
-    history = []
-    if HISTORY_FILE.exists():
+def check_daily_upload_limit(max_per_day: int = 4) -> tuple[bool, int]:
+    """Check how many videos were uploaded today with thread-safety and fail-safe policy."""
+    with UPLOAD_LOCK:
+        if not HISTORY_FILE.exists():
+            return True, 0
         try:
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
                 history = json.load(f)
-        except Exception:
-            history = []
-    
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    history.append({
-        "video_id": video_id,
-        "title": title,
-        "date": today,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
-    try:
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(history[-100:], f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"[WARN] Failed to write upload history: {e}")
+            if not isinstance(history, list):
+                print("[WARN] Upload history corrupted; failing closed for safety.")
+                return False, max_per_day
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            todays_uploads = [h for h in history if isinstance(h, dict) and h.get("date") == today]
+            count = len(todays_uploads)
+            return count < max_per_day, count
+        except Exception as e:
+            print(f"[ERROR] Failed to safely read upload history: {e}. Failing closed.")
+            return False, max_per_day
+
+def record_upload(video_id: str, title: str):
+    """Atomically record upload timestamp into local history file."""
+    with UPLOAD_LOCK:
+        history = []
+        if HISTORY_FILE.exists():
+            try:
+                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        history = data
+            except Exception:
+                history = []
+        
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        history.append({
+            "video_id": video_id,
+            "title": title,
+            "date": today,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        try:
+            temp_history = HISTORY_FILE.with_suffix(".tmp")
+            with open(temp_history, "w", encoding="utf-8") as f:
+                json.dump(history[-100:], f, indent=2, ensure_ascii=False)
+            temp_history.replace(HISTORY_FILE)
+        except Exception as e:
+            print(f"[WARN] Failed to write upload history atomically: {e}")
 
 def set_thumbnail(video_id: str, thumbnail_path: str) -> bool:
     """Sets custom thumbnail for uploaded YouTube video via YouTube Data API v3."""
@@ -328,7 +340,9 @@ def upload_short_video(
     privacy_status: str = "private",  # Safe default: private first
     category_id: str = "28",
     thumbnail_path: str = None,
-    delay_hours: int = 3,
+    auto_schedule: bool = False,      # Explicit user consent required for scheduled release
+    delay_hours: int = 0,             # Default 0 (NO automatic public publishing)
+    is_made_for_kids: bool = False,
     is_shorts: bool = True
 ) -> dict:
     if not os.path.exists(video_path):
@@ -370,7 +384,7 @@ def upload_short_video(
         },
         "status": {
             "privacyStatus": privacy_status,
-            "selfDeclaredMadeForKids": False
+            "selfDeclaredMadeForKids": bool(is_made_for_kids)
         }
     }
     
@@ -405,9 +419,15 @@ def upload_short_video(
     if thumbnail_path and os.path.exists(thumbnail_path):
         set_thumbnail(video_id, thumbnail_path)
 
-    # If user wants scheduled delayed publish
-    if delay_hours and delay_hours > 0 and privacy_status == "private":
-        schedule_publish(video_id, delay_hours=delay_hours)
+    # Automatic delayed publish ONLY if explicit consent (auto_schedule=True) and delay_hours > 0
+    publish_scheduled = False
+    scheduled_at = None
+    if auto_schedule and delay_hours > 0 and privacy_status == "private":
+        ok = schedule_publish(video_id, delay_hours=delay_hours)
+        publish_scheduled = ok
+        if ok:
+            pub_time = datetime.now(timezone.utc) + timedelta(hours=delay_hours)
+            scheduled_at = pub_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
     
     return {
         "status": "success",
@@ -415,5 +435,7 @@ def upload_short_video(
         "url": video_url,
         "title": response.get("snippet", {}).get("title"),
         "privacy": privacy_status,
-        "scheduled_delay_hours": delay_hours if privacy_status == "private" else 0
+        "publish_scheduled": publish_scheduled,
+        "scheduled_publish_time": scheduled_at,
+        "scheduled_delay_hours": delay_hours if (auto_schedule and privacy_status == "private") else 0
     }

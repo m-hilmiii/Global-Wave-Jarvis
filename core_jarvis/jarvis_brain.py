@@ -1,3 +1,4 @@
+import threading
 import uuid
 """
 Global-Wawe / Stark-Core - JARVIS Executive AI Brain
@@ -80,6 +81,7 @@ class JarvisBrain:
         self.conversation_history: List[Dict[str, str]] = []
         self.pending_drafts: Dict[str, Dict[str, Any]] = {}
         self.latest_draft_id: Optional[str] = None
+        self.draft_lock = threading.Lock()
 
     @property
     def pending_draft(self) -> Optional[Dict[str, Any]]:
@@ -112,47 +114,66 @@ class JarvisBrain:
             self.latest_draft_id = draft_id
 
     def confirm_pending_draft(self, draft_id: Optional[str] = None) -> Dict[str, Any]:
-        """Dispatches the specified (or latest) pending draft to WhatsApp after explicit user approval."""
+        """Dispatches the specified pending draft with thread-safe atomic status transition (pending -> sending -> sent/failed)."""
         target_id = draft_id or self.latest_draft_id
-        if not target_id or target_id not in self.pending_drafts:
-            reply = "Efendim, şu anda onay bekleyen aktif bir mesaj taslağı bulunmuyor."
-            speak_text = "Onay bekleyen aktif bir mesaj taslağı bulunmuyor efendim."
-            return {"reply": reply, "speak_text": speak_text, "action_taken": "no_draft"}
+        if not target_id:
+            reply = "Efendim, onaylanacak mesaj için geçerli bir taslak kimliği (draft_id) belirtilmedi."
+            speak_text = "Geçerli bir taslak kimliği belirtilmedi efendim."
+            return {"reply": reply, "speak_text": speak_text, "action_taken": "invalid_draft_id"}
 
-        draft = self.pending_drafts[target_id]
-        if time.time() > draft.get("expires_at", float("inf")):
-            self.pending_drafts.pop(target_id, None)
-            if self.latest_draft_id == target_id:
-                self.latest_draft_id = None
-            reply = "Efendim, bu mesaj taslağının onay süresi doldu. Lütfen mesajı tekrar belirtin."
-            speak_text = "Mesaj taslağının onay süresi doldu efendim."
-            return {"reply": reply, "speak_text": speak_text, "action_taken": "draft_expired"}
+        with self.draft_lock:
+            if target_id not in self.pending_drafts:
+                reply = "Efendim, onay bekleyen böyle bir aktif mesaj taslağı bulunmuyor."
+                speak_text = "Onay bekleyen aktif bir mesaj taslağı bulunmuyor efendim."
+                return {"reply": reply, "speak_text": speak_text, "action_taken": "no_draft"}
 
-        res = whatsapp_tool.send_message_to_phone(draft["phone"], draft["message"], recipient_name=draft["recipient"])
-        if res.get("success"):
-            # Only discard pending draft upon verified successful dispatch
-            self.pending_drafts.pop(target_id, None)
-            if self.latest_draft_id == target_id:
-                self.latest_draft_id = None
-            reply = (
-                f"Mesajınız WhatsApp üzerinden başarıyla iletildi efendim! ✅\n\n"
-                f"📱 **Alıcı:** {draft['recipient']} ({draft['phone']})\n"
-                f"💬 **İletilen Mesaj:** \"{draft['message']}\"\n"
-                f"✅ **Durum:** WhatsApp sunucu onayı (ACK) alındı."
-            )
-            speak_text = f"Mesaj {draft['recipient']} kişisine başarıyla iletildi efendim."
-            self._record_turn("Mesajı onayla ve gönder", reply)
-            return {"reply": reply, "speak_text": speak_text, "action_taken": "whatsapp_dispatched", "details": res, "draft_id": target_id}
-        else:
-            # Retain draft in state on failure so user can retry safely
-            draft["status"] = "failed"
-            reply = (
-                f"Efendim, mesaj iletimi sırasında bir aksaklık oluştu: {res.get('error')}\n\n"
-                f"Taslak korunuyor. Yeniden göndermemi ister misiniz?"
-            )
-            speak_text = "Mesaj iletimi sırasında bir hata oluştu efendim. Taslak korunuyor, tekrar deneyelim mi?"
-            self._record_turn("Mesajı onayla ve gönder", reply)
-            return {"reply": reply, "speak_text": speak_text, "action_taken": "whatsapp_error", "details": res, "draft_id": target_id}
+            draft = self.pending_drafts[target_id]
+            if time.time() > draft.get("expires_at", float("inf")):
+                self.pending_drafts.pop(target_id, None)
+                if self.latest_draft_id == target_id:
+                    self.latest_draft_id = None
+                reply = "Efendim, bu mesaj taslağının onay süresi doldu. Lütfen mesajı tekrar belirtin."
+                speak_text = "Mesaj taslağının onay süresi doldu efendim."
+                return {"reply": reply, "speak_text": speak_text, "action_taken": "draft_expired"}
+
+            # Atomic race-condition prevention: reject concurrent duplicate dispatch attempts
+            if draft.get("status") == "sending":
+                reply = "Efendim, bu mesaj taslağı şu anda WhatsApp üzerinden gönderilmekte."
+                speak_text = "Bu mesaj şu anda gönderiliyor efendim."
+                return {"reply": reply, "speak_text": speak_text, "action_taken": "already_sending"}
+
+            draft["status"] = "sending"
+
+        # Dispatch outside the lock so other threads/requests are not blocked by network latency
+        try:
+            res = whatsapp_tool.send_message_to_phone(draft["phone"], draft["message"], recipient_name=draft["recipient"])
+        except Exception as e:
+            res = {"success": False, "error": str(e)}
+
+        with self.draft_lock:
+            if res.get("success"):
+                draft["status"] = "sent"
+                self.pending_drafts.pop(target_id, None)
+                if self.latest_draft_id == target_id:
+                    self.latest_draft_id = None
+                reply = (
+                    f"Mesajınız WhatsApp üzerinden başarıyla iletildi efendim! ✅\n\n"
+                    f"📱 **Alıcı:** {draft['recipient']} ({draft['phone']})\n"
+                    f"💬 **İletilen Mesaj:** \"{draft['message']}\"\n"
+                    f"✅ **Durum:** WhatsApp sunucu onayı (ACK) alındı."
+                )
+                speak_text = f"Mesaj {draft['recipient']} kişisine başarıyla iletildi efendim."
+                self._record_turn("Mesajı onayla ve gönder", reply)
+                return {"reply": reply, "speak_text": speak_text, "action_taken": "whatsapp_dispatched", "details": res, "draft_id": target_id}
+            else:
+                draft["status"] = "failed"
+                reply = (
+                    f"Efendim, mesaj iletimi sırasında bir aksaklık oluştu: {res.get('error')}\n\n"
+                    f"Taslak korunuyor. Yeniden göndermemi ister misiniz?"
+                )
+                speak_text = "Mesaj iletimi sırasında bir hata oluştu efendim. Taslak korunuyor, tekrar deneyelim mi?"
+                self._record_turn("Mesajı onayla ve gönder", reply)
+                return {"reply": reply, "speak_text": speak_text, "action_taken": "whatsapp_error", "details": res, "draft_id": target_id}
 
     def cancel_pending_draft(self, draft_id: Optional[str] = None) -> Dict[str, Any]:
         """Cancels and discards the specified (or latest) pending draft."""

@@ -1,40 +1,25 @@
 """
 Global-Wawe / Stark-Core - Gmail Intelligence Tool
-Summarizes unread emails and alerts user about urgent matters.
+Explicitly reports status to prevent false positive notifications until full OAuth integration.
 """
 
-import os
 import logging
-from typing import List, Dict, Any
-from pathlib import Path
+from typing import Dict, Any
 
 logger = logging.getLogger("Jarvis.Gmail")
 
 class GmailTool:
     def __init__(self):
-        self.token_file = Path(__file__).resolve().parent.parent.parent / "config" / "gmail_token.json"
-
-    def is_configured(self) -> bool:
-        return self.token_file.exists()
+        pass
 
     def check_inbox(self) -> Dict[str, Any]:
-        """Checks for new unread messages and summarizes them honestly."""
-        if not self.is_configured():
-            return {
-                "success": False,
-                "status": "not_configured",
-                "unread_count": 0,
-                "urgent_count": 0,
-                "summary": "Gmail entegrasyonu henüz yapılandırılmamış efendim. E-postaları kontrol edebilmem için Gmail OAuth bağlantısı gereklidir.",
-                "emails": []
-            }
-        
+        """Checks for new unread messages and honestly reports not_implemented status."""
         return {
-            "success": True,
-            "status": "connected",
+            "success": False,
+            "status": "not_implemented",
             "unread_count": 0,
             "urgent_count": 0,
-            "summary": "Gelen kutunuzda okunmamış yeni e-posta bulunmuyor efendim.",
+            "summary": "Gmail API entegrasyonu henüz tamamlanmadı efendim. E-postalar için Gmail entegrasyonunun kurulması gereklidir.",
             "emails": []
         }
 

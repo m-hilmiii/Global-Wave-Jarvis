@@ -54,9 +54,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+SESSION_TOKEN_FILE = BASE_DIR / "config" / "session_token.key"
+if not SESSION_TOKEN_FILE.exists():
+    SESSION_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _tok = uuid.uuid4().hex + uuid.uuid4().hex
+    SESSION_TOKEN_FILE.write_text(_tok, encoding="utf-8")
+else:
+    _tok = SESSION_TOKEN_FILE.read_text(encoding="utf-8").strip()
+
+LOCAL_SESSION_TOKEN = os.environ.get("GLOBAL_WAVE_TOKEN") or _tok
+
+SENSITIVE_PREFIXES = (
+    "/api/config",
+    "/api/youtube",
+    "/api/jarvis/chats/",
+    "/api/jarvis/draft/",
+    "/api/jarvis/message/delete",
+    "/api/tasks/"
+)
+
 @app.middleware("http")
 async def security_origin_check(request: Request, call_next):
-    # Enforce localhost-only client access & CSRF/Origin validation on mutating requests
+    # 1. Enforce localhost-only client access & CSRF/Origin validation on mutating requests
     if request.method in ["POST", "PUT", "DELETE"]:
         trusted_hosts = {"127.0.0.1", "localhost", "::1"}
         client_host = request.client.host if request.client else "127.0.0.1"
@@ -73,7 +93,24 @@ async def security_origin_check(request: Request, call_next):
                     {"status": "error", "message": "Forbidden: Cross-origin request rejected."},
                     status_code=403
                 )
+                
+        # 2. Local Session Token Authentication on sensitive mutating endpoints
+        if request.url.path.startswith(SENSITIVE_PREFIXES):
+            req_token = request.headers.get("x-local-token") or request.headers.get("authorization", "").replace("Bearer ", "").strip()
+            if not req_token or req_token != LOCAL_SESSION_TOKEN:
+                return JSONResponse(
+                    {"status": "error", "message": "Yetkilendirme hatası: Geçersiz veya eksik X-Local-Token kimlik doğrulama anahtarı."},
+                    status_code=401
+                )
+                
     return await call_next(request)
+
+@app.get("/api/session/token")
+async def api_get_session_token(request: Request):
+    client_host = request.client.host if request.client else "127.0.0.1"
+    if client_host not in {"127.0.0.1", "localhost", "::1"}:
+        return JSONResponse({"status": "error", "message": "Forbidden"}, status_code=403)
+    return {"status": "success", "token": LOCAL_SESSION_TOKEN}
 
 WEB_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
@@ -571,24 +608,29 @@ async def api_clear_token():
 @app.post("/api/youtube/upload-secret")
 async def api_upload_secret(request: Request):
     try:
-        content_type = request.headers.get("content-type", "")
-        if "application/json" in content_type:
-            data = await request.json()
-            with open(CLIENT_SECRET_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            clear_cached_tokens()
-            return {"status": "success", "message": "client_secret.json başarıyla kaydedildi."}
-        else:
-            body = await request.body()
-            text = body.decode("utf-8")
-            # validate json
-            data = json.loads(text)
-            with open(CLIENT_SECRET_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            clear_cached_tokens()
-            return {"status": "success", "message": "client_secret.json başarıyla yüklendi."}
+        raw_body = await request.body()
+        if len(raw_body) > 100 * 1024:
+            return JSONResponse({"status": "error", "message": "Dosya boyutu 100KB sınırını aşamaz."}, status_code=413)
+            
+        data = json.loads(raw_body.decode("utf-8"))
+        if not isinstance(data, dict):
+            return JSONResponse({"status": "error", "message": "Geçersiz JSON formatı."}, status_code=400)
+            
+        client_cfg = data.get("installed") or data.get("web")
+        if not client_cfg or not isinstance(client_cfg, dict) or "client_id" not in client_cfg:
+            return JSONResponse(
+                {"status": "error", "message": "Geçersiz client_secret.json. 'installed' veya 'web' nesnesi ve 'client_id' içermelidir."},
+                status_code=400
+            )
+            
+        temp_file = CLIENT_SECRET_FILE.with_suffix(".tmp")
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        temp_file.replace(CLIENT_SECRET_FILE)
+        clear_cached_tokens()
+        return {"status": "success", "message": "client_secret.json başarıyla doğrulandı ve kaydedildi."}
     except Exception as e:
-        return JSONResponse({"status": "error", "message": f"Geçersiz JSON formatı: {str(e)}"}, status_code=400)
+        return JSONResponse({"status": "error", "message": f"Geçersiz format: {str(e)}"}, status_code=400)
 
 @app.post("/api/youtube/auth")
 async def trigger_youtube_auth():
@@ -627,11 +669,27 @@ async def upload_to_youtube(request: Request):
                 
     if not video_path and body.get("video_url"):
         v_url = body.get("video_url")
-        filename = v_url.split("/")[-1]
+        filename = Path(v_url).name
         video_path = str(OUTPUT_DIR / filename)
         
-    if not video_path or not os.path.exists(video_path):
-        return JSONResponse({"status": "error", "message": f"Video file not found: {video_path}"}, status_code=400)
+    if not video_path:
+        return JSONResponse({"status": "error", "message": "Video dosya yolu belirtilmedi."}, status_code=400)
+
+    # Path traversal security check: must resolve strictly inside OUTPUT_DIR
+    resolved_video = Path(video_path).resolve()
+    resolved_output = OUTPUT_DIR.resolve()
+    if not (resolved_video == resolved_output or resolved_output in resolved_video.parents):
+        return JSONResponse(
+            {"status": "error", "message": "Erişim engellendi: Yalnızca output/ dizini altındaki video dosyaları yüklenebilir."},
+            status_code=403
+        )
+
+    if not resolved_video.exists():
+        return JSONResponse({"status": "error", "message": "Belirtilen video dosyası bulunamadı."}, status_code=404)
+
+    if resolved_video.suffix.lower() not in {".mp4", ".mov", ".mkv", ".webm"}:
+        return JSONResponse({"status": "error", "message": "Geçersiz dosya biçimi: Yalnızca video dosyaları yüklenebilir."}, status_code=400)
+    video_path = str(resolved_video)
         
     try:
         res = upload_short_video(
@@ -774,7 +832,13 @@ async def api_jarvis_draft_confirm(request: Request):
     except Exception:
         pass
     res = jarvis_brain.confirm_pending_draft(draft_id)
-    return {"status": "success", "result": res}
+    action = res.get("action_taken")
+    if action == "whatsapp_dispatched":
+        return {"status": "success", "result": res}
+    elif action in ["no_draft", "draft_expired", "invalid_draft_id", "already_sending"]:
+        return JSONResponse({"status": "error", "result": res}, status_code=400)
+    else:
+        return JSONResponse({"status": "error", "result": res}, status_code=500)
 
 @app.post("/api/jarvis/draft/cancel")
 async def api_jarvis_draft_cancel(request: Request):
@@ -862,23 +926,37 @@ async def api_jarvis_inbox_check_new(since: float = 0):
 @app.post("/api/jarvis/transcribe")
 async def api_jarvis_transcribe(request: Request):
     MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB max limit
-    content = b""
-    try:
+    cl_header = request.headers.get("content-length")
+    if cl_header:
+        try:
+            if int(cl_header) > MAX_AUDIO_BYTES:
+                return JSONResponse({"status": "error", "message": "Ses dosyası boyutu 25MB sınırını aşamaz."}, status_code=413)
+        except ValueError:
+            pass
+
+    content = bytearray()
+    content_type = request.headers.get("content-type", "")
+    
+    if "multipart/form-data" in content_type:
         form = await request.form()
         audio_file = form.get("file")
-        if audio_file:
-            content = await audio_file.read()
-    except Exception:
-        pass
-        
-    if not content:
-        content = await request.body()
+        if not audio_file:
+            return JSONResponse({"status": "error", "message": "Audio file empty"}, status_code=400)
+        while True:
+            chunk = await audio_file.read(64 * 1024)
+            if not chunk:
+                break
+            content.extend(chunk)
+            if len(content) > MAX_AUDIO_BYTES:
+                return JSONResponse({"status": "error", "message": "Ses dosyası boyutu 25MB sınırını aşamaz."}, status_code=413)
+    else:
+        async for chunk in request.stream():
+            content.extend(chunk)
+            if len(content) > MAX_AUDIO_BYTES:
+                return JSONResponse({"status": "error", "message": "Ses dosyası boyutu 25MB sınırını aşamaz."}, status_code=413)
 
     if not content:
         return JSONResponse({"status": "error", "message": "Audio content empty"}, status_code=400)
-
-    if len(content) > MAX_AUDIO_BYTES:
-        return JSONResponse({"status": "error", "message": "Ses dosyası boyutu 25MB sınırını aşamaz."}, status_code=413)
     
     temp_dir = TEMP_WORKSPACE
     temp_dir.mkdir(parents=True, exist_ok=True)

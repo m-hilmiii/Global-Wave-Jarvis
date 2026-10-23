@@ -31,10 +31,12 @@ class TelegramTool:
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         try:
             resp = requests.post(url, json={"chat_id": self.chat_id, "text": text, "parse_mode": "Markdown"}, timeout=10)
-            return {"success": resp.status_code == 200, "response": resp.json()}
+            data = resp.json() if resp.status_code == 200 else {}
+            is_ok = bool(resp.status_code == 200 and data.get("ok") is True)
+            return {"success": is_ok, "response": data}
         except Exception as e:
             logger.error(f"[Telegram Error] {e}")
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": "Telegram API iletisim hatasi"}
 
     def send_video(self, video_path: str, caption: str = "") -> Dict[str, Any]:
         if not self.is_configured() or not os.path.exists(video_path):
