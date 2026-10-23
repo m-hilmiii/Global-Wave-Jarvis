@@ -38,6 +38,8 @@ from db.database import (
 
 app = FastAPI(title="Global Wave AI Agency OS")
 TRANSCRIBE_SEMAPHORE = asyncio.Semaphore(1)
+STREAM_TICKETS = {}
+STREAM_TICKETS_LOCK = threading.Lock()
 
 # Security: Restrict CORS to trusted local origins to mitigate cross-origin attacks & DNS rebinding
 ALLOWED_ORIGINS = [
@@ -90,10 +92,17 @@ async def security_origin_check(request: Request, call_next):
     if request.method in ["POST", "PUT", "DELETE"]:
         origin = request.headers.get("origin")
         if origin:
-            parsed = re.sub(r"^https?://", "", origin).split(":")[0]
-            if parsed not in trusted_hosts:
+            try:
+                parsed_origin = urlparse(origin)
+                origin_host = parsed_origin.hostname or ""
+                if origin_host not in trusted_hosts or parsed_origin.scheme not in ("http", "https"):
+                    return JSONResponse(
+                        {"status": "error", "message": "Forbidden: Cross-origin request rejected."},
+                        status_code=403
+                    )
+            except Exception:
                 return JSONResponse(
-                    {"status": "error", "message": "Forbidden: Cross-origin request rejected."},
+                    {"status": "error", "message": "Forbidden: Invalid origin."},
                     status_code=403
                 )
 
@@ -111,6 +120,19 @@ async def security_origin_check(request: Request, call_next):
             )
             
     return await call_next(request)
+
+@app.post("/api/stream/ticket")
+async def generate_stream_ticket(request: Request):
+    req_token = (
+        request.headers.get("x-local-token")
+        or request.headers.get("authorization", "").replace("Bearer ", "").strip()
+    )
+    if not req_token or req_token != LOCAL_SESSION_TOKEN:
+        return JSONResponse({"status": "error", "message": "Unauthorized: Geçersiz veya eksik X-Local-Token."}, status_code=401)
+    ticket = str(uuid.uuid4())
+    with STREAM_TICKETS_LOCK:
+        STREAM_TICKETS[ticket] = time.time() + 60 # 60 seconds TTL
+    return {"ticket": ticket, "expires_in": 60}
 
 @app.get("/api/session/token")
 async def api_get_session_token(request: Request):
@@ -354,8 +376,10 @@ async def list_agency_channels():
             "local_shorts_count": local_count,
             "last_48h_views": 0,
             "last_48h_velocity": "+0.0%",
-            "retention_score": 88.4,
-            "retention_avg_duration": "42.8s",
+            "retention_score": None,
+            "retention_avg_duration": "N/A",
+            "is_simulated": True,
+            "retention_note": "Canlı izlenme verisi bekleniyor",
             "active_persona": "The Engineer (DE)",
             "is_connected": True,
             "status": "active"
@@ -549,10 +573,12 @@ async def get_channel_analytics(channel_id: str):
         "has_uploaded_videos": total_yt_videos > 0,
         "last_48h_views": 0,
         "last_48h_velocity": "+0.0%",
-        "is_simulated_projection": total_yt_videos == 0,
-        "retention_score": None if total_yt_videos == 0 else 88.4,
-        "retention_avg_duration": "0s" if total_yt_videos == 0 else "42.8s",
-        "retention_grade": "N/A (Henüz Canlı Video Yok)" if total_yt_videos == 0 else "A+ Viral",
+        "is_simulated_projection": True,
+        "analytics_source": "offline_baseline" if total_yt_videos == 0 else "youtube_data_api_metadata_only",
+        "retention_score": None,
+        "retention_avg_duration": "N/A",
+        "retention_grade": "N/A (Veri Yok)",
+        "retention_note": "Canlı YouTube Analytics API bağlantısı veya izlenme verisi bekleniyor",
         "active_persona": "The Engineer (DE)"
     }
 
@@ -780,7 +806,7 @@ async def api_generate_thumbnail(request: Request):
     if custom_bg:
         bg_p = Path(custom_bg).resolve()
         allowed_dirs = [OUTPUT_DIR.resolve(), TEMP_WORKSPACE.resolve(), (BASE_DIR / "assets").resolve()]
-        if not any(str(bg_p).startswith(str(ad)) for ad in allowed_dirs) or not bg_p.is_file():
+        if not any(bg_p.is_relative_to(ad) for ad in allowed_dirs) or not bg_p.is_file():
             custom_bg = None
     
     thumb_path = generate_thumbnail(topic, style_preset=style_preset, custom_bg_path=custom_bg)
@@ -1006,39 +1032,40 @@ async def api_jarvis_transcribe(request: Request):
     if not is_valid_audio:
         return JSONResponse({"status": "error", "message": "Desteklenmeyen veya geçersiz ses dosyası biçimi."}, status_code=400)
     
-    temp_dir = TEMP_WORKSPACE
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_file = temp_dir / f"voice_{uuid.uuid4().hex[:8]}.webm"
-    
-    try:
-        with open(temp_file, "wb") as f:
-            f.write(content)
+    async with TRANSCRIBE_SEMAPHORE:
+            temp_dir = TEMP_WORKSPACE
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            temp_file = temp_dir / f"voice_{uuid.uuid4().hex[:8]}.webm"
             
-        from engine.subtitle_whisper import get_whisper_model
-        model = get_whisper_model()
-        prompt = "Merhaba JARVIS, Mücahit Hilmi, Global-Wave, WhatsApp üzerinden mesaj gönder, rehbere kişi ekle, halini hatrını sor, nasılsın, iyi misin, ilet, yaz, kontrol et, Emre, Babam, Annem, Adem."
-        segments, _ = model.transcribe(
-            str(temp_file),
-            language="tr",
-            initial_prompt=prompt,
-            beam_size=5,
-            vad_filter=True,
-            condition_on_previous_text=False
-        )
-        text = " ".join([s.text for s in segments]).strip()
-        
-        # Phonetic clean-up for common Turkish STT mishearings
-        text = re.sub(r'\b(?:üründür|döndür|yöndür)\b', 'gönder', text, flags=re.IGNORECASE)
-        text = re.sub(r'\bhali hatru\b', 'hali hatrı', text, flags=re.IGNORECASE)
-        text = re.sub(r'\bvatsa bir\b|\bvatsab\b|\bvatsap\b|\bwatsap\b', 'WhatsApp', text, flags=re.IGNORECASE)
-
-        return {"status": "success", "text": text}
-    except Exception as e:
-        print(f"[TRANSCRIBE ERROR] {e}")
-        return JSONResponse({"status": "error", "message": "Ses işlenirken bir hata oluştu."}, status_code=500)
-    finally:
-        if temp_file.exists():
             try:
-                temp_file.unlink()
-            except Exception:
-                pass
+                with open(temp_file, "wb") as f:
+                    f.write(content)
+                    
+                from engine.subtitle_whisper import get_whisper_model
+                model = get_whisper_model()
+                prompt = "Merhaba JARVIS, Mücahit Hilmi, Global-Wave, WhatsApp üzerinden mesaj gönder, rehbere kişi ekle, halini hatrını sor, nasılsın, iyi misin, ilet, yaz, kontrol et, Emre, Babam, Annem, Adem."
+                segments, _ = model.transcribe(
+                    str(temp_file),
+                    language="tr",
+                    initial_prompt=prompt,
+                    beam_size=5,
+                    vad_filter=True,
+                    condition_on_previous_text=False
+                )
+                text = " ".join([s.text for s in segments]).strip()
+                
+                # Phonetic clean-up for common Turkish STT mishearings
+                text = re.sub(r'\b(?:üründür|döndür|yöndür)\b', 'gönder', text, flags=re.IGNORECASE)
+                text = re.sub(r'\bhali hatru\b', 'hali hatrı', text, flags=re.IGNORECASE)
+                text = re.sub(r'\bvatsa bir\b|\bvatsab\b|\bvatsap\b|\bwatsap\b', 'WhatsApp', text, flags=re.IGNORECASE)
+
+                return {"status": "success", "text": text}
+            except Exception as e:
+                print(f"[TRANSCRIBE ERROR] {e}")
+                return JSONResponse({"status": "error", "message": "Ses işlenirken bir hata oluştu."}, status_code=500)
+            finally:
+                if temp_file.exists():
+                    try:
+                        temp_file.unlink()
+                    except Exception:
+                        pass

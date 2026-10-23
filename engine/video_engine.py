@@ -147,17 +147,20 @@ def render_master_video(
         sfx_out = os.path.join(task_temp_dir, "transitions_sfx.wav")
         sfx_track = build_transition_sfx_track(scene_durations, total_audio_duration, sfx_out, volume=0.35)
 
-    # 3. Audio graph assembly
+    # 3. Audio graph assembly with sidechain ducking
     inputs = ["-i", temp_visuals, "-i", master_speech_mp3]
     filter_parts = [f"[0:v]{vf_chain}[vout]"]
-    audio_inputs_to_mix = ["[1:a]"]
     input_idx = 2
 
     if bgm_file and os.path.exists(bgm_file):
         inputs.extend(["-stream_loop", "-1", "-i", bgm_file])
-        filter_parts.append(f"[{input_idx}:a]volume={bgm_volume:.2f}[bgm_ducked]")
-        audio_inputs_to_mix.append("[bgm_ducked]")
+        filter_parts.append("[1:a]asplit=2[speech_main][speech_sc]")
+        filter_parts.append(f"[{input_idx}:a]volume={bgm_volume:.2f}[bgm_base]")
+        filter_parts.append("[bgm_base][speech_sc]sidechaincompress=threshold=0.08:ratio=4:attack=50:release=300[bgm_ducked]")
+        audio_inputs_to_mix = ["[speech_main]", "[bgm_ducked]"]
         input_idx += 1
+    else:
+        audio_inputs_to_mix = ["[1:a]"]
 
     if sfx_track and os.path.exists(sfx_track):
         inputs.extend(["-i", sfx_track])

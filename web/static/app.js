@@ -1693,7 +1693,24 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch (e) {}
         }
 
-        // --- Helper: Selective TTS Speech ---
+        // --- Helper: Selective TTS Speech with Dynamic Voice Discovery ---
+        let cachedTrVoice = null;
+        function loadJarvisVoices() {
+            if (!("speechSynthesis" in window)) return;
+            const voices = window.speechSynthesis.getVoices();
+            if (!voices || voices.length === 0) return;
+            // Prioritize high-fidelity Turkish neural voices (e.g., Ahmet, Emel, Natural, Online)
+            const trVoices = voices.filter(v => v.lang && v.lang.toLowerCase().includes("tr"));
+            cachedTrVoice = trVoices.find(v => /natural|neural|online/i.test(v.name)) || trVoices[0] || null;
+            if (cachedTrVoice) {
+                console.log("[JARVIS Voice Engine] Selected browser voice:", cachedTrVoice.name, cachedTrVoice.lang);
+            }
+        }
+        if ("speechSynthesis" in window) {
+            window.speechSynthesis.onvoiceschanged = loadJarvisVoices;
+            loadJarvisVoices();
+        }
+
         function speakText(text) {
             if (!voiceToggleEl || !voiceToggleEl.checked) return;
             if (!("speechSynthesis" in window)) return;
@@ -1712,9 +1729,8 @@ document.addEventListener("DOMContentLoaded", () => {
             utter.rate = 1.05;
             utter.pitch = 1.0;
             
-            const voices = window.speechSynthesis.getVoices();
-            const trVoice = voices.find(v => v.lang.includes("tr"));
-            if (trVoice) utter.voice = trVoice;
+            if (!cachedTrVoice) loadJarvisVoices();
+            if (cachedTrVoice) utter.voice = cachedTrVoice;
             window.speechSynthesis.speak(utter);
         }
         window.speakJarvisText = speakText;
@@ -2168,7 +2184,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const cleanPhone = activeChat.phone.replace(/[^0-9]/g, "");
                 const waCallUrl = `https://wa.me/${cleanPhone}`;
                 window.open(waCallUrl, "_blank");
-                speakText(`${activeChat.short_name} aranıyor efendim.`);
+                speakText(`${activeChat.short_name} için WhatsApp sohbeti açılıyor efendim.`);
             });
         }
 

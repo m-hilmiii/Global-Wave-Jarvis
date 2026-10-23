@@ -30,7 +30,6 @@ COMMON_TYPO_MAP = {
     "herkes": "herkez",
     "hükümet": "hükümat",
     "orijinal": "orjinal",
-    "milyar": "milyon",
     "laboratuvar": "laboratuar",
     "bilim": "blim",
     # German

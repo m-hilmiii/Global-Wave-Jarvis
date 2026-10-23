@@ -18,6 +18,9 @@ DEFAULT_REPORT = {
     "channel_id": "default",
     "channel_title": "Mücahit Hilmi",
     "generated_at": datetime.now().isoformat(),
+    "is_simulated": True,
+    "source": "demo_baseline",
+    "sample_size": 0,
     "sentiment_score": 94,
     "sentiment_summary": "İzleyiciler yüksek tempolu, gizem ve teknoloji odaklı anlatımı çok beğeniyor.",
     "audience_demands": [
@@ -60,8 +63,9 @@ def get_channel_report(channel_id: str = "default") -> dict:
             print(f"[WARN] Failed to load channel report: {e}")
     return DEFAULT_REPORT
 
-def fetch_youtube_comments(channel_id: str, max_comments: int = 30) -> list:
+def fetch_youtube_comments(channel_id: str, max_comments: int = 30) -> tuple:
     comments = []
+    is_real = False
     try:
         service = get_youtube_service()
         req = service.search().list(
@@ -88,13 +92,14 @@ def fetch_youtube_comments(channel_id: str, max_comments: int = 30) -> list:
                 c_resp = c_req.execute()
                 for c_item in c_resp.get("items", []):
                     top_c = c_item.get("snippet", {}).get("topLevelComment", {}).get("snippet", {})
-                    text = top_c.get("textDisplay", "").strip()
-                    if text:
-                        comments.append(text)
+                    t_val = top_c.get("textDisplay", "").strip()
+                    if t_val:
+                        comments.append(t_val)
+                        is_real = True
             except Exception:
                 pass
     except Exception as e:
-        print(f"[INFO] YouTube API comment fetch note: {e} (Using bootstrap comments)")
+        print(f"[INFO] YouTube API comment fetch note: {e} (Using bootstrap sample comments)")
 
     if not comments:
         comments = [
@@ -104,10 +109,21 @@ def fetch_youtube_comments(channel_id: str, max_comments: int = 30) -> list:
             "Yapay zeka sırları hakkında da bir shorts gelsin lütfen!",
             "Girişteki ses efekti harikaydı, videodan gözümü alamadım."
         ]
-    return comments[:max_comments]
+        meta = {
+            "source": "sample_bootstrap",
+            "is_simulated": True,
+            "sample_size": len(comments)
+        }
+    else:
+        meta = {
+            "source": "youtube_live_api",
+            "is_simulated": False,
+            "sample_size": len(comments)
+        }
+    return comments[:max_comments], meta
 
 def run_feedback_analysis(channel_id: str, channel_title: str = "Mücahit Hilmi") -> dict:
-    comments = fetch_youtube_comments(channel_id)
+    comments, comment_meta = fetch_youtube_comments(channel_id)
     print(f"[FEEDBACK] Running Laya System 1 Decision Analysis on {len(comments)} comments...")
     
     # 1. Tier 1: Laya Decision Engine
@@ -176,6 +192,9 @@ SADECE JSON döndür:
     report["channel_id"] = channel_id
     report["channel_title"] = channel_title
     report["generated_at"] = datetime.now().isoformat()
+    report["is_simulated"] = comment_meta["is_simulated"]
+    report["source"] = comment_meta["source"]
+    report["sample_size"] = comment_meta["sample_size"]
     report["decision_engine"] = "Laya v0.3.21 System 1"
 
     path = get_report_path(channel_id)

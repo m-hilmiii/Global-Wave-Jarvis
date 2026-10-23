@@ -324,12 +324,12 @@ async function main(): Promise<void> {
 
     if (cmd.type === "send" && sock) {
       try {
-        await sock.sendMessage(cmd.jid, { text: cmd.text });
+        const sentMsg = await sock.sendMessage(cmd.jid, { text: cmd.text });
         console.log(`[WhatsApp] Mesaj iletildi -> ${cmd.jid}`);
-        emit({ type: "sent", jid: cmd.jid });
+        emit({ type: "sent", jid: cmd.jid, request_id: cmd.request_id, message_id: sentMsg?.key?.id });
       } catch (err: any) {
         console.error(`[WhatsApp Hata] Gonderilemedi: ${err?.message ?? String(err)}`);
-        emit({ type: "error", message: err?.message ?? String(err) });
+        emit({ type: "error", message: err?.message ?? String(err), request_id: cmd.request_id, jid: cmd.jid });
       }
     } else if (cmd.type === "delete" && sock) {
       try {
@@ -340,10 +340,10 @@ async function main(): Promise<void> {
         };
         await sock.sendMessage(cmd.jid, { delete: key });
         console.log(`[WhatsApp] Mesaj herkesten silindi -> ${cmd.message_id}`);
-        emit({ type: "deleted", jid: cmd.jid, message_id: cmd.message_id });
+        emit({ type: "deleted", jid: cmd.jid, message_id: cmd.message_id, request_id: cmd.request_id });
       } catch (err: any) {
         console.error(`[WhatsApp Hata] Silinemedi: ${err?.message ?? String(err)}`);
-        emit({ type: "error", message: err?.message ?? String(err) });
+        emit({ type: "error", message: err?.message ?? String(err), request_id: cmd.request_id, jid: cmd.jid });
       }
     } else if (cmd.type === "disconnect" && sock) {
       await sock.logout().catch(() => {});

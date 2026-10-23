@@ -11,6 +11,7 @@ import time
 import logging
 import subprocess
 import threading
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -120,18 +121,57 @@ class WhatsAppDaemon:
                         logger.info(f"[WhatsApp] Status: {self.status}")
 
                 elif ev_type == "sent":
+                    req_id = ev.get("request_id")
                     jid = ev.get("jid", "")
                     with self.lock:
-                        if jid in self.reply_events:
-                            self.pending_replies[jid] = {"success": True}
+                        if req_id and req_id in self.reply_events:
+                            self.pending_replies[req_id] = {
+                                "success": True,
+                                "status": "sent",
+                                "message_id": ev.get("message_id"),
+                                "jid": jid
+                            }
+                            self.reply_events[req_id].set()
+                        elif jid in self.reply_events:
+                            self.pending_replies[jid] = {
+                                "success": True,
+                                "status": "sent",
+                                "message_id": ev.get("message_id"),
+                                "jid": jid
+                            }
+                            self.reply_events[jid].set()
+
+                elif ev_type == "deleted":
+                    req_id = ev.get("request_id")
+                    jid = ev.get("jid", "")
+                    with self.lock:
+                        if req_id and req_id in self.reply_events:
+                            self.pending_replies[req_id] = {
+                                "success": True,
+                                "status": "deleted",
+                                "message_id": ev.get("message_id"),
+                                "jid": jid
+                            }
+                            self.reply_events[req_id].set()
+                        elif jid in self.reply_events:
+                            self.pending_replies[jid] = {
+                                "success": True,
+                                "status": "deleted",
+                                "message_id": ev.get("message_id"),
+                                "jid": jid
+                            }
                             self.reply_events[jid].set()
 
                 elif ev_type == "error":
+                    req_id = ev.get("request_id")
                     err_msg = ev.get("message", "Bilinmeyen hata")
                     with self.lock:
-                        for jid, ev_obj in self.reply_events.items():
-                            self.pending_replies[jid] = {"success": False, "error": err_msg}
-                            ev_obj.set()
+                        if req_id and req_id in self.reply_events:
+                            self.pending_replies[req_id] = {"success": False, "status": "failed", "error": err_msg}
+                            self.reply_events[req_id].set()
+                        else:
+                            # If no specific request_id, do not fail unrelated operations
+                            logger.warning(f"[WhatsApp Bridge Warning] {err_msg}")
 
                 elif ev_type == "message":
                     self._handle_incoming_message(ev)
@@ -251,7 +291,7 @@ class WhatsAppDaemon:
                 logger.error(f"[WhatsApp Daemon Stdout Error] {e}")
 
     def send_message(self, phone: str, text: str) -> Dict[str, Any]:
-        """Sends a real WhatsApp message and synchronously waits for real server delivery confirmation."""
+        """Sends a real WhatsApp message with a unique request_id and synchronously waits for server delivery confirmation."""
         if not self.is_authenticated():
             self.start_bridge()
             return {
@@ -284,16 +324,24 @@ class WhatsAppDaemon:
                     "error": "WhatsApp bağlantısı kuruluyor, lütfen 5 saniye sonra tekrar deneyin."
                 }
 
-        # Prepare sync event for delivery confirmation
+        request_id = str(uuid.uuid4())
         ack_event = threading.Event()
         with self.lock:
-            self.reply_events[jid] = ack_event
-            self.pending_replies.pop(jid, None)
+            self.reply_events[request_id] = ack_event
+            self.pending_replies[request_id] = None
 
-        payload = json.dumps({"type": "send", "jid": jid, "text": text}) + "\n"
+        payload = json.dumps({
+            "type": "send",
+            "jid": jid,
+            "text": text,
+            "request_id": request_id
+        }) + "\n"
 
         try:
             if not self.process or not self.process.stdin:
+                with self.lock:
+                    self.reply_events.pop(request_id, None)
+                    self.pending_replies.pop(request_id, None)
                 return {"success": False, "error": "WhatsApp köprü işlemi çalışmıyor."}
 
             self.process.stdin.write(payload)
@@ -303,12 +351,13 @@ class WhatsAppDaemon:
             confirmed = ack_event.wait(timeout=15)
 
             with self.lock:
-                result = self.pending_replies.pop(jid, None)
-                self.reply_events.pop(jid, None)
+                result = self.pending_replies.pop(request_id, None)
+                self.reply_events.pop(request_id, None)
 
             if confirmed and result and result.get("success"):
+                out_msg_id = result.get("message_id") or f"OUT_{int(time.time()*1000)}"
                 out_entry = {
-                    "id": f"OUT_{int(time.time()*1000)}",
+                    "id": out_msg_id,
                     "sender_jid": "me",
                     "chat_jid": jid,
                     "sender_name": "Mücahit Hilmi",
@@ -340,25 +389,88 @@ class WhatsAppDaemon:
                     "recipient_jid": jid,
                     "text": text,
                     "status": "sent",
+                    "request_id": request_id,
+                    "message_id": out_msg_id,
                     "entry": out_entry
                 }
             elif result and not result.get("success"):
                 return {
                     "success": False,
+                    "status": "failed",
+                    "request_id": request_id,
                     "error": f"WhatsApp iletim hatası: {result.get('error')}"
                 }
             else:
+                # Timed out: return status unknown without blind resend to prevent duplicates
                 return {
                     "success": False,
+                    "status": "unknown",
+                    "request_id": request_id,
                     "error": "WhatsApp sunucusundan iletim onayı zaman aşımına uğradı."
                 }
 
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            with self.lock:
+                self.reply_events.pop(request_id, None)
+                self.pending_replies.pop(request_id, None)
+            return {"success": False, "status": "failed", "error": str(e)}
 
 
     def delete_message(self, jid: str, message_id: str, everyone: bool = True) -> Dict[str, Any]:
-        """Deletes a message from WhatsApp (everyone) or removes from local thread (me)."""
+        """Deletes a message from WhatsApp (everyone) with verified server ACK, or removes from local thread (me)."""
+        if everyone:
+            if not self.process or not self.process.stdin:
+                return {"success": False, "error": "WhatsApp köprü işlemi çalışmıyor."}
+
+            digits = "".join([c for c in jid if c.isdigit()])
+            clean_jid = jid if "@" in jid else f"{digits}@s.whatsapp.net"
+            request_id = str(uuid.uuid4())
+            ack_event = threading.Event()
+            with self.lock:
+                self.reply_events[request_id] = ack_event
+                self.pending_replies[request_id] = None
+
+            payload = json.dumps({
+                "type": "delete",
+                "jid": clean_jid,
+                "message_id": message_id,
+                "fromMe": True,
+                "request_id": request_id
+            }) + "\n"
+
+            try:
+                self.process.stdin.write(payload)
+                self.process.stdin.flush()
+
+                confirmed = ack_event.wait(timeout=10)
+                with self.lock:
+                    result = self.pending_replies.pop(request_id, None)
+                    self.reply_events.pop(request_id, None)
+
+                if confirmed and result and result.get("success"):
+                    # Confirmed by Baileys: Now clean up local inbox
+                    with self.lock:
+                        if INBOX_FILE.exists():
+                            try:
+                                with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
+                                    inbox = json.load(f)
+                                inbox = [m for m in inbox if m.get("id") != message_id]
+                                with open(INBOX_FILE, "w", encoding="utf-8") as f:
+                                    json.dump(inbox, f, ensure_ascii=False, indent=2)
+                            except Exception:
+                                pass
+                    return {"success": True, "message": "Mesaj WhatsApp'ta herkesten başarıyla silindi.", "request_id": request_id}
+                elif result and not result.get("success"):
+                    return {"success": False, "error": f"WhatsApp silme hatası: {result.get('error')}", "request_id": request_id}
+                else:
+                    return {"success": False, "error": "WhatsApp sunucusundan silme teyidi zaman aşımına uğradı.", "request_id": request_id}
+            except Exception as e:
+                with self.lock:
+                    self.reply_events.pop(request_id, None)
+                    self.pending_replies.pop(request_id, None)
+                return {"success": False, "error": str(e)}
+
+        # Local deletion only ("Benden Sil")
         with self.lock:
             if INBOX_FILE.exists():
                 try:
@@ -369,18 +481,7 @@ class WhatsAppDaemon:
                         json.dump(inbox, f, ensure_ascii=False, indent=2)
                 except Exception:
                     pass
-
-        if everyone and self.process and self.process.stdin:
-            clean_jid = jid if "@" in jid else f"{''.join([c for c in jid if c.isdigit()])}@s.whatsapp.net"
-            payload = json.dumps({"type": "delete", "jid": clean_jid, "message_id": message_id, "fromMe": True}) + "\n"
-            try:
-                self.process.stdin.write(payload)
-                self.process.stdin.flush()
-                return {"success": True, "message": "Mesaj herkesten silindi."}
-            except Exception as e:
-                return {"success": False, "error": str(e)}
-
-        return {"success": True, "message": "Mesaj yerel sohbetten silindi."}
+        return {"success": True, "message": "Mesaj yerel sohbet geçmişinden silindi."}
 
     def get_chats_overview(self) -> List[Dict[str, Any]]:
         """Returns active contacts with their latest message, timestamp, and unread count."""
@@ -414,10 +515,13 @@ class WhatsAppDaemon:
                 m_sender = str(m.get("sender_name", "")).lower()
                 m_jid = str(m.get("chat_jid", "")) + str(m.get("sender_jid", ""))
 
-                if (c_phone and (c_phone.endswith(m_phone) or m_phone.endswith(c_phone))) or \
-                   (c_lid and c_lid in m_jid) or \
-                   (c_name and c_name in m_sender) or \
-                   (c_full and c_full in m_sender):
+                phone_matched = bool(c_phone and m_phone and len(c_phone) >= 7 and len(m_phone) >= 7 and (c_phone.endswith(m_phone) or m_phone.endswith(c_phone)))
+                target_jid = f"{c_phone}@s.whatsapp.net" if c_phone else ""
+                jid_matched = bool(target_jid and (target_jid in m_jid))
+                lid_matched = bool(c_lid and len(c_lid) >= 5 and c_lid in m_jid)
+                name_matched = bool(c_name and len(c_name) >= 3 and (c_name == m_sender or c_name in m_sender.split()))
+
+                if phone_matched or jid_matched or lid_matched or name_matched:
                     matched_msgs.append(m)
 
             last_msg = matched_msgs[-1] if matched_msgs else None
@@ -482,9 +586,13 @@ class WhatsAppDaemon:
             m_sender = str(m.get("sender_name", "")).lower()
             m_jid = str(m.get("chat_jid", "")) + str(m.get("sender_jid", ""))
 
-            if (c_phone and (c_phone.endswith(m_phone) or m_phone.endswith(c_phone))) or \
-               (c_lid and c_lid in m_jid) or \
-               (c_name and c_name in m_sender):
+            phone_matched = bool(c_phone and m_phone and len(c_phone) >= 7 and len(m_phone) >= 7 and (c_phone.endswith(m_phone) or m_phone.endswith(c_phone)))
+            target_jid = f"{c_phone}@s.whatsapp.net" if c_phone else ""
+            jid_matched = bool(target_jid and (target_jid in m_jid))
+            lid_matched = bool(c_lid and len(c_lid) >= 5 and c_lid in m_jid)
+            name_matched = bool(c_name and len(c_name) >= 3 and (c_name == m_sender or c_name in m_sender.split()))
+
+            if phone_matched or jid_matched or lid_matched or name_matched:
                 history.append(m)
 
         history.sort(key=lambda x: x.get("timestamp", 0))

@@ -1,5 +1,6 @@
+import uuid
 import threading
-UPLOAD_LOCK = threading.Lock()
+UPLOAD_LOCK = threading.RLock()
 """
 Global Wave - Official YouTube Data API v3 Uploader Engine (Faz 2)
 1. Desktop OAuth 2.0 Loopback Flow.
@@ -200,52 +201,105 @@ import random
 
 HISTORY_FILE = CONFIG_DIR / "upload_history.json"
 
-def check_daily_upload_limit(max_per_day: int = 4) -> tuple[bool, int]:
-    """Check how many videos were uploaded today with thread-safety and fail-safe policy."""
-    with UPLOAD_LOCK:
-        if not HISTORY_FILE.exists():
-            return True, 0
-        try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                history = json.load(f)
-            if not isinstance(history, list):
-                print("[WARN] Upload history corrupted; failing closed for safety.")
-                return False, max_per_day
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            todays_uploads = [h for h in history if isinstance(h, dict) and h.get("date") == today]
-            count = len(todays_uploads)
-            return count < max_per_day, count
-        except Exception as e:
-            print(f"[ERROR] Failed to safely read upload history: {e}. Failing closed.")
-            return False, max_per_day
+def _load_upload_history_unlocked() -> list:
+    """Reads upload history without locking (must be called within UPLOAD_LOCK)."""
+    if not HISTORY_FILE.exists():
+        return []
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except Exception as e:
+        print(f"[WARN] Failed to read upload history: {e}")
+        return []
 
-def record_upload(video_id: str, title: str):
-    """Atomically record upload timestamp into local history file."""
+def _save_upload_history_unlocked(history: list):
+    """Atomically writes upload history to disk (must be called within UPLOAD_LOCK)."""
+    try:
+        temp_history = HISTORY_FILE.with_suffix(".tmp")
+        with open(temp_history, "w", encoding="utf-8") as f:
+            json.dump(history[-100:], f, indent=2, ensure_ascii=False)
+        temp_history.replace(HISTORY_FILE)
+    except Exception as e:
+        print(f"[WARN] Failed to write upload history atomically: {e}")
+
+def check_daily_upload_limit(max_per_day: int = 4) -> tuple[bool, int]:
+    """Check how many videos were uploaded or are actively uploading today with re-entrant thread safety."""
     with UPLOAD_LOCK:
-        history = []
-        if HISTORY_FILE.exists():
-            try:
-                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        history = data
-            except Exception:
-                history = []
-        
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        history = _load_upload_history_unlocked()
+        active_today = [
+            h for h in history
+            if isinstance(h, dict) and h.get("date") == today and h.get("status", "completed") in ["completed", "uploading"]
+        ]
+        count = len(active_today)
+        return count < max_per_day, count
+
+def reserve_daily_upload_slot(max_per_day: int = 4) -> tuple[bool, int, str]:
+    """Atomically verifies the daily limit and reserves a slot before upload starts. Returns (can_upload, count, res_id)."""
+    with UPLOAD_LOCK:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        history = _load_upload_history_unlocked()
+        active_today = [
+            h for h in history
+            if isinstance(h, dict) and h.get("date") == today and h.get("status", "completed") in ["completed", "uploading"]
+        ]
+        count = len(active_today)
+        if count >= max_per_day:
+            return False, count, ""
+
+        res_id = str(uuid.uuid4())[:8]
         history.append({
-            "video_id": video_id,
-            "title": title,
+            "reservation_id": res_id,
+            "status": "uploading",
             "date": today,
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
-        try:
-            temp_history = HISTORY_FILE.with_suffix(".tmp")
-            with open(temp_history, "w", encoding="utf-8") as f:
-                json.dump(history[-100:], f, indent=2, ensure_ascii=False)
-            temp_history.replace(HISTORY_FILE)
-        except Exception as e:
-            print(f"[WARN] Failed to write upload history atomically: {e}")
+        _save_upload_history_unlocked(history)
+        return True, count + 1, res_id
+
+def release_upload_reservation(reservation_id: str):
+    """Frees a reservation slot when upload fails or is aborted."""
+    if not reservation_id:
+        return
+    with UPLOAD_LOCK:
+        history = _load_upload_history_unlocked()
+        for h in history:
+            if isinstance(h, dict) and h.get("reservation_id") == reservation_id:
+                h["status"] = "failed"
+                h["failed_at"] = datetime.now(timezone.utc).isoformat()
+                break
+        _save_upload_history_unlocked(history)
+
+def complete_upload_reservation(reservation_id: str, video_id: str, title: str):
+    """Confirms reservation as a successfully completed YouTube upload."""
+    with UPLOAD_LOCK:
+        history = _load_upload_history_unlocked()
+        matched = False
+        if reservation_id:
+            for h in history:
+                if isinstance(h, dict) and h.get("reservation_id") == reservation_id:
+                    h["status"] = "completed"
+                    h["video_id"] = video_id
+                    h["title"] = title
+                    h["completed_at"] = datetime.now(timezone.utc).isoformat()
+                    matched = True
+                    break
+        if not matched:
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            history.append({
+                "reservation_id": reservation_id or str(uuid.uuid4())[:8],
+                "status": "completed",
+                "video_id": video_id,
+                "title": title,
+                "date": today,
+                "completed_at": datetime.now(timezone.utc).isoformat()
+            })
+        _save_upload_history_unlocked(history)
+
+def record_upload(video_id: str, title: str):
+    """Backward compatible wrapper for complete_upload_reservation."""
+    complete_upload_reservation("", video_id, title)
 
 def set_thumbnail(video_id: str, thumbnail_path: str) -> bool:
     """Sets custom thumbnail for uploaded YouTube video via YouTube Data API v3."""
@@ -351,95 +405,98 @@ def upload_short_video(
         raise FileNotFoundError(f"Video file not found: {video_path}")
         
     # Atomically verify limit and reserve slot before upload begins
-    with UPLOAD_LOCK:
-        can_upload, today_count = check_daily_upload_limit(max_per_day=4)
-        if not can_upload:
-            raise RuntimeError(f"Günlük maksimum güvenli yükleme sınırına ({today_count}/4) ulaşıldı. Kanal güvenliği ve spam koruması için işlem durduruldu.")
+    can_upload, today_count, res_id = reserve_daily_upload_slot(max_per_day=4)
+    if not can_upload:
+        raise RuntimeError(f"Günlük maksimum güvenli yükleme sınırına ({today_count}/4) ulaşıldı. Kanal güvenliği ve spam koruması için işlem durduruldu.")
 
-    service = get_youtube_service()
-    
-    clean_title = title.strip()
-    if is_shorts:
-        if "#Shorts" not in clean_title and "#shorts" not in clean_title:
-            clean_title = f"{clean_title} #Shorts"
-        if len(clean_title) > 100:
-            clean_title = clean_title[:92] + " #Shorts"
-    else:
-        if len(clean_title) > 100:
-            clean_title = clean_title[:97] + "..."
+    try:
+        service = get_youtube_service()
         
-    if not description:
-        tag_suffix = "#Shorts #Viral #AI" if is_shorts else "#Documentary #Knowledge #DeepDive"
-        description = f"{clean_title}\n\nAutonomous documentary created by Global Wave AI Agency OS.\n{tag_suffix}"
-    else:
-        if is_shorts and "#Shorts" not in description:
-            description = f"{description}\n\n#Shorts"
-
-    default_tags = ["Shorts", "YouTube Shorts"] if is_shorts else ["Documentary", "Full Video", "Analysis"]
-    default_tags += ["AI", "Technology", "Knowledge"]
-    all_tags = list(set((tags or []) + default_tags))[:25]
-    
-    body = {
-        "snippet": {
-            "title": clean_title,
-            "description": description,
-            "tags": all_tags,
-            "categoryId": category_id
-        },
-        "status": {
-            "privacyStatus": privacy_status,
-            "selfDeclaredMadeForKids": bool(is_made_for_kids)
-        }
-    }
-    
-    print(f"[YOUTUBE] Initializing safe resumable upload for: '{clean_title}' (Privacy: {privacy_status})...")
-    media = MediaFileUpload(
-        video_path,
-        chunksize=1024 * 1024 * 2,
-        resumable=True,
-        mimetype="video/mp4"
-    )
-    
-    request = service.videos().insert(
-        part="snippet,status",
-        body=body,
-        media_body=media
-    )
-    
-    response = None
-    while response is None:
-        status, response = request.next_chunk()
-        if status:
-            pct = int(status.progress() * 100)
-            print(f"[YOUTUBE] Uploading... {pct}%")
+        clean_title = title.strip()
+        if is_shorts:
+            if "#Shorts" not in clean_title and "#shorts" not in clean_title:
+                clean_title = f"{clean_title} #Shorts"
+            if len(clean_title) > 100:
+                clean_title = clean_title[:92] + " #Shorts"
+        else:
+            if len(clean_title) > 100:
+                clean_title = clean_title[:97] + "..."
             
-    video_id = response.get("id")
-    video_url = f"https://youtu.be/{video_id}"
-    print(f"[YOUTUBE] Upload SUCCESS! Video ID: {video_id} -> {video_url}")
+        if not description:
+            tag_suffix = "#Shorts #Viral #AI" if is_shorts else "#Documentary #Knowledge #DeepDive"
+            description = f"{clean_title}\n\nAutonomous documentary created by Global Wave AI Agency OS.\n{tag_suffix}"
+        else:
+            if is_shorts and "#Shorts" not in description:
+                description = f"{description}\n\n#Shorts"
 
-    record_upload(video_id, clean_title)
+        default_tags = ["Shorts", "YouTube Shorts"] if is_shorts else ["Documentary", "Full Video", "Analysis"]
+        default_tags += ["AI", "Technology", "Knowledge"]
+        all_tags = list(set((tags or []) + default_tags))[:25]
+        
+        body = {
+            "snippet": {
+                "title": clean_title,
+                "description": description,
+                "tags": all_tags,
+                "categoryId": category_id
+            },
+            "status": {
+                "privacyStatus": privacy_status,
+                "selfDeclaredMadeForKids": bool(is_made_for_kids)
+            }
+        }
+        
+        print(f"[YOUTUBE] Initializing safe resumable upload for: '{clean_title}' (Privacy: {privacy_status})...")
+        media = MediaFileUpload(
+            video_path,
+            chunksize=1024 * 1024 * 2,
+            resumable=True,
+            mimetype="video/mp4"
+        )
+        
+        request = service.videos().insert(
+            part="snippet,status",
+            body=body,
+            media_body=media
+        )
+        
+        response = None
+        while response is None:
+            status, response = request.next_chunk()
+            if status:
+                pct = int(status.progress() * 100)
+                print(f"[YOUTUBE] Uploading... {pct}%")
+                
+        video_id = response.get("id")
+        video_url = f"https://youtu.be/{video_id}"
+        print(f"[YOUTUBE] Upload SUCCESS! Video ID: {video_id} -> {video_url}")
 
-    # Optional custom thumbnail
-    if thumbnail_path and os.path.exists(thumbnail_path):
-        set_thumbnail(video_id, thumbnail_path)
+        complete_upload_reservation(res_id, video_id, clean_title)
 
-    # Automatic delayed publish ONLY if explicit consent (auto_schedule=True) and delay_hours > 0
-    publish_scheduled = False
-    scheduled_at = None
-    if auto_schedule and delay_hours > 0 and privacy_status == "private":
-        ok = schedule_publish(video_id, delay_hours=delay_hours)
-        publish_scheduled = ok
-        if ok:
-            pub_time = datetime.now(timezone.utc) + timedelta(hours=delay_hours)
-            scheduled_at = pub_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    
-    return {
-        "status": "success",
-        "video_id": video_id,
-        "url": video_url,
-        "title": response.get("snippet", {}).get("title"),
-        "privacy": privacy_status,
-        "publish_scheduled": publish_scheduled,
-        "scheduled_publish_time": scheduled_at,
-        "scheduled_delay_hours": delay_hours if (auto_schedule and privacy_status == "private") else 0
-    }
+        # Optional custom thumbnail
+        if thumbnail_path and os.path.exists(thumbnail_path):
+            set_thumbnail(video_id, thumbnail_path)
+
+        # Automatic delayed publish ONLY if explicit consent (auto_schedule=True) and delay_hours > 0
+        publish_scheduled = False
+        scheduled_at = None
+        if auto_schedule and delay_hours > 0 and privacy_status == "private":
+            ok = schedule_publish(video_id, delay_hours=delay_hours)
+            publish_scheduled = ok
+            if ok:
+                pub_time = datetime.now(timezone.utc) + timedelta(hours=delay_hours)
+                scheduled_at = pub_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        
+        return {
+            "status": "success",
+            "video_id": video_id,
+            "url": video_url,
+            "title": response.get("snippet", {}).get("title"),
+            "privacy": privacy_status,
+            "publish_scheduled": publish_scheduled,
+            "scheduled_publish_time": scheduled_at,
+            "scheduled_delay_hours": delay_hours if (auto_schedule and privacy_status == "private") else 0
+        }
+    except Exception as e:
+        release_upload_reservation(res_id)
+        raise e
