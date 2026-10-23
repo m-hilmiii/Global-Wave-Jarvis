@@ -1,0 +1,59 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Environment variables & Sensitive Credentials
+.env
+.env.*
+config/youtube_tokens.json
+config/client_secret.json
+client_secret*.json
+
+# WhatsApp Baileys Auth Session & Private Keys (CRITICAL SECURITY)
+core_jarvis/whatsapp_bridge/auth_info_baileys/
+auth_info_baileys/
+*.session
+
+# Large Neural Network Models & Binary Weights (>25MB)
+models/kokoro/kokoro-v1.0.onnx
+models/kokoro/voices-v1.0.bin
+models/**/*.onnx
+models/**/*.bin
+models/**/*.pth
+models/**/*.safetensors
+
+# Media & Render Outputs
+output/
+temp/
+tmp/
+
+# Node / NPM
+node_modules/
+package-lock.json
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.agents/
+
+# Database and API keys
+config/tokens.json
+*.db
+
+# WhatsApp Live Session Keys and Inbound Cache (CRITICAL)
+data/whatsapp_auth/
+data/whatsapp_inbox.json
+
+# Large font packs (>50MB)
+assets/fonts/*.ttc

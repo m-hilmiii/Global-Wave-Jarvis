@@ -1,0 +1,213 @@
+/* Global Wave - AI Agency OS | Ultra-Luxury Dark SaaS Design System */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+    --bg-dark: #0a0f1a;
+    --bg-panel: rgba(13, 21, 39, 0.78);
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --border-cyan-highlight: rgba(0, 242, 254, 0.28);
+    --border-purple-highlight: rgba(168, 85, 247, 0.28);
+    --neon-cyan: #00f2fe;
+    --neon-indigo: #6366f1;
+    --neon-purple: #a855f7;
+    --neon-emerald: #10b981;
+    --neon-red: #ef4444;
+}
+
+/* Master Obsidian Background with Ambient Glows & Subtle Texture Grain */
+body {
+    background-color: #0a0f1a;
+    background-image: 
+        radial-gradient(circle at 10% 15%, rgba(0, 242, 254, 0.05) 0%, transparent 35%),
+        radial-gradient(circle at 90% 10%, rgba(99, 102, 241, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 50% 85%, rgba(168, 85, 247, 0.04) 0%, transparent 45%),
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.022'/%3E%3C/svg%3E");
+    color: #f1f5f9;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: -0.01em;
+}
+
+/* Typography Enhancements */
+h1, h2, h3, h4, .font-display {
+    font-family: 'Outfit', sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.font-mono {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Custom Ultra-Thin Scrollbars */
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(10, 15, 26, 0.6);
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.15);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 242, 254, 0.4);
+}
+
+/* Glassmorphism Panels (Luxury Obsidian & Cyan Edge) */
+.glass-panel {
+    background: rgba(13, 21, 39, 0.72);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid var(--border-cyan-highlight);
+    box-shadow: 0 12px 35px -10px rgba(0, 0, 0, 0.65), 0 0 25px -5px rgba(0, 242, 254, 0.03);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel:hover {
+    border-top-color: rgba(0, 242, 254, 0.5);
+    box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.75), 0 0 30px -4px rgba(0, 242, 254, 0.08);
+}
+
+.glass-panel-purple {
+    background: rgba(13, 21, 39, 0.72);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid var(--border-purple-highlight);
+    box-shadow: 0 12px 35px -10px rgba(0, 0, 0, 0.65);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel-purple:hover {
+    border-top-color: rgba(168, 85, 247, 0.5);
+    box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.75), 0 0 30px -4px rgba(168, 85, 247, 0.08);
+}
+
+/* Sharp, Cinematic Action Bars & Buttons */
+.action-bar-btn {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.5rem; /* Sharp 8px */
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.025em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.action-bar-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+    transform: skewX(-20deg);
+    transition: transform 0.65s ease;
+}
+
+.action-bar-btn:hover::before {
+    transform: translateX(300%) skewX(-20deg);
+}
+
+/* Cinematic Cyan Primary Button */
+.btn-cinematic-cyan {
+    background: linear-gradient(135deg, #00f2fe 0%, #0284c7 100%);
+    color: #030a16;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 0 18px rgba(0, 242, 254, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.btn-cinematic-cyan:hover {
+    background: linear-gradient(135deg, #38bdf8 0%, #0369a1 100%);
+    box-shadow: 0 0 28px rgba(0, 242, 254, 0.65), inset 0 1px 0 #ffffff;
+    transform: translateY(-1px);
+    color: #010409;
+}
+
+/* Cinematic Dark Glass Action Button */
+.btn-cinematic-dark {
+    background: rgba(15, 23, 42, 0.85);
+    color: #e2e8f0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.btn-cinematic-dark:hover {
+    background: rgba(26, 38, 66, 0.95);
+    color: #ffffff;
+    border-color: rgba(0, 242, 254, 0.35);
+    box-shadow: 0 0 18px rgba(0, 242, 254, 0.2);
+    transform: translateY(-1px);
+}
+
+/* Otonom Yetkilendirme Gerekli (Pulsing Red Action Bar) */
+.btn-cinematic-auth-danger {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.35) 100%);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
+    animation: pulseGlow 2.5s infinite;
+}
+
+.btn-cinematic-auth-danger:hover {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: #ffffff;
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);
+    transform: translateY(-1px);
+}
+
+@keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+    50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.45); }
+}
+
+/* Sidebar Nav Items */
+.nav-item {
+    color: #94a3b8;
+    position: relative;
+    border-left: 2px solid transparent;
+}
+
+.nav-item:hover {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.nav-item.active {
+    color: #ffffff;
+    background: linear-gradient(90deg, rgba(0, 242, 254, 0.12) 0%, rgba(99, 102, 241, 0.06) 100%);
+    border-left: 3px solid #00f2fe;
+    box-shadow: inset 1px 0 12px rgba(0, 242, 254, 0.1);
+}
+
+/* Sparkline Trend Indicator Bars */
+.spark-bar {
+    width: 4px;
+    border-radius: 2px;
+    background: rgba(0, 242, 254, 0.2);
+    transition: all 0.3s ease;
+}
+
+.spark-bar.active {
+    background: #00f2fe;
+    box-shadow: 0 0 8px #00f2fe;
+}
+
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(4, 7, 15, 0.82);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.hidden { display: none !important; }

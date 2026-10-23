@@ -1,0 +1,31 @@
+{
+  "sentiment_summary": "İzleyici sadakati yüksek (%80); anlatım temposu ve karaoke altyazı akışı takdir topluyor.",
+  "audience_demands": [
+    "Ses tonu ve kelime kelime yanan altyazı inanılmaz akıcı, tebrikler!"
+  ],
+  "strengths": [
+    "Karaoke altyazı temposu ve dinamik seslendirme izleyiciyi ekranda tutuyor.",
+    "ShortGPT geçiş ses efektleri retention oranını artırıyor."
+  ],
+  "weaknesses_to_avoid": [
+    "Ses tonu ve kelime kelime yanan altyazı inanılmaz akıcı, tebrikler!",
+    "Yapay zeka sırları hakkında da bir shorts gelsin lütfen!"
+  ],
+  "persona_tuning": {
+    "humor_level": "Hafif sarkastik, zeki",
+    "energy_level": "9/10 Yüksek tempolu ve merak uyandırıcı",
+    "catchphrase": "İşte kimsenin anlatmadığı o gerçek..."
+  },
+  "seo_keywords": [
+    "YouTube Shorts",
+    "Uzay Felaketleri",
+    "Yapay Zeka",
+    "Mühendislik Sırları",
+    "Teknoloji"
+  ],
+  "sentiment_score": 80,
+  "channel_id": "default",
+  "channel_title": "Mücahit Hilmi",
+  "generated_at": "2026-09-28T11:06:16.016785",
+  "decision_engine": "Laya v0.3.21 System 1"
+}
