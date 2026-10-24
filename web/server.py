@@ -958,6 +958,110 @@ async def api_jarvis_telemetry():
 async def api_jarvis_contacts():
     return {"status": "success", "contacts": contacts_mgr.get_all()}
 
+@app.post("/api/jarvis/contacts")
+async def api_jarvis_add_contact(request: Request):
+    data = await request.json()
+    name = data.get("name", "").strip()
+    phone = data.get("phone", "").strip()
+    relationship = data.get("relationship", "").strip()
+    notes = data.get("notes", "").strip()
+    full_name = data.get("full_name", "").strip()
+    if not name or not phone:
+        return JSONResponse({"status": "error", "message": "İsim ve telefon bilgisi zorunludur."}, status_code=400)
+    contact = await run_in_threadpool(contacts_mgr.add_contact, name, phone, relationship, notes, full_name)
+    return {"status": "success", "contact": contact}
+
+@app.delete("/api/jarvis/contacts/{identifier}")
+async def api_jarvis_delete_contact(identifier: str):
+    deleted = await run_in_threadpool(contacts_mgr.delete_contact, identifier)
+    if deleted:
+        return {"status": "success", "deleted": deleted}
+    return JSONResponse({"status": "error", "message": "Kişi bulunamadı veya sistem sahibi silinemez."}, status_code=404)
+
+@app.post("/api/jarvis/contacts/import")
+async def api_jarvis_import_contacts(request: Request):
+    data = await request.json()
+    raw_text = data.get("text", "")
+    contacts_list = data.get("contacts", [])
+    if contacts_list:
+        res = await run_in_threadpool(contacts_mgr.bulk_import, contacts_list)
+    elif raw_text:
+        res = await run_in_threadpool(contacts_mgr.import_raw_text, raw_text)
+    else:
+        return JSONResponse({"status": "error", "message": "İçe aktarılacak kişi verisi bulunamadı."}, status_code=400)
+    return {"status": "success", "result": res}
+
+@app.post("/api/jarvis/contacts/import_file")
+async def api_jarvis_import_file(request: Request):
+    form = await request.form()
+    upload = form.get("file")
+    if not upload:
+        return JSONResponse({"status": "error", "message": "Dosya seçilmedi."}, status_code=400)
+    content = await upload.read()
+    filename = upload.filename.lower() if upload.filename else ""
+    text = content.decode("utf-8", errors="replace")
+    if filename.endswith(".vcf") or "begin:vcard" in text.lower():
+        res = await run_in_threadpool(contacts_mgr.import_vcard, text)
+    elif filename.endswith(".csv") or "," in text or ";" in text:
+        res = await run_in_threadpool(contacts_mgr.import_google_csv, text)
+    else:
+        res = await run_in_threadpool(contacts_mgr.import_raw_text, text)
+    return {"status": "success", "result": res}
+
+@app.get("/api/jarvis/contacts/google_sync")
+async def api_jarvis_contacts_google_sync():
+    res = await run_in_threadpool(contacts_mgr.sync_google_people_api)
+    return {"status": "success" if res.get("success") else "warning", "result": res}
+
+@app.post("/api/jarvis/chat/clear")
+async def api_jarvis_chat_clear():
+    def _clear():
+        jarvis_brain.conversation_history.clear()
+        with jarvis_brain.draft_lock:
+            jarvis_brain.pending_drafts.clear()
+            jarvis_brain.latest_draft_id = None
+    await run_in_threadpool(_clear)
+    return {"status": "success", "message": "JARVIS sohbet geçmişi ve taslakları temizlendi."}
+
+@app.delete("/api/jarvis/chats/{identifier}")
+async def api_jarvis_delete_chat(identifier: str):
+    count = await run_in_threadpool(whatsapp_daemon.clear_chat, identifier)
+    return {"status": "success", "cleared_messages": count}
+
+from core_jarvis.tools.wol_tool import wol_tool
+from core_jarvis.permission_guard import permission_guard
+
+@app.get("/api/jarvis/wol/identity")
+async def api_jarvis_wol_identity():
+    identity = await run_in_threadpool(wol_tool.get_host_wol_identity)
+    return {"status": "success", "wol_identity": identity}
+
+@app.post("/api/jarvis/wol/wake")
+async def api_jarvis_wol_wake(request: Request):
+    data = await request.json()
+    mac = data.get("mac_address", "").strip()
+    broadcast_ip = data.get("broadcast_ip", "255.255.255.255").strip()
+    port = int(data.get("port", 9))
+    if not mac:
+        return JSONResponse({"status": "error", "message": "Hedef MAC adresi zorunludur."}, status_code=400)
+    
+    # Permission Guard: Level 3 confirmation
+    eval_res = permission_guard.evaluate_action("wol_dispatch", confirmed_by_user=True)
+    if not eval_res["allowed"]:
+        return JSONResponse({"status": "error", "message": eval_res["reason"]}, status_code=403)
+
+    res = await run_in_threadpool(wol_tool.send_magic_packet, mac, broadcast_ip=broadcast_ip, port=port)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+@app.get("/api/jarvis/security/audit")
+async def api_jarvis_security_audit():
+    return {
+        "status": "success",
+        "audit_trail": permission_guard.get_audit_trail(limit=50)
+    }
+
+
+
 
 from core_jarvis.whatsapp_daemon import whatsapp_daemon, INBOX_FILE
 

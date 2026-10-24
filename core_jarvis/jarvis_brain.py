@@ -440,6 +440,18 @@ JSON ŞEMASI:
             return {"reply": reply, "speak_text": speak_text, "action_taken": "mute_voice"}
 
         # ----------------------------------------------------
+        # 0b. CLEAR CHAT & MEMORY BUFFER
+        # ----------------------------------------------------
+        if any(k in q_lower for k in ["sohbeti temizle", "sohbeti sil", "hafızayı temizle", "hafizayi temizle", "ekranı temizle", "ekrani temizle", "geçmişi temizle", "gecmisi temizle", "sohbet geçmişini sil"]):
+            self.conversation_history.clear()
+            with self.draft_lock:
+                self.pending_drafts.clear()
+                self.latest_draft_id = None
+            reply = "Sohbet geçmişi ve kısa süreli hafıza tamponu temizlendi efendim. Yepyeni bir oturumla emrinizdeyim."
+            speak_text = "Sohbet geçmişi temizlendi efendim."
+            return {"reply": reply, "speak_text": speak_text, "action_taken": "chat_cleared"}
+
+        # ----------------------------------------------------
         # 1. PENDING DRAFT CONFIRMATION / REVISION / CANCEL
         # ----------------------------------------------------
         if self.pending_draft:
@@ -543,6 +555,29 @@ JSON ŞEMASI:
                 speak_text = f"{saved['name']} kişisi rehbere eklendi efendim."
                 self._record_turn(user_text, reply)
                 return {"reply": reply, "speak_text": speak_text, "action_taken": "contact_saved", "details": saved}
+
+        # ----------------------------------------------------
+        # 3b. FAST-PATH: CONTACT DELETING / REMOVING
+        # ----------------------------------------------------
+        if any(w in q_lower for w in ["sil", "çıkar", "cikar", "kaldır", "kaldir"]) and any(w in q_lower for w in ["rehber", "kişi", "kisi", "numara", "kayıt", "kayit"]):
+            m_del = re.search(r'(?:rehberden|rehberdeki)?\s*([A-Za-zçğıöşüÇĞİÖŞÜ0-9\s]+?)\s*(?:kişisini|adlı\s+kişiyi|adındaki\s+kişiyi|kaydını|kişiyi)?\s*(?:rehberden)?\s*(?:sil|çıkar|cikar|kaldır|kaldir)', cleaned_input, re.IGNORECASE)
+            del_query = ""
+            if m_del:
+                del_query = m_del.group(1).strip()
+                del_query = re.sub(r'\b(rehberden|rehberdeki|kişi|kisi|kişisini|lütfen|lutfen|hemen)\b', '', del_query, flags=re.IGNORECASE).strip()
+            
+            if del_query:
+                deleted = contacts_mgr.delete_contact(del_query)
+                if deleted:
+                    reply = f"Efendim, **{deleted['name']}** ({deleted.get('phone', '')}) kişisini rehberinizden sildim."
+                    speak_text = f"{deleted['name']} kişisi rehberden silindi efendim."
+                    self._record_turn(user_text, reply)
+                    return {"reply": reply, "speak_text": speak_text, "action_taken": "contact_deleted", "details": deleted}
+                else:
+                    reply = f"Efendim, rehberinizde '{del_query}' adına sahip silinebilecek bir kişi bulunamadı."
+                    speak_text = f"Rehberde {del_query} bulunamadı efendim."
+                    self._record_turn(user_text, reply)
+                    return {"reply": reply, "speak_text": speak_text, "action_taken": "contact_not_found"}
 
         # ----------------------------------------------------
         # 4. HARDWARE & VRAM STATUS
@@ -698,6 +733,31 @@ JSON ŞEMASI:
                 "action_taken": "draft_created",
                 "draft": self.pending_draft
             }
+
+        # CASE B2: DELETE CONTACT
+        elif action == "delete_contact" and decision.get("recipient"):
+            rec = decision["recipient"]
+            deleted = contacts_mgr.delete_contact(rec)
+            if deleted:
+                reply = f"Efendim, **{deleted['name']}** ({deleted.get('phone', '')}) kişisini rehberinizden sildim."
+                speak_text = f"{deleted['name']} kişisi rehberden silindi efendim."
+                self._record_turn(user_text, reply)
+                return {"reply": reply, "speak_text": speak_text, "action_taken": "contact_deleted", "details": deleted}
+            else:
+                reply = f"Efendim, rehberinizde '{rec}' kişisini bulamadığım için silme işlemi gerçekleştirilemedi."
+                speak_text = f"Rehberde {rec} kişisi bulunamadı efendim."
+                self._record_turn(user_text, reply)
+                return {"reply": reply, "speak_text": speak_text, "action_taken": "contact_not_found"}
+
+        # CASE B3: CLEAR CHAT
+        elif action == "clear_chat":
+            self.conversation_history.clear()
+            with self.draft_lock:
+                self.pending_drafts.clear()
+                self.latest_draft_id = None
+            reply = "Sohbet geçmişi ve kısa süreli hafıza tamponu temizlendi efendim. Yepyeni bir oturumla emrinizdeyim."
+            speak_text = "Sohbet geçmişi temizlendi efendim."
+            return {"reply": reply, "speak_text": speak_text, "action_taken": "chat_cleared"}
 
         # CASE C: CHECK WHATSAPP INBOX
         elif action == "check_inbox":

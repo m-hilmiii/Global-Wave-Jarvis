@@ -595,6 +595,30 @@ class WhatsAppDaemon:
                     m["unread"] = False
             self._atomic_write_inbox(inbox)
 
+    def clear_chat(self, contact_query: str) -> int:
+        """Removes all messages for a specific contact from local inbox cache."""
+        history = self.get_chat_history(contact_query)
+        msg_ids = {m.get("id") for m in history if m.get("id")}
+        if not msg_ids:
+            return 0
+
+        with self.lock:
+            inbox = self._read_inbox_locked()
+            remaining = [m for m in inbox if m.get("id") not in msg_ids]
+            cleared_count = len(inbox) - len(remaining)
+            self._atomic_write_inbox(remaining)
+            logger.info(f"[Daemon] Cleared {cleared_count} messages for chat '{contact_query}'")
+            return cleared_count
+
+    def clear_all_chats(self) -> int:
+        """Clears all messages from inbox cache."""
+        with self.lock:
+            inbox = self._read_inbox_locked()
+            count = len(inbox)
+            self._atomic_write_inbox([])
+            logger.info(f"[Daemon] Cleared all {count} messages from inbox cache")
+            return count
+
     def get_status(self) -> Dict[str, Any]:
         return {
             "is_connected": self.is_connected(),

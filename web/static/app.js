@@ -2177,11 +2177,52 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // --- Clear Chat ---
         if (clearBtn) {
-            clearBtn.addEventListener("click", () => {
+            clearBtn.addEventListener("click", async () => {
                 feedEl.innerHTML = "";
                 if (activeChat.id === "jarvis") {
                     jarvisAiFeed = [];
-                    appendMessage("JARVIS Core", "Akış temizlendi efendim. Emrinizdeyim.", false);
+                    try {
+                        await authFetch("/api/jarvis/chat/clear", { method: "POST" });
+                    } catch(e) {}
+                    appendMessage("JARVIS Core", "Akış ve hafıza tamponu temizlendi efendim. Emrinizdeyim.", false);
+                }
+            });
+        }
+
+        // --- Clear Full Conversation History (Top Toolbar Button) ---
+        const clearHistoryBtn = document.getElementById("chatClearHistoryBtn");
+        if (clearHistoryBtn) {
+            clearHistoryBtn.addEventListener("click", async () => {
+                if (activeChat.id === "jarvis") {
+                    if (!confirm("JARVIS sohbet geçmişini ve kısa süreli hafızasını tamamen temizlemek istiyor musunuz?")) return;
+                    try {
+                        await authFetch("/api/jarvis/chat/clear", { method: "POST" });
+                        feedEl.innerHTML = "";
+                        jarvisAiFeed = [];
+                        appendMessage("JARVIS Core", "Sohbet geçmişi ve kısa süreli hafıza tamponu temizlendi efendim. Yepyeni bir oturumla emrinizdeyim.", false);
+                        speakText("Sohbet geçmişi temizlendi efendim.");
+                    } catch (err) {
+                        alert("Temizleme hatası: " + err.message);
+                    }
+                } else {
+                    const contactName = activeChat.short_name || activeChat.name;
+                    if (!confirm(`"${contactName}" kişisi ile olan tüm WhatsApp mesaj geçmişi silinsin mi?`)) return;
+                    try {
+                        await authFetch(`/api/jarvis/chats/${encodeURIComponent(contactName)}`, { method: "DELETE" });
+                        feedEl.innerHTML = `
+                            <div class="text-center py-16 text-slate-400 text-xs space-y-2 font-sans">
+                                <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto text-xl">
+                                    <i class="fa-brands fa-whatsapp"></i>
+                                </div>
+                                <p class="font-bold text-slate-300">Sohbet Geçmişi Temizlendi</p>
+                                <p class="text-slate-500 text-[11px]">${escapeHtml(contactName)} kişisine ait mesaj kayıtları silindi.</p>
+                            </div>
+                        `;
+                        speakText("WhatsApp mesaj geçmişi silindi efendim.");
+                        loadChatsList();
+                    } catch (err) {
+                        alert("Sohbet silme hatası: " + err.message);
+                    }
                 }
             });
         }
@@ -2449,8 +2490,391 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             scrollToBottom();
         };
-    }
+    
 
+        // ==========================================
+        // REHBER & İLETİŞİM KOMUTA MERKEZİ MANTIĞI
+        // ==========================================
+        const contactsModal = document.getElementById("contactsManagerModal");
+        const openContactsBtn = document.getElementById("addContactModalBtn");
+        const closeContactsBtn = document.getElementById("closeContactsModalBtn");
+        const modalCountBadge = document.getElementById("modalContactCountBadge");
+        const modalCardsList = document.getElementById("contactModalCardsList");
+        const modalSearchInput = document.getElementById("contactModalSearchInput");
+        const modalSummaryText = document.getElementById("contactModalSummaryText");
+        const btnDeleteAll = document.getElementById("btnDeleteAllContacts");
+
+        window.switchContactTab = function(tabName) {
+            document.querySelectorAll(".contact-nav-tab").forEach(b => {
+                b.classList.remove("active", "bg-cyan-500/20", "text-cyan-300", "border-cyan-500/40");
+                b.classList.add("bg-slate-800/60", "text-slate-300", "border-slate-700/60");
+            });
+            document.querySelectorAll(".contact-tab-pane").forEach(p => p.classList.add("hidden"));
+
+            const tabBtnMap = {
+                list: "btnTabListContacts",
+                add: "btnTabAddContact",
+                bulk: "btnTabBulkContacts",
+                google: "btnTabGoogleSync"
+            };
+            const tabPaneMap = {
+                list: "contactPaneList",
+                add: "contactPaneAdd",
+                bulk: "contactPaneBulk",
+                google: "contactPaneGoogle"
+            };
+
+            const btn = document.getElementById(tabBtnMap[tabName]);
+            const pane = document.getElementById(tabPaneMap[tabName]);
+            if (btn) {
+                btn.classList.add("active", "bg-cyan-500/20", "text-cyan-300", "border-cyan-500/40");
+                btn.classList.remove("bg-slate-800/60", "text-slate-300", "border-slate-700/60");
+            }
+            if (pane) pane.classList.remove("hidden");
+
+            if (tabName === "list") {
+                renderModalContacts(allRawContacts);
+            }
+        };
+
+        let allRawContacts = [];
+        async function fetchAllRawContacts() {
+            try {
+                const res = await authFetch("/api/jarvis/contacts");
+                const data = await res.json();
+                if (data.status === "success" && Array.isArray(data.contacts)) {
+                    allRawContacts = data.contacts;
+                    if (modalCountBadge) modalCountBadge.textContent = `${allRawContacts.length} Kişi`;
+                    renderModalContacts(allRawContacts);
+                }
+            } catch (e) {
+                console.warn("[Contacts] Could not load raw contacts:", e);
+            }
+        }
+
+        function renderModalContacts(contacts) {
+            if (!modalCardsList) return;
+            modalCardsList.innerHTML = "";
+
+            if (!contacts || contacts.length === 0) {
+                modalCardsList.innerHTML = `
+                    <div class="text-center py-12 text-slate-500 text-xs">
+                        <i class="fa-solid fa-address-book text-2xl mb-2 text-slate-600 block"></i>
+                        Rehberde kayıtlı kişi bulunamadı.
+                    </div>
+                `;
+                if (modalSummaryText) modalSummaryText.textContent = "0 kişi listeleniyor.";
+                return;
+            }
+
+            if (modalSummaryText) modalSummaryText.textContent = `Toplam ${contacts.length} kişi listeleniyor.`;
+
+            contacts.forEach(c => {
+                const isOwner = c.id === "c_owner";
+                const initial = (c.name || "?").substring(0, 1).toUpperCase();
+                const card = document.createElement("div");
+                card.className = "p-3 rounded-xl bg-dark-950/80 border border-slate-800/90 hover:border-cyan-500/30 flex items-center justify-between transition-all group";
+                
+                const relBadge = c.relationship 
+                    ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono">${escapeHtml(c.relationship)}</span>` 
+                    : "";
+                const notesHtml = c.notes 
+                    ? `<p class="text-[11px] text-slate-400 mt-0.5 truncate max-w-[280px]">${escapeHtml(c.notes)}</p>` 
+                    : "";
+
+                card.innerHTML = `
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <div class="w-9 h-9 rounded-xl ${isOwner ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-300' : 'bg-slate-800/90 border-slate-700/80 text-slate-200'} border flex items-center justify-center text-sm font-bold font-mono shrink-0 shadow-sm">
+                            ${escapeHtml(initial)}
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center space-x-2">
+                                <h4 class="text-xs font-bold text-white truncate">${escapeHtml(c.name)}</h4>
+                                ${relBadge}
+                            </div>
+                            <div class="flex items-center space-x-2 text-[11px] font-mono text-slate-400">
+                                <span>${escapeHtml(c.phone || "")}</span>
+                                ${c.full_name && c.full_name !== c.name ? `<span class="text-slate-500">• ${escapeHtml(c.full_name)}</span>` : ""}
+                            </div>
+                            ${notesHtml}
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-1.5 shrink-0 ml-2">
+                        <button onclick="window.chatWithContact('${escapeHtml(c.name)}')" title="Sohbete Git" class="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs transition-all flex items-center space-x-1">
+                            <i class="fa-brands fa-whatsapp text-[11px]"></i>
+                            <span class="hidden sm:inline">Sohbet</span>
+                        </button>
+                        ${isOwner ? '' : `
+                        <button onclick="window.deleteContactPrompt('${escapeHtml(c.id || c.name)}', '${escapeHtml(c.name)}')" title="Kişiyi Sil" class="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 text-xs transition-all">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                        `}
+                    </div>
+                `;
+                modalCardsList.appendChild(card);
+            });
+        }
+
+        if (modalSearchInput) {
+            modalSearchInput.addEventListener("input", (e) => {
+                const q = e.target.value.toLowerCase().trim();
+                const filtered = allRawContacts.filter(c => 
+                    (c.name && c.name.toLowerCase().includes(q)) ||
+                    (c.full_name && c.full_name.toLowerCase().includes(q)) ||
+                    (c.phone && c.phone.includes(q)) ||
+                    (c.relationship && c.relationship.toLowerCase().includes(q))
+                );
+                renderModalContacts(filtered);
+            });
+        }
+
+        if (openContactsBtn && contactsModal) {
+            openContactsBtn.addEventListener("click", () => {
+                contactsModal.classList.remove("hidden");
+                window.switchContactTab("list");
+                fetchAllRawContacts();
+            });
+        }
+        if (closeContactsBtn && contactsModal) {
+            closeContactsBtn.addEventListener("click", () => {
+                contactsModal.classList.add("hidden");
+            });
+        }
+        if (contactsModal) {
+            contactsModal.addEventListener("click", (e) => {
+                if (e.target === contactsModal) {
+                    contactsModal.classList.add("hidden");
+                }
+            });
+        }
+
+        window.chatWithContact = function(contactName) {
+            if (contactsModal) contactsModal.classList.add("hidden");
+            const found = allContacts.find(c => c.short_name.toLowerCase() === contactName.toLowerCase() || c.name.toLowerCase().includes(contactName.toLowerCase()));
+            if (found) {
+                switchChat(found);
+            } else {
+                switchChat({ id: "custom_" + contactName, name: contactName, short_name: contactName, phone: "" });
+            }
+        };
+
+        window.deleteContactPrompt = async function(id, name) {
+            if (!confirm(`"${name}" kişisini rehberden silmek istediğinize emin misiniz?`)) return;
+            try {
+                const res = await authFetch(`/api/jarvis/contacts/${encodeURIComponent(id)}`, { method: "DELETE" });
+                const data = await res.json();
+                if (data.status === "success") {
+                    speakText(`${name} kişisi silindi efendim.`);
+                    await fetchAllRawContacts();
+                    await loadChatsList();
+                } else {
+                    alert("Silme hatası: " + (data.message || "Bilinmeyen hata"));
+                }
+            } catch (err) {
+                alert("Silme işlemi başarısız: " + err.message);
+            }
+        };
+
+        if (btnDeleteAll) {
+            btnDeleteAll.addEventListener("click", async () => {
+                if (!confirm("Sistem sahibi hariç tüm rehberi silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) return;
+                try {
+                    for (const c of allRawContacts) {
+                        if (c.id !== "c_owner") {
+                            await authFetch(`/api/jarvis/contacts/${encodeURIComponent(c.id || c.name)}`, { method: "DELETE" });
+                        }
+                    }
+                    speakText("Rehber temizlendi efendim.");
+                    await fetchAllRawContacts();
+                    await loadChatsList();
+                } catch (e) {
+                    alert("Hata oluştu: " + e.message);
+                }
+            });
+        }
+
+        const btnSaveContact = document.getElementById("btnSaveSingleContact");
+        if (btnSaveContact) {
+            btnSaveContact.addEventListener("click", async () => {
+                const name = document.getElementById("newContactName")?.value.trim();
+                const phone = document.getElementById("newContactPhone")?.value.trim();
+                const rel = document.getElementById("newContactRel")?.value.trim();
+                const fullName = document.getElementById("newContactFullName")?.value.trim();
+                const notes = document.getElementById("newContactNotes")?.value.trim();
+
+                if (!name || !phone) {
+                    alert("Lütfen kişi adı ve telefon numarasını girin.");
+                    return;
+                }
+
+                btnSaveContact.disabled = true;
+                btnSaveContact.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Kaydediliyor...';
+
+                try {
+                    const res = await authFetch("/api/jarvis/contacts", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            name,
+                            phone,
+                            relationship: rel,
+                            full_name: fullName,
+                            notes
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.status === "success") {
+                        speakText(`${name} kişisi rehbere eklendi efendim.`);
+                        document.getElementById("newContactName").value = "";
+                        document.getElementById("newContactPhone").value = "";
+                        document.getElementById("newContactRel").value = "";
+                        document.getElementById("newContactFullName").value = "";
+                        document.getElementById("newContactNotes").value = "";
+                        await fetchAllRawContacts();
+                        await loadChatsList();
+                        window.switchContactTab("list");
+                    } else {
+                        alert("Hata: " + (data.message || "Kaydedilemedi"));
+                    }
+                } catch (err) {
+                    alert("Kayıt hatası: " + err.message);
+                } finally {
+                    btnSaveContact.disabled = false;
+                    btnSaveContact.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i> <span>Rehbere Kaydet</span>';
+                }
+            });
+        }
+
+        const btnSubmitBulk = document.getElementById("btnSubmitBulkContacts");
+        if (btnSubmitBulk) {
+            btnSubmitBulk.addEventListener("click", async () => {
+                const textVal = document.getElementById("bulkContactsInput")?.value.trim();
+                const statusEl = document.getElementById("bulkParseStatus");
+                if (!textVal) {
+                    alert("Lütfen en az bir kişi bilgisi yapıştırın.");
+                    return;
+                }
+
+                btnSubmitBulk.disabled = true;
+                btnSubmitBulk.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Çözümleniyor...';
+                if (statusEl) statusEl.textContent = "Kişiler ayrıştırılıyor ve ekleniyor...";
+
+                try {
+                    const res = await authFetch("/api/jarvis/contacts/import", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ text: textVal })
+                    });
+                    const data = await res.json();
+                    if (data.status === "success") {
+                        const { added, updated, total_contacts } = data.result;
+                        alert(`Başarılı! ${added} yeni kişi eklendi, ${updated} kişi güncellendi (Toplam: ${total_contacts} kişi).`);
+                        speakText(`${added} yeni kişi rehbere aktarıldı efendim.`);
+                        document.getElementById("bulkContactsInput").value = "";
+                        if (statusEl) statusEl.textContent = `${added} kişi eklendi.`;
+                        await fetchAllRawContacts();
+                        await loadChatsList();
+                        window.switchContactTab("list");
+                    } else {
+                        alert("Hata: " + (data.message || "Aktarım başarısız"));
+                    }
+                } catch (err) {
+                    alert("İçe aktarma hatası: " + err.message);
+                } finally {
+                    btnSubmitBulk.disabled = false;
+                    btnSubmitBulk.innerHTML = '<i class="fa-solid fa-file-import mr-1"></i> <span>Topluca İçe Aktar</span>';
+                }
+            });
+        }
+
+        const fileSelector = document.getElementById("contactFileSelector");
+        const fileLabel = document.getElementById("contactFileNameLabel");
+        const btnProcessFile = document.getElementById("btnProcessContactFile");
+
+        if (fileSelector) {
+            fileSelector.addEventListener("change", () => {
+                if (fileSelector.files && fileSelector.files[0]) {
+                    const f = fileSelector.files[0];
+                    if (fileLabel) fileLabel.textContent = `Seçildi: ${f.name} (${Math.round(f.size / 1024)} KB)`;
+                    if (btnProcessFile) {
+                        btnProcessFile.disabled = false;
+                        btnProcessFile.classList.remove("bg-cyan-600/40", "text-slate-400", "cursor-not-allowed");
+                        btnProcessFile.classList.add("bg-cyan-500", "hover:bg-cyan-400", "text-dark-950", "shadow-md");
+                    }
+                }
+            });
+        }
+
+        if (btnProcessFile && fileSelector) {
+            btnProcessFile.addEventListener("click", async () => {
+                if (!fileSelector.files || !fileSelector.files[0]) return;
+                const file = fileSelector.files[0];
+
+                btnProcessFile.disabled = true;
+                btnProcessFile.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Yükleniyor ve Ayrıştırılıyor...';
+
+                const formData = new FormData();
+                formData.append("file", file);
+
+                try {
+                    const res = await authFetch("/api/jarvis/contacts/import_file", {
+                        method: "POST",
+                        body: formData
+                    });
+                    const data = await res.json();
+                    if (data.status === "success") {
+                        const { added, updated, total_contacts } = data.result;
+                        alert(`Harika! ${file.name} dosyasından ${added} kişi eklendi, ${updated} kişi güncellendi (Toplam: ${total_contacts} kişi).`);
+                        speakText(`Dosyadan ${added} yeni kişi rehbere aktarıldı efendim.`);
+                        if (fileLabel) fileLabel.textContent = "CSV veya VCF Dosyası Seç (.csv / .vcf)";
+                        fileSelector.value = "";
+                        await fetchAllRawContacts();
+                        await loadChatsList();
+                        window.switchContactTab("list");
+                    } else {
+                        alert("Hata: " + (data.message || "Dosya ayrıştırılamadı"));
+                    }
+                } catch (err) {
+                    alert("Dosya yükleme hatası: " + err.message);
+                } finally {
+                    btnProcessFile.disabled = false;
+                    btnProcessFile.innerHTML = '<i class="fa-solid fa-check mr-1"></i> <span>Dosyayı Çözümle ve Aktar</span>';
+                }
+            });
+        }
+
+        const btnGoogleApi = document.getElementById("btnSyncGoogleApi");
+        const googleStatusText = document.getElementById("googleApiStatusText");
+        if (btnGoogleApi) {
+            btnGoogleApi.addEventListener("click", async () => {
+                btnGoogleApi.disabled = true;
+                btnGoogleApi.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Kontrol Ediliyor...';
+                if (googleStatusText) googleStatusText.textContent = "Google People API sorgulanıyor...";
+
+                try {
+                    const res = await authFetch("/api/jarvis/contacts/google_sync");
+                    const data = await res.json();
+                    if (data.status === "success" && data.result.success) {
+                        alert(`Başarılı! Google People API ile ${data.result.count} kişi çekildi.`);
+                        speakText("Google rehberiniz senkronize edildi efendim.");
+                        await fetchAllRawContacts();
+                        await loadChatsList();
+                        window.switchContactTab("list");
+                    } else {
+                        const msg = data.result ? data.result.message : "Google People API yanıt vermedi.";
+                        alert(msg);
+                        if (googleStatusText) googleStatusText.textContent = msg;
+                    }
+                } catch (err) {
+                    alert("Google senkronizasyon hatası: " + err.message);
+                } finally {
+                    btnGoogleApi.disabled = false;
+                    btnGoogleApi.innerHTML = '<i class="fa-brands fa-google mr-1 text-amber-400"></i> <span>Google\'dan Çek</span>';
+                }
+            });
+        }
+
+    }
     initJarvisHUD();
     // Launch Application
     initApp();

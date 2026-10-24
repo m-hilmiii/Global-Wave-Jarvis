@@ -287,9 +287,9 @@
                                     <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></div>
                                     <span class="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">İletişim & Rehber</span>
                                 </div>
-                                <button id="addContactModalBtn" title="Yeni Kişi Ekle" class="text-xs bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 px-2 py-0.5 rounded-lg transition-all flex items-center space-x-1">
-                                    <i class="fa-solid fa-plus text-[10px]"></i>
-                                    <span>Yeni Kişi</span>
+                                <button id="addContactModalBtn" title="Rehber Yönetimi ve İçe Aktarma" class="text-xs bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 px-2.5 py-1 rounded-lg transition-all flex items-center space-x-1.5 shadow-sm">
+                                    <i class="fa-solid fa-address-book text-[11px] text-cyan-400"></i>
+                                    <span>Rehber Paneli</span>
                                 </button>
                             </div>
                             <div class="relative">
@@ -365,8 +365,12 @@
                                 <button id="chatRefreshBtn" title="Yenile / Canlı Mesajları Çek" class="p-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs transition-all">
                                     <i class="fa-solid fa-rotate-right"></i>
                                 </button>
-                                <button id="clearJarvisChatBtn" title="Ekranı Temizle" class="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs transition-all">
+                                <button id="clearJarvisChatBtn" title="Ekranı / Kısa Süreli Hafızayı Temizle" class="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs transition-all">
                                     <i class="fa-solid fa-broom"></i>
+                                </button>
+                                <button id="chatClearHistoryBtn" title="Tüm Sohbet Geçmişini Temizle" class="px-2 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center space-x-1 transition-all">
+                                    <i class="fa-solid fa-trash text-[11px] text-rose-400"></i>
+                                    <span class="hidden sm:inline">Sohbeti Temizle</span>
                                 </button>
                             </div>
                         </div>
@@ -1724,6 +1728,175 @@
 
         </div>
     </div>
+
+
+    <!-- ========================================== -->
+    <!-- REHBER & İLETİŞİM KOMUTA MERKEZİ (MODAL)    -->
+    <!-- ========================================== -->
+    <div id="contactsManagerModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/85 backdrop-blur-md transition-all duration-300">
+        <div class="bg-dark-900/95 border border-cyan-500/30 rounded-2xl max-w-2xl w-full p-6 shadow-[0_0_50px_rgba(0,242,254,0.15)] relative flex flex-col max-h-[90vh] overflow-hidden">
+            
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between pb-4 border-b border-cyan-500/20 shrink-0">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-lg shadow-sm">
+                        <i class="fa-solid fa-address-book"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white font-mono flex items-center gap-2">
+                            <span>Rehber & İletişim Komuta Merkezi</span>
+                            <span id="modalContactCountBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">0 Kişi</span>
+                        </h3>
+                        <p class="text-xs text-slate-400 mt-0.5">Kişileri yönetin, Google / Gmail rehberinizi aktarın veya toplu numara ekleyin.</p>
+                    </div>
+                </div>
+                <button id="closeContactsModalBtn" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Modal Nav Tabs -->
+            <div class="flex items-center space-x-2 pt-3 pb-2 border-b border-slate-800/80 shrink-0 text-xs font-mono">
+                <button id="btnTabListContacts" onclick="window.switchContactTab('list')" class="contact-nav-tab active px-3 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 transition-all flex items-center space-x-1.5">
+                    <i class="fa-solid fa-list-ul text-[11px]"></i>
+                    <span>Kişilerim</span>
+                </button>
+                <button id="btnTabAddContact" onclick="window.switchContactTab('add')" class="contact-nav-tab px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 transition-all flex items-center space-x-1.5">
+                    <i class="fa-solid fa-user-plus text-[11px]"></i>
+                    <span>Yeni Kişi</span>
+                </button>
+                <button id="btnTabBulkContacts" onclick="window.switchContactTab('bulk')" class="contact-nav-tab px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 transition-all flex items-center space-x-1.5">
+                    <i class="fa-solid fa-file-lines text-[11px]"></i>
+                    <span>Toplu Metin Ekle</span>
+                </button>
+                <button id="btnTabGoogleSync" onclick="window.switchContactTab('google')" class="contact-nav-tab px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/60 transition-all flex items-center space-x-1.5">
+                    <i class="fa-brands fa-google text-[11px] text-amber-400"></i>
+                    <span>Google / vCard Aktar</span>
+                </button>
+            </div>
+
+            <!-- TAB 1: KİŞİLER LİSTESİ & YÖNETİMİ -->
+            <div id="contactPaneList" class="contact-tab-pane flex-1 min-h-0 flex flex-col pt-3">
+                <div class="relative mb-3 shrink-0">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-500"></i>
+                    <input type="text" id="contactModalSearchInput" placeholder="Kişi adı, unvan veya telefon numarasıyla filtrele..." class="w-full bg-dark-950 border border-slate-800 focus:border-cyan-500/50 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition-all">
+                </div>
+                <div id="contactModalCardsList" class="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                    <!-- Populated dynamically via JS -->
+                </div>
+                <div class="pt-3 border-t border-slate-800/80 mt-2 shrink-0 flex items-center justify-between text-xs text-slate-400">
+                    <span id="contactModalSummaryText">Toplam 0 kişi listeleniyor.</span>
+                    <button id="btnDeleteAllContacts" class="text-rose-400/80 hover:text-rose-300 text-[11px] flex items-center space-x-1 transition-all">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>Rehberi Temizle</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB 2: TEK KİŞİ EKLE -->
+            <div id="contactPaneAdd" class="contact-tab-pane hidden flex-1 min-h-0 overflow-y-auto pt-4 space-y-3 custom-scrollbar">
+                <div>
+                    <label class="block text-xs font-mono text-slate-300 mb-1">Kişi Adı (veya Lakap) *</label>
+                    <input type="text" id="newContactName" placeholder="Örn: Ahmet Yılmaz, Babam, Selim..." class="w-full bg-dark-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-slate-300 mb-1">Telefon Numarası *</label>
+                    <input type="text" id="newContactPhone" placeholder="Örn: 0555 123 45 67 veya +905321112233" class="w-full bg-dark-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-mono text-slate-300 mb-1">Yakınlık / Rol</label>
+                        <input type="text" id="newContactRel" placeholder="Örn: Baba, Anne, İş Ortağı, Arkadaş" class="w-full bg-dark-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-mono text-slate-300 mb-1">Tam Ad Soyad (Opsiyonel)</label>
+                        <input type="text" id="newContactFullName" placeholder="Örn: Ahmet Faruk Yılmaz" class="w-full bg-dark-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-slate-300 mb-1">Özel Notlar</label>
+                    <textarea id="newContactNotes" rows="2" placeholder="Örn: Pazartesi günleri müsait, video editörü..." class="w-full bg-dark-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none"></textarea>
+                </div>
+                <div class="pt-2">
+                    <button id="btnSaveSingleContact" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        <span>Rehbere Kaydet</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB 3: TOPLU METİN EKLE -->
+            <div id="contactPaneBulk" class="contact-tab-pane hidden flex-1 min-h-0 flex flex-col pt-3 space-y-3">
+                <div class="p-3 rounded-xl bg-cyan-950/20 border border-cyan-500/20 text-xs text-slate-300 leading-relaxed font-sans">
+                    <i class="fa-solid fa-circle-info text-cyan-400 mr-1.5"></i>
+                    Birden fazla kişiyi alt alta yapıştırın. Sistem; isim, telefon ve parantez içindeki unvanları otomatik olarak ayıklar:
+                    <div class="mt-1.5 font-mono text-[11px] text-cyan-300/80 bg-dark-950 p-2 rounded-lg border border-slate-800">
+                        Ahmet Kaya: 0532 111 22 33 (İş Ortağı)<br>
+                        Mehmet Demir, +905559876543, Arkadaş<br>
+                        0555 999 88 77 Ayşe Hanım
+                    </div>
+                </div>
+                <textarea id="bulkContactsInput" class="flex-1 min-h-[140px] bg-dark-950 border border-slate-800 focus:border-cyan-400 rounded-xl p-3 text-xs text-slate-100 font-mono placeholder-slate-600 focus:outline-none custom-scrollbar" placeholder="Kişi listesini buraya yapıştırın..."></textarea>
+                <div class="flex items-center justify-between pt-1 shrink-0">
+                    <span id="bulkParseStatus" class="text-xs text-slate-400 font-mono">Yapıştırıp içe aktara tıklayın.</span>
+                    <button id="btnSubmitBulkContacts" class="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-dark-950 font-bold text-xs shadow-md transition-all flex items-center space-x-1.5">
+                        <i class="fa-solid fa-file-import"></i>
+                        <span>Topluca İçe Aktar</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB 4: GOOGLE / GMAIL & VCARD İÇE AKTAR -->
+            <div id="contactPaneGoogle" class="contact-tab-pane hidden flex-1 min-h-0 overflow-y-auto pt-3 space-y-4 custom-scrollbar">
+                
+                <!-- KART 1: GOOGLE CSV / VCARD DOSYASI YÜKLE -->
+                <div class="p-4 rounded-xl bg-dark-950 border border-slate-800 hover:border-cyan-500/40 transition-all space-y-3">
+                    <div class="flex items-center space-x-2.5">
+                        <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold font-mono">1</div>
+                        <div>
+                            <h4 class="text-xs font-bold text-white">Google Contacts CSV veya vCard (.vcf) Yükle</h4>
+                            <p class="text-[11px] text-slate-400">Android, iPhone, Gmail veya Outlook'tan indirdiğiniz rehber dosyasını seçin.</p>
+                        </div>
+                    </div>
+                    <div class="p-3 bg-dark-900 rounded-lg border border-dashed border-slate-700/80 text-center space-y-2">
+                        <input type="file" id="contactFileSelector" accept=".csv,.vcf" class="hidden">
+                        <button onclick="document.getElementById('contactFileSelector').click()" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 font-mono text-xs border border-cyan-500/30 transition-all flex items-center justify-center space-x-2 mx-auto">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span id="contactFileNameLabel">CSV veya VCF Dosyası Seç (.csv / .vcf)</span>
+                        </button>
+                        <p class="text-[10px] text-slate-500 font-mono">İpucu: <a href="https://contacts.google.com" target="_blank" class="text-cyan-400 underline hover:text-cyan-300">contacts.google.com</a> &rarr; Dışa Aktar (Export) &rarr; Google CSV seçeneğiyle tüm rehberinizi 2 saniyede indirebilirsiniz.</p>
+                    </div>
+                    <div class="flex items-center justify-end">
+                        <button id="btnProcessContactFile" disabled class="px-4 py-2 rounded-lg bg-cyan-600/40 text-slate-400 font-bold text-xs transition-all flex items-center space-x-1.5 cursor-not-allowed">
+                            <i class="fa-solid fa-check"></i>
+                            <span>Dosyayı Çözümle ve Aktar</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KART 2: GOOGLE HESABI SENKRONİZASYONU -->
+                <div class="p-4 rounded-xl bg-dark-950 border border-slate-800 hover:border-amber-500/40 transition-all space-y-3">
+                    <div class="flex items-center space-x-2.5">
+                        <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold font-mono">2</div>
+                        <div>
+                            <h4 class="text-xs font-bold text-white">Google / Gmail API Senkronizasyonu</h4>
+                            <p class="text-[11px] text-slate-400">Bağlı Google hesabınız varsa Google People API ile doğrudan rehberi çeker.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between pt-1">
+                        <span id="googleApiStatusText" class="text-xs text-slate-400 font-mono">Doğrudan Google API ile senkronize et.</span>
+                        <button id="btnSyncGoogleApi" class="px-4 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs transition-all flex items-center space-x-1.5 shadow-sm">
+                            <i class="fa-brands fa-google text-amber-400"></i>
+                            <span>Google'dan Çek</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
 
     <!-- Core App Logic -->
     <script src="/static/app.js?v=3.5"></script>
