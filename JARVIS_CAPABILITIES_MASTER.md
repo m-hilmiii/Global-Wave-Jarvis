@@ -1,11 +1,11 @@
 # 🧠 JARVIS Master Yetenek & Fonksiyon Kataloğu
 > **Sistem:** Global-Wave / Stark-Core Personal AI Operating System  
 > **Kullanıcı:** Mücahit Hilmi (Hitap: *Sayın Hilmi* / *Efendim*)  
-> **Versiyon:** v5.8 (Master Architecture - Voice Interaction & Kokoro TTS Engine)  
+> **Versiyon:** v5.9 (Master Architecture - Executive Web HUD Control Center)  
 > **Son Güncelleme:** 24 Ekim 2026  
-> **Doğrulama:** 109/109 Birim Testi Başarılı (`Ran 109 tests in 49.584s OK`)
+> **Doğrulama:** 109/109 Birim Testi Başarılı (`Ran 109 tests in 51.679s OK`)
 
-Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlarını, güvenlik kalkanını, API uç noktalarını ve tetikleyici komutlarını eksiksiz listeler. Yeni bir özellik eklendikçe güncellenir.
+Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlarını, güvenlik kalkanını, API uç noktalarını, görsel Web HUD panellerini ve tetikleyici komutlarını eksiksiz listeler. Yeni bir özellik eklendikçe güncellenir.
 
 ---
 
@@ -174,6 +174,40 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | `/api/jarvis/voice/command` | `POST` | Wake-word denetimiyle sesli komutu işler ve sesli yanıt üretir |
 | `/api/jarvis/voice/speak` | `POST` | Kokoro-82M ONNX ile metni seslendirir ve `.wav` URL'i döner |
 | `/api/jarvis/voice/status` | `GET` | Ses motoru, ONNX ağırlıkları ve önbellek durumu |
+
+---
+
+## 🖥️ 6. Web HUD Yönetici Kumanda Panelleri (Frontend UI)
+
+JARVIS Web HUD, Iron Man tarzı karanlık cam (glassmorphism), neon cam göbeği/mor ışımalar ve 5 bağımsız alt paneliyle Sayın Hilmi için tasarlandı:
+
+### A. İletişim & Chat Paneli (`#jarvisHudView_chat`)
+- Doğrudan JARVIS yapay zeka çekirdeğiyle konuşma veya rehberdeki kişilere (WhatsApp Baileys) mesaj hazırlama/gönderme.
+- Hızlı yönlendirme şeridi: Günlük Brifing, Ajanda, Hafıza RAG, Ses Stüdyosu ve Sistem Durumu butonları.
+- Anlık mikrofon ile sesli komut alma ve Kokoro TTS sesli yanıtları.
+
+### B. Günlük Brifing & Yönetici Özeti (`#jarvisHudView_briefing`)
+- **Dinamik Karşılama:** Günün saatine göre akıllı hitap (*"Günaydın Sayın Hilmi"*, *"İyi Akşamlar Sayın Hilmi"*).
+- **Tek Tıkla Seslendirme:** *"Brifingi Dinle (Kokoro TTS)"* butonu ile günün tüm özetini yerel nöral sesle seslendirir.
+- **4 Canlı Operasyon Rozeti:** Aktif Görevler, WhatsApp İletişimleri, Arka Plan Render İşleri ve Sistem Telemetrisi.
+- **Öncelikli Görev Panosu:** Acil/yüksek öncelikli görevler ve inline hızlı görev ekleme formu.
+- **Zamanlanmış Hatırlatıcılar & Son Yönetici Notları:** Yaklaşan randevular ve son stratejik kararlar.
+
+### C. Ajanda, Görevler & Yönetici Not Panosu (`#jarvisHudView_agenda`)
+- **Görev Yönetimi:** Tümü, Bekleyen ve Tamamlanan durum filtreleri; Acil (kırmızı), Yüksek (kehribar), Normal (cam göbeği) öncelik rozetleri; son teslim tarihi takibi.
+- **İnteraktif Tamamlama:** Tek tıkla görevi tamamlama, pozitif sesli uyarı chimesi ve anında brifingle çift yönlü senkronizasyon.
+- **Yönetici Notları (Memos):** Başlık, içerik ve etiketleme (`#toplantı`, `#fikir`, `#finans`) ile anlık strateji arşivi.
+
+### D. Yerel Kod & Dokümantasyon RAG Arama Paneli (`#jarvisHudView_rag`)
+- **BM25 Hızlı Arama:** Yerel kod tabanını (<10ms) tarayan anlık arama motoru.
+- **Önerilen Arama Rozetleri:** `#ffmpeg amf`, `#telemetry`, `#prompt injection`, `#kokoro tts`, `#whatsapp daemon`.
+- **Kod Önizleme & Anlık Özet:** Satır aralıkları, alaka skoru, JetBrains Mono kod bloğu ve *"Özetle"* butonuyla anında inline doküman özeti.
+- **İndeks Tazeleme:** Tek tıkla çalışma alanını yeniden tarama (`reindexKnowledge`).
+
+### E. Ses, Kokoro-82M & Holografik Dalga Analizörü (`#jarvisHudView_voice`)
+- **60 FPS Holografik Dalga Canvas:** HTML5 Canvas üzerinde çalışan çoklu reaktör halkaları ve renkli neon sinüs dalgaları. JARVIS konuşurken yüksek genlikli canlı dalgalar, beklemedeyken yumuşak nefes alma animasyonu.
+- **Wake-Word Simülatörü:** *"Hey Jarvis"*, *"Dinle Jarvis"* tetikleme analizi ve temizlenen komutun anında çalıştırılması.
+- **Kokoro-82M Stüdyosu:** 4 farklı stüdyo ses karakteri (`am_adam`, `af_sarah`, `af_nicole`, `am_george`), 0.8x-1.4x hız ayarı, hazır brifing şablonları ve özel metin sentezleme.
 
 ---
 *Not: Bu dosya her yeni modül, araç veya yetenek entegrasyonunda otomatik olarak güncellenir.*

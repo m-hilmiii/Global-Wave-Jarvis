@@ -2074,6 +2074,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     currentAudio = null;
                 }
                 currentAudio = new Audio(audioUrl);
+                currentAudio.onplay = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(true); };
+                currentAudio.onended = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
+                currentAudio.onpause = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
+                currentAudio.onerror = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
                 currentAudio.play().catch(e => console.warn("[Jarvis Audio Playback]", e));
                 return;
             }
@@ -2092,6 +2096,10 @@ document.addEventListener("DOMContentLoaded", () => {
                         currentAudio = null;
                     }
                     currentAudio = new Audio(data.speech.audio_url);
+                    currentAudio.onplay = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(true); };
+                    currentAudio.onended = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
+                    currentAudio.onpause = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
+                    currentAudio.onerror = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
                     currentAudio.play().catch(e => console.warn("[Jarvis Audio Playback]", e));
                 } else if ('speechSynthesis' in window) {
                     // Fallback to browser Web Speech API
@@ -2100,6 +2108,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     const utterance = new SpeechSynthesisUtterance(clean);
                     utterance.lang = "tr-TR";
                     utterance.rate = 1.05;
+                    utterance.onstart = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(true); };
+                    utterance.onend = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
+                    utterance.onerror = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
                     window.speechSynthesis.speak(utterance);
                 }
             })
@@ -2110,6 +2121,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     const utterance = new SpeechSynthesisUtterance(clean);
                     utterance.lang = "tr-TR";
                     utterance.rate = 1.05;
+                    utterance.onstart = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(true); };
+                    utterance.onend = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
+                    utterance.onerror = () => { if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false); };
                     window.speechSynthesis.speak(utterance);
                 }
             });
@@ -2926,6 +2940,801 @@ document.addEventListener("DOMContentLoaded", () => {
                 } finally {
                     btnGoogleApi.disabled = false;
                     btnGoogleApi.innerHTML = '<i class="fa-brands fa-google mr-1 text-amber-400"></i> <span>Google\'dan Çek</span>';
+                }
+            });
+        }
+
+        // =========================================================================
+        // EXECUTIVE JARVIS HUD: SUB-VIEW SWITCHER & CONTROLLERS
+        // =========================================================================
+        let currentHudSubTab = "chat";
+        window.switchJarvisHudTab = function(subTabName) {
+            currentHudSubTab = subTabName;
+
+            // 1. Update sub-nav button active styles
+            document.querySelectorAll(".jarvis-hud-nav-btn").forEach(btn => {
+                if (btn.dataset.hudTab === subTabName) {
+                    btn.classList.add("active", "bg-cyan-500/20", "text-cyan-300", "border-cyan-500/40", "shadow-sm");
+                    btn.classList.remove("text-slate-400", "border-transparent");
+                } else {
+                    btn.classList.remove("active", "bg-cyan-500/20", "text-cyan-300", "border-cyan-500/40", "shadow-sm");
+                    btn.classList.add("text-slate-400", "border-transparent");
+                }
+            });
+
+            // 2. Hide all subviews
+            document.querySelectorAll(".jarvis-hud-subview").forEach(view => {
+                view.classList.add("hidden");
+            });
+
+            // 3. Show target subview
+            const targetView = document.getElementById("jarvisHudView_" + subTabName);
+            if (targetView) {
+                targetView.classList.remove("hidden");
+            }
+
+            // 4. Trigger data load for active view
+            if (subTabName === "briefing") {
+                window.loadDailyBriefing();
+            } else if (subTabName === "agenda") {
+                window.loadAgendaData();
+            } else if (subTabName === "rag") {
+                window.loadRagStats();
+            } else if (subTabName === "voice") {
+                window.initVoiceVisualizer();
+            }
+        };
+
+        // -------------------------------------------------------------------------
+        // 1. GÜNLÜK BRİFİNG CONTROLLER
+        // -------------------------------------------------------------------------
+        let latestBriefingData = null;
+
+        window.loadDailyBriefing = async function(force = false) {
+            const btnRefresh = document.getElementById("btnRefreshBriefing");
+            if (btnRefresh) btnRefresh.classList.add("fa-spin");
+
+            try {
+                const res = await authFetch("/api/jarvis/assistant/briefing");
+                const data = await res.json();
+                if (data.status === "success" && data.briefing) {
+                    latestBriefingData = data.briefing;
+                    const b = data.briefing;
+
+                    // Dynamic time greeting
+                    const hour = new Date().getHours();
+                    let greeting = "İyi Günler, Sayın Hilmi";
+                    if (hour >= 5 && hour < 12) greeting = "Günaydın, Sayın Hilmi";
+                    else if (hour >= 12 && hour < 17) greeting = "Tünaydın, Sayın Hilmi";
+                    else if (hour >= 17 && hour < 22) greeting = "İyi Akşamlar, Sayın Hilmi";
+                    else greeting = "İyi Geceler, Sayın Hilmi";
+
+                    const greetEl = document.getElementById("briefingGreetingTitle");
+                    if (greetEl) greetEl.textContent = greeting;
+
+                    // Formatted date & time
+                    const timeEl = document.getElementById("briefingTimestamp");
+                    if (timeEl) {
+                        const now = new Date();
+                        timeEl.textContent = now.toLocaleDateString("tr-TR", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + " " + now.toLocaleTimeString("tr-TR", { hour: '2-digit', minute: '2-digit' });
+                    }
+
+                    // Metrics
+                    const tasksEl = document.getElementById("briefingMetricTasks");
+                    if (tasksEl) {
+                        tasksEl.textContent = `${b.tasks_count || 0} Görev`;
+                        if (b.overdue_count > 0) {
+                            tasksEl.innerHTML = `<span class="text-rose-400 font-bold">${b.tasks_count} Görev (${b.overdue_count} Gecikmiş)</span>`;
+                        }
+                    }
+
+                    const unreadEl = document.getElementById("briefingMetricUnread");
+                    if (unreadEl) {
+                        unreadEl.textContent = `${b.unread_messages || 0} Yeni Mesaj`;
+                    }
+
+                    const jobsEl = document.getElementById("briefingMetricJobs");
+                    if (jobsEl) {
+                        jobsEl.textContent = `${b.active_jobs || 0} Arka Plan İşi`;
+                    }
+
+                    const sysEl = document.getElementById("briefingMetricSystem");
+                    if (sysEl) {
+                        sysEl.textContent = b.system_ready ? "Sistemler Hazır" : "Nominal Kontrol";
+                    }
+
+                    // Direct Speech Transcript
+                    const speechEl = document.getElementById("briefingSpeechText");
+                    if (speechEl && b.speak_text) {
+                        speechEl.textContent = b.speak_text;
+                    }
+
+                    // Priority tasks list
+                    const prioList = document.getElementById("briefingPriorityTasksList");
+                    if (prioList) {
+                        prioList.innerHTML = "";
+                        const tasks = b.priority_tasks || [];
+                        if (tasks.length === 0) {
+                            prioList.innerHTML = `<div class="p-3 text-center text-xs text-slate-500 italic bg-dark-900/50 rounded-lg">Bugün için öncelikli veya acil bir görev bulunmuyor efendim.</div>`;
+                        } else {
+                            tasks.forEach(t => {
+                                const prioColor = t.priority === "urgent" ? "border-rose-500/40 text-rose-300 bg-rose-500/10" : "border-amber-500/40 text-amber-300 bg-amber-500/10";
+                                const div = document.createElement("div");
+                                div.className = `p-2.5 rounded-lg bg-dark-900/80 border ${prioColor} flex items-center justify-between transition-all hover:bg-dark-900`;
+                                div.innerHTML = `
+                                    <div class="flex items-center space-x-2.5 min-w-0">
+                                        <button onclick="window.completeTask('${t.id}')" title="Görevi Tamamla" class="w-5 h-5 rounded border border-slate-600 hover:border-emerald-400 hover:bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs transition-all shrink-0">
+                                            <i class="fa-solid fa-check opacity-0 hover:opacity-100"></i>
+                                        </button>
+                                        <span class="text-xs text-slate-200 font-medium truncate">${escapeHtml(t.title)}</span>
+                                        <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-dark-950 text-slate-400 border border-slate-700 uppercase">${escapeHtml(t.priority)}</span>
+                                    </div>
+                                    ${t.due_date ? `<span class="text-[10px] font-mono text-slate-400 shrink-0 ml-2">${escapeHtml(t.due_date)}</span>` : ''}
+                                `;
+                                prioList.appendChild(div);
+                            });
+                        }
+                    }
+
+                    // Reminders list
+                    const remList = document.getElementById("briefingRemindersList");
+                    const remBadge = document.getElementById("briefingRemindersCountBadge");
+                    if (remList) {
+                        remList.innerHTML = "";
+                        const reminders = b.reminders || [];
+                        if (remBadge) remBadge.textContent = reminders.length;
+                        if (reminders.length === 0) {
+                            remList.innerHTML = `<div class="p-2.5 text-center text-xs text-slate-500 italic bg-dark-900/50 rounded-lg">Yaklaşan hatırlatıcı yok.</div>`;
+                        } else {
+                            reminders.forEach(r => {
+                                const div = document.createElement("div");
+                                div.className = "p-2 rounded-lg bg-dark-900/70 border border-amber-500/20 flex items-center justify-between text-xs";
+                                div.innerHTML = `
+                                    <span class="text-slate-200 truncate font-medium">${escapeHtml(r.title)}</span>
+                                    <span class="text-[10px] font-mono text-amber-300 ml-2 shrink-0">${r.datetime_iso ? r.datetime_iso.slice(11, 16) : ''}</span>
+                                `;
+                                remList.appendChild(div);
+                            });
+                        }
+                    }
+
+                    // Notes list
+                    const noteList = document.getElementById("briefingNotesList");
+                    if (noteList) {
+                        noteList.innerHTML = "";
+                        const notes = b.notes || [];
+                        if (notes.length === 0) {
+                            noteList.innerHTML = `<div class="p-2.5 text-center text-xs text-slate-500 italic bg-dark-900/50 rounded-lg">Kayıtlı not bulunmuyor.</div>`;
+                        } else {
+                            notes.slice(0, 3).forEach(n => {
+                                const div = document.createElement("div");
+                                div.className = "p-2.5 rounded-lg bg-dark-900/70 border border-indigo-500/20 space-y-1";
+                                div.innerHTML = `
+                                    <div class="flex items-center justify-between">
+                                        <h4 class="text-xs font-bold text-indigo-300 truncate">${escapeHtml(n.title)}</h4>
+                                        <span class="text-[9px] font-mono text-slate-500">${n.created_at ? n.created_at.slice(0, 10) : ''}</span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-300 line-clamp-2">${escapeHtml(n.content)}</p>
+                                `;
+                                noteList.appendChild(div);
+                            });
+                        }
+                    }
+                }
+            } catch(e) {
+                console.error("[Briefing Load Error]", e);
+            } finally {
+                if (btnRefresh) btnRefresh.classList.remove("fa-spin");
+            }
+        };
+
+        window.playDailyBriefingAudio = function() {
+            const speechText = latestBriefingData?.speak_text || document.getElementById("briefingSpeechText")?.textContent;
+            if (speechText) {
+                const badge = document.getElementById("briefingVoiceStateBadge");
+                if (badge) {
+                    badge.textContent = "Seslendiriliyor...";
+                    badge.classList.remove("text-slate-400", "bg-dark-900");
+                    badge.classList.add("text-cyan-300", "bg-cyan-500/20", "animate-pulse");
+                }
+                speakText(speechText);
+            }
+        };
+
+        // Briefing quick task form
+        const briefingTaskForm = document.getElementById("briefingQuickTaskForm");
+        if (briefingTaskForm) {
+            briefingTaskForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const input = document.getElementById("briefingTaskInput");
+                const prio = document.getElementById("briefingTaskPriority");
+                const title = input?.value?.trim();
+                if (!title) return;
+
+                try {
+                    const res = await authFetch("/api/jarvis/assistant/tasks", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            title: title,
+                            priority: prio?.value || "normal",
+                            category: "general"
+                        })
+                    });
+                    const d = await res.json();
+                    if (d.status === "success") {
+                        input.value = "";
+                        playMessageChime();
+                        window.loadDailyBriefing();
+                    }
+                } catch(err) {
+                    alert("Görev ekleme hatası: " + err.message);
+                }
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // 2. AJANDA & GÖREV / NOT PANOSU CONTROLLER
+        // -------------------------------------------------------------------------
+        let allAgendaTasks = [];
+        let allAgendaNotes = [];
+        let currentAgendaFilter = "all";
+
+        window.loadAgendaData = async function() {
+            try {
+                const [tasksRes, notesRes] = await Promise.all([
+                    authFetch("/api/jarvis/assistant/tasks"),
+                    authFetch("/api/jarvis/assistant/notes")
+                ]);
+                const tasksData = await tasksRes.json();
+                const notesData = await notesRes.json();
+
+                if (tasksData.status === "success") {
+                    allAgendaTasks = tasksData.tasks || [];
+                    const pendingCount = allAgendaTasks.filter(t => t.status !== "completed").length;
+                    const badge = document.getElementById("agendaTaskCountBadge");
+                    if (badge) badge.textContent = pendingCount;
+                    const totalLabel = document.getElementById("agendaTotalTasksLabel");
+                    if (totalLabel) totalLabel.textContent = `${pendingCount} Bekleyen / ${allAgendaTasks.length} Toplam`;
+                    renderAgendaTasks();
+                }
+
+                if (notesData.status === "success") {
+                    allAgendaNotes = notesData.notes || [];
+                    const notesLabel = document.getElementById("agendaTotalNotesLabel");
+                    if (notesLabel) notesLabel.textContent = `${allAgendaNotes.length} Not`;
+                    renderAgendaNotes();
+                }
+            } catch(e) {
+                console.error("[Agenda Load Error]", e);
+            }
+        };
+
+        window.filterAgendaTasks = function(status) {
+            currentAgendaFilter = status;
+            document.querySelectorAll(".agenda-filter-btn").forEach(btn => {
+                if (btn.dataset.status === status) {
+                    btn.classList.add("active", "bg-cyan-500/20", "text-cyan-300", "border-cyan-500/40");
+                    btn.classList.remove("text-slate-400", "border-transparent");
+                } else {
+                    btn.classList.remove("active", "bg-cyan-500/20", "text-cyan-300", "border-cyan-500/40");
+                    btn.classList.add("text-slate-400", "border-transparent");
+                }
+            });
+            renderAgendaTasks();
+        };
+
+        function renderAgendaTasks() {
+            const listEl = document.getElementById("agendaTasksList");
+            if (!listEl) return;
+            listEl.innerHTML = "";
+
+            let filtered = allAgendaTasks;
+            if (currentAgendaFilter === "pending") {
+                filtered = allAgendaTasks.filter(t => t.status !== "completed");
+            } else if (currentAgendaFilter === "completed") {
+                filtered = allAgendaTasks.filter(t => t.status === "completed");
+            }
+
+            if (filtered.length === 0) {
+                listEl.innerHTML = `<div class="p-6 text-center text-xs text-slate-500 italic bg-dark-900/40 rounded-xl">Bu filtrede gösterilecek görev bulunmuyor efendim.</div>`;
+                return;
+            }
+
+            filtered.forEach(t => {
+                const isDone = t.status === "completed";
+                const prioBorder = t.priority === "urgent" ? "border-rose-500/40 shadow-rose-950/20" : t.priority === "high" ? "border-amber-500/40" : "border-cyan-500/25";
+                const prioColor = t.priority === "urgent" ? "bg-rose-500/15 text-rose-300 border-rose-500/30" : t.priority === "high" ? "bg-amber-500/15 text-amber-300 border-amber-500/30" : "bg-cyan-500/15 text-cyan-300 border-cyan-500/30";
+
+                const div = document.createElement("div");
+                div.className = `p-3 rounded-xl bg-dark-900/80 border ${prioBorder} flex items-center justify-between space-x-3 transition-all hover:bg-dark-900 shadow-md ${isDone ? 'opacity-50' : ''}`;
+                div.innerHTML = `
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <button onclick="window.completeTask('${t.id}')" ${isDone ? 'disabled' : ''} title="${isDone ? 'Tamamlandı' : 'Tamamla'}" class="w-6 h-6 rounded-lg border ${isDone ? 'bg-emerald-500 border-emerald-400 text-dark-950' : 'border-slate-600 hover:border-emerald-400 hover:bg-emerald-500/20 text-emerald-400'} flex items-center justify-center text-xs transition-all shrink-0">
+                            <i class="fa-solid fa-check ${isDone ? '' : 'opacity-0 hover:opacity-100'}"></i>
+                        </button>
+                        <div class="min-w-0">
+                            <h4 class="text-xs font-semibold text-slate-100 ${isDone ? 'line-through text-slate-400' : ''} truncate">${escapeHtml(t.title)}</h4>
+                            <div class="flex items-center space-x-2 mt-1">
+                                <span class="text-[9px] font-mono px-1.5 py-0.2 rounded border uppercase font-bold ${prioColor}">${escapeHtml(t.priority)}</span>
+                                ${t.category ? `<span class="text-[9px] font-mono text-slate-400 bg-dark-950 px-1.5 py-0.2 rounded border border-slate-700">#${escapeHtml(t.category)}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    ${t.due_date ? `
+                        <div class="text-right shrink-0">
+                            <span class="text-[10px] font-mono text-slate-400 flex items-center space-x-1">
+                                <i class="fa-regular fa-calendar text-[9px]"></i>
+                                <span>${escapeHtml(t.due_date)}</span>
+                            </span>
+                        </div>
+                    ` : ''}
+                `;
+                listEl.appendChild(div);
+            });
+        }
+
+        window.completeTask = async function(taskId) {
+            try {
+                const res = await authFetch(`/api/jarvis/assistant/tasks/${encodeURIComponent(taskId)}/complete`, {
+                    method: "POST"
+                });
+                const d = await res.json();
+                if (d.status === "success") {
+                    playMessageChime();
+                    window.loadAgendaData();
+                    if (currentHudSubTab === "briefing") {
+                        window.loadDailyBriefing();
+                    }
+                }
+            } catch(e) {
+                alert("Görev tamamlama hatası: " + e.message);
+            }
+        };
+
+        function renderAgendaNotes() {
+            const listEl = document.getElementById("agendaNotesList");
+            if (!listEl) return;
+            listEl.innerHTML = "";
+
+            if (allAgendaNotes.length === 0) {
+                listEl.innerHTML = `<div class="p-6 text-center text-xs text-slate-500 italic bg-dark-900/40 rounded-xl">Henüz kayıtlı bir yönetici notu yok efendim.</div>`;
+                return;
+            }
+
+            allAgendaNotes.forEach(n => {
+                const div = document.createElement("div");
+                div.className = "p-3 rounded-xl bg-dark-900/80 border border-indigo-500/25 space-y-2 transition-all hover:border-indigo-500/40 shadow-md";
+                const tagsHtml = (n.tags || []).map(t => `<span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/25">#${escapeHtml(t)}</span>`).join(" ");
+                div.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-bold text-slate-100 font-display truncate">${escapeHtml(n.title)}</h4>
+                        <span class="text-[9px] font-mono text-slate-500">${n.created_at ? n.created_at.slice(0, 16).replace("T", " ") : ''}</span>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed font-sans whitespace-pre-wrap">${escapeHtml(n.content)}</p>
+                    ${tagsHtml ? `<div class="flex items-center space-x-1.5 pt-1">${tagsHtml}</div>` : ''}
+                `;
+                listEl.appendChild(div);
+            });
+        }
+
+        // Agenda Task Creator Form
+        const agendaTaskForm = document.getElementById("agendaNewTaskForm");
+        if (agendaTaskForm) {
+            agendaTaskForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const titleEl = document.getElementById("agendaNewTaskTitle");
+                const prioEl = document.getElementById("agendaNewTaskPriority");
+                const dueEl = document.getElementById("agendaNewTaskDueDate");
+                const catEl = document.getElementById("agendaNewTaskCategory");
+
+                const title = titleEl?.value?.trim();
+                if (!title) return;
+
+                try {
+                    const res = await authFetch("/api/jarvis/assistant/tasks", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            title: title,
+                            priority: prioEl?.value || "normal",
+                            due_date: dueEl?.value || null,
+                            category: catEl?.value || "general"
+                        })
+                    });
+                    const d = await res.json();
+                    if (d.status === "success") {
+                        titleEl.value = "";
+                        playMessageChime();
+                        window.loadAgendaData();
+                    }
+                } catch(err) {
+                    alert("Görev ekleme hatası: " + err.message);
+                }
+            });
+        }
+
+        // Agenda Note Creator Form
+        const agendaNoteForm = document.getElementById("agendaNewNoteForm");
+        if (agendaNoteForm) {
+            agendaNoteForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const titleEl = document.getElementById("agendaNewNoteTitle");
+                const contentEl = document.getElementById("agendaNewNoteContent");
+                const tagsEl = document.getElementById("agendaNewNoteTags");
+
+                const title = titleEl?.value?.trim();
+                const content = contentEl?.value?.trim();
+                if (!title || !content) return;
+
+                const tags = tagsEl?.value ? tagsEl.value.split(",").map(t => t.trim()).filter(Boolean) : [];
+
+                try {
+                    const res = await authFetch("/api/jarvis/assistant/notes", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            title: title,
+                            content: content,
+                            tags: tags
+                        })
+                    });
+                    const d = await res.json();
+                    if (d.status === "success") {
+                        titleEl.value = "";
+                        contentEl.value = "";
+                        if (tagsEl) tagsEl.value = "";
+                        playMessageChime();
+                        window.loadAgendaData();
+                    }
+                } catch(err) {
+                    alert("Not kaydetme hatası: " + err.message);
+                }
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // 3. YEREL HAFIZA & DOKÜMAN RAG ARAMA CONTROLLER
+        // -------------------------------------------------------------------------
+        window.loadRagStats = async function() {
+            try {
+                const res = await authFetch("/api/jarvis/knowledge/stats");
+                const data = await res.json();
+                if (data.status === "success" && data.stats) {
+                    const s = data.stats;
+                    const fEl = document.getElementById("ragStatsFiles");
+                    const cEl = document.getElementById("ragStatsChunks");
+                    if (fEl) fEl.textContent = s.total_files || 0;
+                    if (cEl) cEl.textContent = s.total_chunks || 0;
+                }
+            } catch(e) {}
+        };
+
+        window.reindexKnowledge = async function(force = true) {
+            const btn = document.getElementById("btnReindexKnowledge");
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-[10px]"></i> <span>İndeksleniyor...</span>';
+            }
+
+            try {
+                const res = await authFetch("/api/jarvis/knowledge/index", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ force: force })
+                });
+                const d = await res.json();
+                if (d.status === "success" && d.index) {
+                    alert(`Harika! ${d.index.indexed_files} dosya ve ${d.index.total_chunks} parça başarıyla indekslendi.`);
+                    speakText("Yerel bilgi tabanı indeksi başarıyla yenilendi efendim.");
+                    window.loadRagStats();
+                }
+            } catch(e) {
+                alert("İndeksleme hatası: " + e.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-rotate text-[10px]"></i> <span>İndeksi Yenile</span>';
+                }
+            }
+        };
+
+        window.triggerRagQuery = function(query) {
+            const input = document.getElementById("ragSearchInput");
+            if (input) {
+                input.value = query;
+                window.searchLocalKnowledge(query);
+            }
+        };
+
+        window.searchLocalKnowledge = async function(query) {
+            if (!query || !query.trim()) return;
+            const resultsEl = document.getElementById("ragSearchResults");
+
+            if (resultsEl) {
+                resultsEl.innerHTML = `
+                    <div class="flex items-center justify-center p-8 space-x-2 text-purple-400">
+                        <i class="fa-solid fa-spinner fa-spin text-lg"></i>
+                        <span class="text-xs font-mono">BM25 motoru taranıyor...</span>
+                    </div>
+                `;
+            }
+
+            try {
+                const res = await authFetch("/api/jarvis/knowledge/search", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: query.trim(), top_k: 6 })
+                });
+                const data = await res.json();
+
+                if (data.status === "success" && data.results) {
+                    const hits = data.results.results || [];
+                    if (hits.length === 0) {
+                        resultsEl.innerHTML = `
+                            <div class="p-8 text-center text-xs text-slate-500 italic bg-dark-950/60 rounded-xl">
+                                "${escapeHtml(query)}" ile eşleşen doküman veya kod parçası bulunamadı.
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    resultsEl.innerHTML = "";
+                    hits.forEach((hit, idx) => {
+                        const card = document.createElement("div");
+                        card.className = "p-3.5 rounded-xl bg-dark-950/90 border border-purple-500/25 space-y-2.5 shadow-lg transition-all hover:border-purple-500/40";
+                        const scorePill = `<span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">Skor: ${hit.score.toFixed(2)}</span>`;
+                        const escapedPath = escapeHtml(hit.file_path);
+                        const linesBadge = `<span class="text-[10px] font-mono text-slate-400">L${hit.start_line}-${hit.end_line}</span>`;
+
+                        card.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-2 min-w-0">
+                                    <i class="fa-solid fa-file-code text-purple-400 text-xs shrink-0"></i>
+                                    <span class="text-xs font-mono font-bold text-slate-200 truncate">${escapedPath}</span>
+                                    ${linesBadge}
+                                </div>
+                                <div class="flex items-center space-x-2 shrink-0">
+                                    ${scorePill}
+                                    <button onclick="window.summarizeRagDoc('${hit.file_path.replace(/\\/g, '\\\\')}', this)" class="text-[10px] font-mono bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 px-2 py-0.5 rounded-md transition-all flex items-center space-x-1">
+                                        <i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i>
+                                        <span>Özetle</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <pre class="bg-dark-900/90 p-3 rounded-lg border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto custom-scrollbar max-h-36"><code>${escapeHtml(hit.snippet)}</code></pre>
+                            <div class="summary-container hidden pt-2 border-t border-purple-500/20 text-xs"></div>
+                        `;
+                        resultsEl.appendChild(card);
+                    });
+                }
+            } catch(e) {
+                if (resultsEl) resultsEl.innerHTML = `<div class="p-4 text-xs text-rose-400">Arama hatası: ${e.message}</div>`;
+            }
+        };
+
+        window.summarizeRagDoc = async function(filePath, btn) {
+            const card = btn ? btn.closest(".p-3\\.5") : null;
+            const container = card ? card.querySelector(".summary-container") : null;
+            if (!container) return;
+
+            container.classList.remove("hidden");
+            container.innerHTML = `<div class="text-purple-300 font-mono text-[11px]"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Doküman özetleniyor...</div>`;
+
+            try {
+                const res = await authFetch("/api/jarvis/knowledge/summarize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ file_path: filePath })
+                });
+                const d = await res.json();
+                if (d.status === "success" && d.document) {
+                    const doc = d.document;
+                    const pointsHtml = (doc.key_points || []).map(p => `<li class="text-slate-300 text-xs">${escapeHtml(p)}</li>`).join("");
+                    container.innerHTML = `
+                        <div class="p-3 rounded-lg bg-purple-950/30 border border-purple-500/30 space-y-2">
+                            <div class="flex items-center space-x-1.5 text-purple-300 font-bold text-xs font-mono">
+                                <i class="fa-solid fa-sparkles"></i>
+                                <span>Yapay Zeka Özeti (${escapeHtml(doc.file_name)})</span>
+                            </div>
+                            <p class="text-xs text-slate-200">${escapeHtml(doc.lead_text)}</p>
+                            ${pointsHtml ? `<ul class="list-disc list-inside space-y-1 pt-1 border-t border-purple-500/20">${pointsHtml}</ul>` : ''}
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `<div class="text-rose-400 text-xs">Özet alınamadı.</div>`;
+                }
+            } catch(e) {
+                container.innerHTML = `<div class="text-rose-400 text-xs">Özet hatası: ${e.message}</div>`;
+            }
+        };
+
+        const ragForm = document.getElementById("ragSearchForm");
+        if (ragForm) {
+            ragForm.addEventListener("submit", (e) => {
+                e.preventDefault();
+                const q = document.getElementById("ragSearchInput")?.value?.trim();
+                if (q) window.searchLocalKnowledge(q);
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // 4. SES, KOKORO-82M STÜDYO & HOLOGRAFİK DALGA CONTROLLER
+        // -------------------------------------------------------------------------
+        let visualizerAnimFrame = null;
+        let isVoiceVisualizerRunning = false;
+        let isVoiceActive = false;
+
+        window.setVoiceVisualizerActive = function(active) {
+            isVoiceActive = Boolean(active);
+            const statusEl = document.getElementById("voiceVisualizerStatus");
+            if (statusEl) {
+                if (isVoiceActive) {
+                    statusEl.textContent = "SESLENDİRİLİYOR \u2022 KOKORO-82M AKTİF";
+                    statusEl.className = "text-[9px] font-mono px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400 animate-pulse";
+                } else {
+                    statusEl.textContent = "BEKLEMEDE \u2022 KOKORO-82M HAZIR";
+                    statusEl.className = "text-[9px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30";
+                }
+            }
+        };
+
+        window.initVoiceVisualizer = function() {
+            const canvas = document.getElementById("jarvisVoiceVisualizerCanvas");
+            if (!canvas) return;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+
+            // Set internal resolution
+            canvas.width = canvas.parentElement.clientWidth || 500;
+            canvas.height = 160;
+
+            if (isVoiceVisualizerRunning) return;
+            isVoiceVisualizerRunning = true;
+
+            let step = 0;
+            function draw() {
+                step += 0.04;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                const width = canvas.width;
+                const height = canvas.height;
+                const midY = height / 2;
+
+                // Ambient reactor background rings
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(width / 2, midY, isVoiceActive ? 55 + Math.sin(step * 3) * 6 : 40 + Math.sin(step) * 2, 0, Math.PI * 2);
+                ctx.strokeStyle = isVoiceActive ? "rgba(0, 242, 254, 0.45)" : "rgba(16, 185, 129, 0.25)";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(width / 2, midY, isVoiceActive ? 30 + Math.cos(step * 2) * 4 : 20, 0, Math.PI * 2);
+                ctx.fillStyle = isVoiceActive ? "rgba(0, 242, 254, 0.2)" : "rgba(16, 185, 129, 0.08)";
+                ctx.fill();
+                ctx.restore();
+
+                // Sine wave lines
+                const waves = [
+                    { amp: isVoiceActive ? 36 : 10, freq: 0.025, speed: 2.5, color: "rgba(0, 242, 254, 0.9)" }, // Neon Cyan
+                    { amp: isVoiceActive ? 28 : 7, freq: 0.035, speed: -2.0, color: "rgba(168, 85, 247, 0.8)" }, // Purple
+                    { amp: isVoiceActive ? 20 : 5, freq: 0.018, speed: 1.5, color: "rgba(16, 185, 129, 0.6)" }  // Emerald
+                ];
+
+                waves.forEach(w => {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.lineWidth = isVoiceActive ? 2.5 : 1.5;
+                    ctx.strokeStyle = w.color;
+
+                    for (let x = 0; x < width; x += 3) {
+                        const y = midY + Math.sin(x * w.freq + step * w.speed) * w.amp * Math.sin((x / width) * Math.PI);
+                        if (x === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                    ctx.restore();
+                });
+
+                visualizerAnimFrame = requestAnimationFrame(draw);
+            }
+            draw();
+        };
+
+        window.setVoicePresetText = function(text) {
+            const ta = document.getElementById("voiceCustomText");
+            if (ta) ta.value = text;
+        };
+
+        window.synthesizeCustomVoice = async function() {
+            const voiceSelect = document.getElementById("voiceCharacterSelect");
+            const speedSlider = document.getElementById("voiceSpeedSlider");
+            const customText = document.getElementById("voiceCustomText");
+            const btn = document.getElementById("btnSynthesizeVoice");
+            const player = document.getElementById("jarvisVoiceAudioPlayer");
+
+            const text = customText?.value?.trim();
+            if (!text) {
+                alert("Lütfen seslendirilecek bir metin girin.");
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Kokoro Sentezleniyor...';
+            }
+
+            try {
+                const res = await authFetch("/api/jarvis/voice/speak", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: voiceSelect?.value || "am_adam",
+                        speed: parseFloat(speedSlider?.value || 1.05)
+                    })
+                });
+                const d = await res.json();
+                if (d.status === "success" && d.speech && d.speech.audio_url) {
+                    if (player) {
+                        player.src = d.speech.audio_url;
+                        player.classList.remove("hidden");
+                        player.onplay = () => window.setVoiceVisualizerActive(true);
+                        player.onended = () => window.setVoiceVisualizerActive(false);
+                        player.onpause = () => window.setVoiceVisualizerActive(false);
+                        player.onerror = () => window.setVoiceVisualizerActive(false);
+                        player.play();
+                    }
+                    window.setVoiceVisualizerActive(true);
+                } else {
+                    speakText(text);
+                }
+            } catch(e) {
+                speakText(text);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles mr-1"></i> <span>Kokoro ile Sentezle & Dinle</span>';
+                }
+            }
+        };
+
+        // Wake-word simulator form
+        const wakeWordForm = document.getElementById("voiceWakeWordForm");
+        if (wakeWordForm) {
+            wakeWordForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const input = document.getElementById("voiceWakeWordInput");
+                const btn = document.getElementById("btnWakeWordTest");
+                const text = input?.value?.trim();
+                if (!text) return;
+
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+                }
+
+                try {
+                    const res = await authFetch("/api/jarvis/voice/command", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ text: text })
+                    });
+                    const d = await res.json();
+                    if (d.status === "success" && d.voice_response) {
+                        const vr = d.voice_response;
+                        const resp = vr.response_text || vr.speak_text;
+                        speakText(resp, vr.audio_url);
+                        alert(`Wake-word algılandı: "${vr.wake_word_detected ? 'EVET' : 'HAYIR'}"\nKomut: ${vr.cleaned_command}\nJARVIS Yanıtı: ${resp}`);
+                    }
+                } catch(err) {
+                    alert("Ses komutu hatası: " + err.message);
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = 'Simüle Et';
+                    }
                 }
             });
         }
