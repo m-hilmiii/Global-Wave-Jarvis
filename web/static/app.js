@@ -1796,6 +1796,96 @@ document.addEventListener("DOMContentLoaded", () => {
             toastEl.classList.add("-translate-y-24", "opacity-0", "pointer-events-none");
         }
 
+        // --- Helper: Render Multimodal WhatsApp Media (Images, PDFs, ZIPs, Audio, Video) ---
+        function renderMediaAttachmentHtml(media) {
+            if (!media || !media.url) return "";
+            const safeUrl = sanitizeUrl(media.url);
+            if (!safeUrl) return "";
+
+            const fileName = escapeHtml(media.file_name || "Dosya");
+            const fileSizeKb = media.file_size ? Math.max(1, Math.round(media.file_size / 1024)) : 0;
+            const sizeBadge = fileSizeKb > 1024
+                ? `${(fileSizeKb / 1024).toFixed(2)} MB`
+                : `${fileSizeKb} KB`;
+
+            // 1. IMAGE / PHOTO / STICKER PREVIEW
+            if (media.media_type === "image" || media.media_type === "sticker") {
+                return `
+                    <div class="mt-2.5 rounded-xl overflow-hidden border border-cyan-500/30 bg-dark-950/90 max-w-xs shadow-lg">
+                        <a href="${safeUrl}" target="_blank" title="Tam boyutta açmak için tıklayın">
+                            <img src="${safeUrl}" alt="${fileName}" class="w-full max-h-64 object-cover hover:scale-105 transition-transform duration-200 cursor-zoom-in" loading="lazy" />
+                        </a>
+                        <div class="px-3 py-1.5 flex items-center justify-between text-[10px] font-mono text-slate-400 bg-dark-900/90 border-t border-slate-800">
+                            <span class="truncate max-w-[180px]">${fileName}</span>
+                            <a href="${safeUrl}" download="${fileName}" class="text-cyan-400 hover:text-cyan-300 font-bold ml-2">
+                                <i class="fa-solid fa-download mr-1"></i>İndir (${sizeBadge})
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 2. VOICE NOTE / AUDIO PLAYER
+            if (media.media_type === "audio") {
+                return `
+                    <div class="mt-2.5 p-2.5 rounded-xl border border-emerald-500/30 bg-dark-950/90 max-w-xs space-y-1.5">
+                        <div class="flex items-center space-x-2 text-[11px] font-mono text-emerald-400">
+                            <i class="fa-solid fa-microphone-lines"></i>
+                            <span>Sesli Mesaj (${sizeBadge})</span>
+                        </div>
+                        <audio controls preload="metadata" class="w-full h-8">
+                            <source src="${safeUrl}" type="${escapeHtml(media.mime_type || 'audio/ogg')}">
+                        </audio>
+                    </div>
+                `;
+            }
+
+            // 3. VIDEO PLAYER
+            if (media.media_type === "video") {
+                return `
+                    <div class="mt-2.5 rounded-xl overflow-hidden border border-indigo-500/30 bg-dark-950/90 max-w-xs">
+                        <video controls preload="metadata" class="w-full max-h-64">
+                            <source src="${safeUrl}" type="${escapeHtml(media.mime_type || 'video/mp4')}">
+                        </video>
+                        <div class="px-3 py-1.5 flex items-center justify-between text-[10px] font-mono text-slate-400 bg-dark-900">
+                            <span class="truncate">${fileName}</span>
+                            <a href="${safeUrl}" download="${fileName}" class="text-cyan-400 hover:underline">İndir (${sizeBadge})</a>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 4. DOCUMENTS (PDF, ZIP, RAR, DOCX, XLSX, etc.)
+            const ext = fileName.split(".").pop().toLowerCase();
+            let iconClass = "fa-file-lines text-cyan-400";
+            if (ext === "pdf") iconClass = "fa-file-pdf text-rose-400";
+            else if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) iconClass = "fa-file-zipper text-amber-400";
+            else if (["doc", "docx"].includes(ext)) iconClass = "fa-file-word text-blue-400";
+            else if (["xls", "xlsx", "csv"].includes(ext)) iconClass = "fa-file-excel text-emerald-400";
+
+            return `
+                <div class="mt-2.5 p-3 rounded-xl border border-slate-700/80 bg-dark-950/90 hover:border-cyan-500/40 transition-all flex items-center justify-between space-x-3 max-w-sm shadow-md">
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <div class="w-10 h-10 rounded-lg bg-dark-900 border border-slate-800 flex items-center justify-center text-lg shrink-0">
+                            <i class="fa-solid ${iconClass}"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-100 truncate" title="${fileName}">${fileName}</p>
+                            <p class="text-[10px] font-mono text-slate-400 uppercase">${escapeHtml(ext)} Belgesi &bull; ${sizeBadge}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-1.5 shrink-0">
+                        <a href="${safeUrl}" target="_blank" title="Tarayıcıda Aç" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition-all">
+                            <i class="fa-solid fa-up-right-from-square"></i>
+                        </a>
+                        <a href="${safeUrl}" download="${fileName}" title="Bilgisayara İndir" class="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold transition-all">
+                            <i class="fa-solid fa-download"></i>
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+
         // --- Append Message to Feed ---
         function appendMessage(sender, text, isUser = false, extraHtml = "", meta = {}) {
             const row = document.createElement("div");
@@ -1821,6 +1911,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 .replace(/\*(.*?)\*/g, '<em class="text-slate-300">$1</em>')
                 .replace(/\n/g, "<br>");
 
+            const mediaHtml = renderMediaAttachmentHtml(meta.media);
+
             let actionBtnHtml = "";
             if (meta.fromMe && meta.messageId) {
                 actionBtnHtml = `
@@ -1842,6 +1934,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         ${meta.time ? `<span class="text-[10px] font-mono text-slate-500">${escapeHtml(meta.time)}</span>` : ""}
                     </div>
                     <div class="leading-relaxed text-sm">${formatted}</div>
+                    ${mediaHtml}
                     ${extraHtml}
                     ${actionBtnHtml}
                 </div>
@@ -2042,7 +2135,8 @@ document.addEventListener("DOMContentLoaded", () => {
                             time: m.time,
                             messageId: m.id,
                             jid: m.chat_jid || m.sender_jid,
-                            fromMe: isMe
+                            fromMe: isMe,
+                            media: m.media
                         });
                     });
                 } else {
@@ -2457,7 +2551,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                 (m.sender_name && m.sender_name.toLowerCase().includes(activeChat.short_name.toLowerCase())) ||
                                 (m.phone && activeChat.phone && activeChat.phone.includes(m.phone))
                             )) {
-                                appendMessage(m.sender_name, m.text, false, "", { time: m.time, messageId: m.id, fromMe: false });
+                                appendMessage(m.sender_name, m.text, false, "", { time: m.time, messageId: m.id, fromMe: false, media: m.media });
                             }
                         });
                         if (Array.isArray(data.overview)) {

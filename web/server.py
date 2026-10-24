@@ -1349,6 +1349,32 @@ async def api_jarvis_voice_status():
     res = await run_in_threadpool(voice_tool.get_status)
     return {"status": "success", "voice_status": res}
 
+from core_jarvis.daemon_manager import daemon_manager
+
+@app.get("/api/jarvis/daemon/status")
+async def api_jarvis_daemon_status():
+    res = await run_in_threadpool(daemon_manager.get_status)
+    return {"status": "success", "daemon": res}
+
+@app.post("/api/jarvis/daemon/shortcut")
+async def api_jarvis_daemon_shortcut():
+    res = await run_in_threadpool(daemon_manager.create_desktop_shortcut)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+@app.post("/api/jarvis/daemon/startup")
+async def api_jarvis_daemon_startup(request: Request):
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        pass
+    enabled = payload.get("enabled", True)
+    if enabled:
+        res = await run_in_threadpool(daemon_manager.install_windows_startup)
+    else:
+        res = await run_in_threadpool(daemon_manager.uninstall_windows_startup)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
 from core_jarvis.whatsapp_daemon import whatsapp_daemon, INBOX_FILE
 
 

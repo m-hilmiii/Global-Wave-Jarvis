@@ -21,7 +21,7 @@ from core_jarvis.reality_memory import reality_memory
 from core_jarvis.autonomous_engine import autonomous_engine
 
 logger = logging.getLogger("Jarvis.Orchestrator")
-WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent
+WORKSPACE_DIR = Path(__file__).resolve().parent.parent
 
 # ==============================================================================
 # 1. SystemSpecialist

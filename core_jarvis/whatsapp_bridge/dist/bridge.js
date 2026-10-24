@@ -1,8 +1,8 @@
 "use strict";
 /**
- * Global-Wawe WhatsApp Baileys Bridge
- * Real-time connection with QR Code in terminal, Web JSON events,
- * and robust inbox persistence for all message types (including ephemeral/quotes).
+ * Global-Wave / Stark-Core WhatsApp Baileys Bridge (v2.0 Multimodal)
+ * Supports Text, Images, PDF/ZIP/Documents, Voice Notes (PTT), Videos & Stickers.
+ * Automatically downloads incoming media to output/whatsapp_media/ for HUD display.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -47,7 +47,9 @@ const qrcodeTerminal = __importStar(require("qrcode-terminal"));
 const qrcode_1 = __importDefault(require("qrcode"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const crypto = __importStar(require("crypto"));
 const pino_1 = __importDefault(require("pino"));
+const silentLogger = (0, pino_1.default)({ level: "silent" });
 function emit(event) {
     process.stdout.write(JSON.stringify(event) + "\n");
 }
@@ -60,133 +62,141 @@ function parseArgs() {
             break;
         }
     }
-    return { authDir: path.resolve(process.cwd(), authDir) };
+    const resolvedAuth = path.resolve(process.cwd(), authDir);
+    // Save media under Global-Wawe/output/whatsapp_media so FastAPI /output static mount serves it directly
+    const workspaceRoot = path.resolve(resolvedAuth, "..", "..");
+    const mediaDir = path.join(workspaceRoot, "output", "whatsapp_media");
+    return { authDir: resolvedAuth, mediaDir };
 }
-function extractMessageText(message) {
+/** Unwraps ephemeral, viewOnce, or documentWithCaption containers to get the core message object */
+function unwrapMessage(message) {
+    if (!message)
+        return null;
+    if (message.ephemeralMessage?.message)
+        return unwrapMessage(message.ephemeralMessage.message);
+    if (message.viewOnceMessage?.message)
+        return unwrapMessage(message.viewOnceMessage.message);
+    if (message.viewOnceMessageV2?.message)
+        return unwrapMessage(message.viewOnceMessageV2.message);
+    if (message.documentWithCaptionMessage?.message)
+        return unwrapMessage(message.documentWithCaptionMessage.message);
+    if (message.editedMessage?.message)
+        return unwrapMessage(message.editedMessage.message);
+    if (message.protocolMessage?.editedMessage)
+        return unwrapMessage(message.protocolMessage.editedMessage);
+    return message;
+}
+function extractMessageText(rawMessage) {
+    const message = unwrapMessage(rawMessage);
     if (!message)
         return "";
-    if (typeof message.conversation === "string" && message.conversation) {
+    if (typeof message.conversation === "string" && message.conversation)
         return message.conversation;
-    }
-    if (message.extendedTextMessage?.text) {
+    if (message.extendedTextMessage?.text)
         return message.extendedTextMessage.text;
-    }
-    if (message.ephemeralMessage?.message) {
-        return extractMessageText(message.ephemeralMessage.message);
-    }
-    if (message.viewOnceMessage?.message) {
-        return extractMessageText(message.viewOnceMessage.message);
-    }
-    if (message.viewOnceMessageV2?.message) {
-        return extractMessageText(message.viewOnceMessageV2.message);
-    }
-    if (message.documentWithCaptionMessage?.message) {
-        return extractMessageText(message.documentWithCaptionMessage.message);
-    }
-    if (message.imageMessage?.caption) {
+    if (message.imageMessage?.caption)
         return message.imageMessage.caption;
-    }
-    if (message.videoMessage?.caption) {
+    if (message.videoMessage?.caption)
         return message.videoMessage.caption;
-    }
-    if (message.editedMessage?.message) {
-        return extractMessageText(message.editedMessage.message);
-    }
-    if (message.protocolMessage?.editedMessage) {
-        return extractMessageText(message.protocolMessage.editedMessage);
-    }
+    if (message.documentMessage?.caption)
+        return message.documentMessage.caption;
     return "";
 }
-function resolveSenderInfo(authDir, jid, pushName) {
-    const rawNum = jid.replace(/\D/g, "");
-    try {
-        const contactsPath = path.resolve(authDir, "..", "contacts.json");
-        if (fs.existsSync(contactsPath)) {
-            const raw = fs.readFileSync(contactsPath, "utf-8").replace(/^\uFEFF/, "");
-            const data = JSON.parse(raw);
-            const contacts = data.contacts || [];
-            for (const c of contacts) {
-                const cNum = (c.phone || "").replace(/\D/g, "");
-                if (cNum && rawNum && (cNum.endsWith(rawNum) || rawNum.endsWith(cNum))) {
-                    return { name: c.name, phone: c.phone || rawNum };
-                }
-                if (c.lid && (jid.includes(c.lid) || rawNum.includes(c.lid))) {
-                    const displayName = c.full_name ? `${c.name} (${c.full_name})` : c.name;
-                    return { name: displayName, phone: c.phone || rawNum };
-                }
-                if (pushName && ((c.full_name && pushName.toLowerCase().includes(c.full_name.toLowerCase())) ||
-                    (c.name && pushName.toLowerCase().includes(c.name.toLowerCase())) ||
-                    (c.relationship && c.relationship.toLowerCase() === "baba" && pushName.toLowerCase().includes("yaşar")))) {
-                    const displayName = c.full_name ? `${c.name} (${c.full_name})` : `${c.name} (${pushName})`;
-                    return { name: displayName, phone: c.phone || rawNum };
-                }
-            }
-        }
-    }
-    catch (e) { }
-    return { name: pushName || rawNum || "Bilinmeyen Numara", phone: rawNum };
+const MIME_EXTENSION_MAP = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "application/pdf": ".pdf",
+    "application/zip": ".zip",
+    "application/x-zip-compressed": ".zip",
+    "application/x-rar-compressed": ".rar",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "text/plain": ".txt",
+    "audio/ogg; codecs=opus": ".ogg",
+    "audio/ogg": ".ogg",
+    "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a",
+    "video/mp4": ".mp4",
+};
+function sanitizeFileName(rawName, fallbackExt) {
+    const base = path.basename(rawName || `file${fallbackExt}`);
+    // Keep only safe ASCII characters to prevent Path Traversal and URL encoding issues
+    const safe = base.replace(/[^a-zA-Z0-9._-]/g, "_");
+    return safe.length > 3 ? safe : `attachment_${Date.now()}${fallbackExt}`;
 }
-function markChatAsReadInInbox(authDir, chatId) {
-    try {
-        const inboxPath = path.resolve(authDir, "..", "whatsapp_inbox.json");
-        if (!fs.existsSync(inboxPath))
-            return;
-        const raw = fs.readFileSync(inboxPath, "utf-8").replace(/^\uFEFF/, "");
-        const inbox = JSON.parse(raw);
-        let changed = false;
-        const cleanChatId = chatId.replace(/\D/g, "");
-        for (const msg of inbox) {
-            const msgChat = (msg.chat_jid || "").replace(/\D/g, "");
-            const msgSender = (msg.sender_jid || "").replace(/\D/g, "");
-            const msgPhone = (msg.phone || "").replace(/\D/g, "");
-            if (msg.chat_jid === chatId ||
-                msg.sender_jid === chatId ||
-                (cleanChatId && (msgChat.includes(cleanChatId) || msgSender.includes(cleanChatId) || msgPhone.includes(cleanChatId)))) {
-                if (msg.unread) {
-                    msg.unread = false;
-                    changed = true;
-                }
-            }
-        }
-        if (changed) {
-            fs.writeFileSync(inboxPath, JSON.stringify(inbox, null, 2), "utf-8");
-            emit({ type: "chat_read", chatId });
-        }
+async function extractAndDownloadMedia(msg, mediaDir) {
+    const unwrapped = unwrapMessage(msg.message);
+    if (!unwrapped)
+        return null;
+    let mediaType = null;
+    let mediaObj = null;
+    if (unwrapped.imageMessage) {
+        mediaType = "image";
+        mediaObj = unwrapped.imageMessage;
     }
-    catch (err) { }
-}
-function saveMessageToInbox(authDir, entry) {
+    else if (unwrapped.documentMessage) {
+        mediaType = "document";
+        mediaObj = unwrapped.documentMessage;
+    }
+    else if (unwrapped.audioMessage) {
+        mediaType = "audio";
+        mediaObj = unwrapped.audioMessage;
+    }
+    else if (unwrapped.videoMessage) {
+        mediaType = "video";
+        mediaObj = unwrapped.videoMessage;
+    }
+    else if (unwrapped.stickerMessage) {
+        mediaType = "sticker";
+        mediaObj = unwrapped.stickerMessage;
+    }
+    if (!mediaType || !mediaObj)
+        return null;
     try {
-        const inboxPath = path.resolve(authDir, "..", "whatsapp_inbox.json");
-        let inbox = [];
-        if (fs.existsSync(inboxPath)) {
-            try {
-                const raw = fs.readFileSync(inboxPath, "utf-8").replace(/^\uFEFF/, "");
-                inbox = JSON.parse(raw);
-            }
-            catch { }
+        if (!fs.existsSync(mediaDir)) {
+            fs.mkdirSync(mediaDir, { recursive: true });
         }
-        if (!inbox.some((m) => m.id === entry.id)) {
-            inbox.push(entry);
-            if (inbox.length > 100)
-                inbox = inbox.slice(-100);
-            fs.writeFileSync(inboxPath, JSON.stringify(inbox, null, 2), "utf-8");
-        }
+        const mimeType = mediaObj.mimetype || "application/octet-stream";
+        const defaultExt = MIME_EXTENSION_MAP[mimeType.split(";")[0].trim()] || ".bin";
+        const originalName = mediaObj.fileName || `${mediaType}_${Date.now()}${defaultExt}`;
+        const safeName = sanitizeFileName(originalName, defaultExt);
+        const uniquePrefix = `${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+        const savedFileName = `wa_${uniquePrefix}_${safeName}`;
+        const fullDiskPath = path.join(mediaDir, savedFileName);
+        const buffer = await (0, baileys_1.downloadMediaMessage)(msg, "buffer", {}, {
+            logger: silentLogger,
+            reuploadRequest: async (m) => m,
+        });
+        fs.writeFileSync(fullDiskPath, buffer);
+        const fileSize = buffer.length;
+        return {
+            media_type: mediaType,
+            mime_type: mimeType,
+            file_name: originalName,
+            file_size: fileSize,
+            url: `/output/whatsapp_media/${savedFileName}`,
+            local_path: fullDiskPath,
+        };
     }
     catch (err) {
-        console.error("[Bridge Inbox Error]", err);
+        console.error(`[WhatsApp Media Download Error] ${err?.message ?? String(err)}`);
+        return null;
     }
 }
 async function main() {
-    const { authDir } = parseArgs();
+    const { authDir, mediaDir } = parseArgs();
     if (!fs.existsSync(authDir)) {
         fs.mkdirSync(authDir, { recursive: true });
+    }
+    if (!fs.existsSync(mediaDir)) {
+        fs.mkdirSync(mediaDir, { recursive: true });
     }
     const { state, saveCreds } = await (0, baileys_1.useMultiFileAuthState)(authDir);
     const { version } = await (0, baileys_1.fetchLatestWaWebVersion)().catch(() => ({
         version: [2, 3000, 1051456098],
     }));
-    const silentLogger = (0, pino_1.default)({ level: "silent" });
     let sock = null;
     function startSocket() {
         sock = (0, baileys_1.default)({
@@ -204,113 +214,68 @@ async function main() {
         sock.ev.on("connection.update", async (update) => {
             const { connection, lastDisconnect, qr } = update;
             if (qr) {
-                console.log("\n==================================================");
-                console.log("   JARVIS WHATSAPP QR KODU (TELEFONUNUZDAN OKUTUN)");
-                console.log("==================================================\n");
                 qrcodeTerminal.generate(qr, { small: true });
-                console.log("\n==================================================");
-                console.log("Telefonunuzdan: WhatsApp -> Ayarlar -> Bagli Cihazlar -> Cihaz Bagla");
-                console.log("Tarayicida gormek icin: " + path.join(authDir, "qr.html"));
-                console.log("==================================================\n");
                 try {
-                    // 100% Local QR code rendering (zero external network requests / zero data leakage)
                     const qrDataUrl = await qrcode_1.default.toDataURL(qr, { margin: 2, scale: 8 });
-                    const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>JARVIS WhatsApp QR Baglanti</title>
-  <style>
-    body { background: #0b0f19; color: #58a6ff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-    .card { background: #161b26; border: 1px solid #30363d; border-radius: 16px; padding: 32px; text-align: center; box-shadow: 0 12px 32px rgba(0,0,0,0.6); max-width: 440px; }
-    h2 { color: #00d2ff; margin-top: 0; }
-    .qr-box { background: white; padding: 16px; border-radius: 12px; display: inline-block; margin: 20px 0; }
-    img { display: block; border-radius: 4px; }
-    p { color: #c9d1d9; font-size: 15px; line-height: 1.5; }
-    .sub { color: #8b949e; font-size: 13px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h2>JARVIS WhatsApp Baglantisi</h2>
-    <p>Telefonunuzdan <b>WhatsApp &gt; Bagli Cihazlar &gt; Cihaz Bagla</b> secenegini acin ve kameranizi asagidaki koda tutun:</p>
-    <div class="qr-box">
-      <img src="${qrDataUrl}" alt="QR Code" width="350" height="350" />
-    </div>
-    <p class="sub">Baglanti saglandiktan sonra bu sayfayi kapatabilirsiniz.</p>
-  </div>
-</body>
-</html>`;
+                    const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>JARVIS WhatsApp QR</title></head><body style="background:#0b0f19;color:#58a6ff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:sans-serif;"><div style="background:#161b26;padding:32px;border-radius:16px;text-align:center;"><h2>JARVIS WhatsApp Bağlantısı</h2><img src="${qrDataUrl}" width="320" height="320" /></div></body></html>`;
                     fs.writeFileSync(path.join(authDir, "qr.html"), htmlContent, "utf-8");
                 }
-                catch (e) { }
+                catch (err) {
+                    console.error("[QR Render Warning]", err);
+                }
                 emit({ type: "qr", data: qr });
             }
             if (connection === "close") {
                 const statusCode = lastDisconnect?.error?.output?.statusCode ?? 500;
                 if (statusCode === baileys_1.DisconnectReason.loggedOut) {
-                    console.log("[WhatsApp] Oturum sonlandirildi (Logged out).");
                     emit({ type: "status", status: "disconnected" });
                     emit({ type: "error", message: "Logged out from WhatsApp" });
                 }
                 else {
-                    console.log("[WhatsApp] Baglanti koptu veya yenileniyor...");
                     emit({ type: "status", status: "disconnected" });
                     setTimeout(startSocket, 2500);
                 }
             }
             else if (connection === "open") {
-                console.log("\n==================================================");
-                console.log("[OK] TEBRIKLER! WHATSAPP OTURUMU BASARIYLA BAGLANDI!");
-                console.log("JARVIS artik telefonunuz uzerinden mesaj atabilir.");
-                console.log("Bu pencereyi kapatabilirsiniz.");
-                console.log("==================================================\n");
                 emit({ type: "status", status: "connected" });
             }
         });
-        sock.ev.on("chats.update", (chats) => {
-            for (const chat of chats) {
-                if (chat.unreadCount === 0 && chat.id) {
-                    markChatAsReadInInbox(authDir, chat.id);
-                }
-            }
-        });
-        sock.ev.on("messages.upsert", ({ messages }) => {
+        sock.ev.on("messages.upsert", async ({ messages }) => {
             for (const msg of messages) {
                 if (!msg.message || msg.key.fromMe)
                     continue;
-                const text = extractMessageText(msg.message).trim();
                 const chatJid = msg.key.remoteJid || "";
+                if (!chatJid || chatJid === "status@broadcast")
+                    continue;
                 const senderJid = msg.key.participant || chatJid;
                 const pushName = msg.pushName || "";
-                const primaryJid = chatJid.includes("@s.whatsapp.net") ? chatJid : senderJid;
-                if (chatJid && text) {
-                    const { name, phone } = resolveSenderInfo(authDir, primaryJid, pushName);
-                    const now = new Date();
-                    const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-                    const inboxEntry = {
-                        id: msg.key.id,
-                        sender_jid: senderJid,
-                        chat_jid: chatJid,
-                        sender_name: name,
-                        phone: phone,
-                        text: text,
-                        time: timeStr,
-                        timestamp: Date.now() / 1000,
-                        unread: true,
+                let text = extractMessageText(msg.message).trim();
+                // Check and download any attached media (Image, PDF, ZIP, Audio, Video)
+                const mediaInfo = await extractAndDownloadMedia(msg, mediaDir);
+                // If message has neither text nor media, skip
+                if (!text && !mediaInfo)
+                    continue;
+                // Provide descriptive fallback text if user sent a file without caption
+                if (!text && mediaInfo) {
+                    const typeLabels = {
+                        image: "📷 [Fotoğraf]",
+                        document: `📄 [Belge: ${mediaInfo.file_name}]`,
+                        audio: "🎤 [Sesli Mesaj]",
+                        video: "🎬 [Video]",
+                        sticker: "🏷️ [Çıkartma]",
                     };
-                    saveMessageToInbox(authDir, inboxEntry);
-                    emit({
-                        type: "message",
-                        jid: chatJid,
-                        sender: senderJid,
-                        text,
-                        message_id: msg.key.id,
-                        pushName,
-                        sender_name: name,
-                        phone,
-                    });
+                    text = typeLabels[mediaInfo.media_type] || `[Dosya: ${mediaInfo.file_name}]`;
                 }
+                // Single-writer architecture: emit full event to Python WhatsAppDaemon
+                emit({
+                    type: "message",
+                    jid: chatJid,
+                    sender: senderJid,
+                    text,
+                    message_id: msg.key.id,
+                    pushName,
+                    media: mediaInfo,
+                });
             }
         });
     }
@@ -334,12 +299,20 @@ async function main() {
         if (cmd.type === "send" && sock) {
             try {
                 const sentMsg = await sock.sendMessage(cmd.jid, { text: cmd.text });
-                console.log(`[WhatsApp] Mesaj sunucuya iletildi (sent) -> ${cmd.jid}`);
-                emit({ type: "sent", jid: cmd.jid, request_id: cmd.request_id, message_id: sentMsg?.key?.id });
+                emit({
+                    type: "sent",
+                    jid: cmd.jid,
+                    request_id: cmd.request_id,
+                    message_id: sentMsg?.key?.id,
+                });
             }
             catch (err) {
-                console.error(`[WhatsApp Hata] Gonderilemedi: ${err?.message ?? String(err)}`);
-                emit({ type: "error", message: err?.message ?? String(err), request_id: cmd.request_id, jid: cmd.jid });
+                emit({
+                    type: "error",
+                    message: err?.message ?? String(err),
+                    request_id: cmd.request_id,
+                    jid: cmd.jid,
+                });
             }
         }
         else if (cmd.type === "delete" && sock) {
@@ -350,12 +323,20 @@ async function main() {
                     id: cmd.message_id,
                 };
                 await sock.sendMessage(cmd.jid, { delete: key });
-                console.log(`[WhatsApp] Silme talebi sunucuya iletildi (delete_requested) -> ${cmd.message_id}`);
-                emit({ type: "deleted", jid: cmd.jid, message_id: cmd.message_id, request_id: cmd.request_id });
+                emit({
+                    type: "deleted",
+                    jid: cmd.jid,
+                    message_id: cmd.message_id,
+                    request_id: cmd.request_id,
+                });
             }
             catch (err) {
-                console.error(`[WhatsApp Hata] Silinemedi: ${err?.message ?? String(err)}`);
-                emit({ type: "error", message: err?.message ?? String(err), request_id: cmd.request_id, jid: cmd.jid });
+                emit({
+                    type: "error",
+                    message: err?.message ?? String(err),
+                    request_id: cmd.request_id,
+                    jid: cmd.jid,
+                });
             }
         }
         else if (cmd.type === "disconnect" && sock) {

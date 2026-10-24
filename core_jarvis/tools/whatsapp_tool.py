@@ -7,7 +7,7 @@ Manages sending and incoming message inbox.
 
 import re
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from core_jarvis.tools.contacts import contacts_mgr
 from core_jarvis.whatsapp_daemon import whatsapp_daemon
 
@@ -72,8 +72,20 @@ class WhatsAppTool:
         """Retrieves real received messages from WhatsApp inbox."""
         return whatsapp_daemon.get_inbox(limit=limit, unread_only=unread_only)
 
+    def get_chat_history(self, contact_query: str) -> List[Dict[str, Any]]:
+        """Returns chronological messages for a specific contact or raw phone number."""
+        return whatsapp_daemon.get_chat_history(contact_query)
+
+    def get_latest_incoming_message(self, contact_query: str) -> Optional[Dict[str, Any]]:
+        """Returns the most recent incoming message from a contact, regardless of read status."""
+        return whatsapp_daemon.get_latest_incoming_message(contact_query)
+
     def mark_all_read(self):
         """Marks all incoming messages as read."""
         whatsapp_daemon.mark_all_read()
+
+    def mark_chat_read(self, contact_query: str):
+        """Marks all messages for a specific contact as read."""
+        whatsapp_daemon.mark_chat_read(contact_query)
 
 whatsapp_tool = WhatsAppTool()

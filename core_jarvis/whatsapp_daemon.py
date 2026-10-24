@@ -245,8 +245,9 @@ class WhatsAppDaemon:
         text = ev.get("text", "").strip()
         msg_id = ev.get("message_id", "")
         push_name = ev.get("pushName", "")
+        media_info = ev.get("media")  # Multimodal attachment dict (image, pdf, zip, audio, etc.)
 
-        if not text:
+        if not text and not media_info:
             return
 
         # Prefer chat_jid if it contains the phone number (@s.whatsapp.net) over lid
@@ -257,24 +258,30 @@ class WhatsAppDaemon:
         with self.lock:
             inbox = self._read_inbox_locked()
 
-            # Avoid duplicates
+            # Prevent duplicate entries
             if any(m.get("id") == msg_id for m in inbox):
                 return
 
-            entry = {
+            entry: Dict[str, Any] = {
                 "id": msg_id,
+                "chat_jid": chat_jid,
                 "sender_jid": sender_jid,
                 "sender_name": sender_name,
                 "phone": phone,
                 "text": text,
                 "time": now_str,
                 "timestamp": time.time(),
-                "unread": True
+                "unread": True,
+                "from_me": False,
+                "media": media_info  # Persists url, media_type, file_name, file_size, mime_type
             }
             inbox.append(entry)
-            inbox = inbox[-100:]  # Keep latest 100 messages
+            inbox = inbox[-150:]  # Keep latest 150 messages
             self._atomic_write_inbox(inbox)
-            logger.info(f"[WhatsApp] Incoming from {sender_name}: '{text}'")
+            logger.info(
+                f"[WhatsApp] Incoming from {sender_name}: '{text}' "
+                f"{'(+Media: ' + media_info.get('file_name', '') + ')' if media_info else ''}"
+            )
 
     def get_inbox(self, limit: int = 10, unread_only: bool = False) -> List[Dict[str, Any]]:
         messages = self._read_inbox_locked()
@@ -502,8 +509,9 @@ class WhatsAppDaemon:
                 target_jid = f"{norm_c}@s.whatsapp.net" if norm_c else ""
                 jid_matched = bool(target_jid and (target_jid == str(m.get("chat_jid", "")) or target_jid == str(m.get("sender_jid", ""))))
                 lid_matched = bool(c_lid and len(c_lid) >= 8 and (c_lid in str(m.get("chat_jid", "")) or c_lid in str(m.get("sender_jid", ""))))
+                name_matched = bool(c_name and m_sender and (c_name == m_sender or (len(c_name) >= 3 and c_name in m_sender)))
 
-                if phone_matched or jid_matched or lid_matched:
+                if phone_matched or jid_matched or lid_matched or name_matched:
                     matched_msgs.append(m)
 
             last_msg = matched_msgs[-1] if matched_msgs else None
@@ -537,8 +545,16 @@ class WhatsAppDaemon:
                 break
 
         if not target:
-            # Do NOT fallback to first chat if contact not found; prevent private message leaks
-            return []
+            # Fallback: check if any message in inbox directly matches by sender_name or phone
+            inbox = self._read_inbox_locked()
+            matched = []
+            for m in inbox:
+                m_sender = str(m.get("sender_name", "")).lower()
+                m_phone = "".join([x for x in str(m.get("phone", "")) if x.isdigit()])
+                if q in m_sender or (m_phone and q in m_phone):
+                    matched.append(m)
+            matched.sort(key=lambda x: x.get("timestamp", 0))
+            return matched
 
         c_phone = "".join([x for x in target.get("phone", "") if x.isdigit()])
         c_name = target.get("short_name", "").lower()
@@ -574,12 +590,19 @@ class WhatsAppDaemon:
             target_jid = f"{norm_c}@s.whatsapp.net" if norm_c else ""
             jid_matched = bool(target_jid and (target_jid == str(m.get("chat_jid", "")) or target_jid == str(m.get("sender_jid", ""))))
             lid_matched = bool(c_lid and len(c_lid) >= 8 and (c_lid in str(m.get("chat_jid", "")) or c_lid in str(m.get("sender_jid", ""))))
+            name_matched = bool(c_name and m_sender and (c_name == m_sender or (len(c_name) >= 3 and c_name in m_sender)))
 
-            if phone_matched or jid_matched or lid_matched:
+            if phone_matched or jid_matched or lid_matched or name_matched:
                 history.append(m)
 
         history.sort(key=lambda x: x.get("timestamp", 0))
         return history
+
+    def get_latest_incoming_message(self, contact_query: str) -> Optional[Dict[str, Any]]:
+        """Returns the most recent incoming message from a contact, regardless of read status."""
+        history = self.get_chat_history(contact_query)
+        incoming = [m for m in history if not m.get("from_me")]
+        return incoming[-1] if incoming else None
 
     def mark_chat_read(self, contact_query: str):
         """Marks all unread messages for a specific contact as read."""

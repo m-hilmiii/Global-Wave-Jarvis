@@ -212,41 +212,53 @@ class ContactsManager:
             return count
 
     def bulk_import(self, contacts_list: List[Dict]) -> Dict[str, Any]:
-        """Imports a list of contact dicts, adding new and updating existing."""
+        """Imports a list of contact dicts, adding new and updating existing in a single atomic batch."""
+        contacts = self.get_all()
         added = 0
         updated = 0
+
+        # Build lookup indices for fast O(1) matching
+        name_map = {c.get("name", "").lower(): c for c in contacts if c.get("name")}
+        phone_map = {c.get("phone", ""): c for c in contacts if c.get("phone")}
+
         for item in contacts_list:
             name = item.get("name") or item.get("full_name") or ""
             phone = item.get("phone") or ""
-            if not name or not phone:
+            clean_name = name.strip()
+            clean_phone = "".join([c for c in phone if c.isdigit() or c == "+"])
+            if not clean_name or not clean_phone:
                 continue
-            existing = None
-            contacts = self.get_all()
-            for c in contacts:
-                if c.get("name", "").lower() == name.strip().lower() or (c.get("phone") and c["phone"] == phone):
-                    existing = c
-                    break
+
+            existing = name_map.get(clean_name.lower()) or phone_map.get(clean_phone)
             if existing:
-                self.add_contact(
-                    name=name.strip(),
-                    phone=phone.strip(),
-                    relationship=item.get("relationship", existing.get("relationship", "")),
-                    notes=item.get("notes", existing.get("notes", "")),
-                    full_name=item.get("full_name", existing.get("full_name", name.strip()))
-                )
+                existing["name"] = clean_name
+                existing["phone"] = clean_phone
+                if item.get("relationship"):
+                    existing["relationship"] = item["relationship"]
+                if item.get("notes"):
+                    existing["notes"] = item["notes"]
+                if item.get("full_name"):
+                    existing["full_name"] = item["full_name"]
+                if item.get("lid"):
+                    existing["lid"] = item["lid"]
                 updated += 1
             else:
-                self.add_contact(
-                    name=name.strip(),
-                    phone=phone.strip(),
-                    relationship=item.get("relationship", ""),
-                    notes=item.get("notes", ""),
-                    full_name=item.get("full_name", name.strip())
-                )
+                new_c = {
+                    "id": f"c_{len(contacts) + 1}",
+                    "name": clean_name,
+                    "phone": clean_phone,
+                    "relationship": item.get("relationship", ""),
+                    "notes": item.get("notes", ""),
+                    "full_name": item.get("full_name", clean_name),
+                    "lid": item.get("lid", "")
+                }
+                contacts.append(new_c)
+                name_map[clean_name.lower()] = new_c
+                phone_map[clean_phone] = new_c
                 added += 1
 
-        total = len(self.get_all())
-        return {"added": added, "updated": updated, "total_contacts": total}
+        self._save_all(contacts)
+        return {"added": added, "updated": updated, "total_contacts": len(contacts)}
 
     def import_raw_text(self, text: str) -> Dict[str, Any]:
         """Parses multi-line freeform text contacts (Name: Phone (Rel) or CSV-like)."""
