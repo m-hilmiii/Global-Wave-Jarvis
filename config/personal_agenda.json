@@ -920,6 +920,50 @@
       ],
       "created_at": 1792863280.4614298,
       "updated_at": 1792863280.4614298
+    },
+    {
+      "id": "note_2b87bae1",
+      "title": "Araştırma: FastAPI async streaming",
+      "content": "Konu: FastAPI async streaming\n\nBulunan Başlıca Kaynaklar ve Bilgiler:\n- 'FastAPI async streaming' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792872156.6832182,
+      "updated_at": 1792872156.6832182
+    },
+    {
+      "id": "note_d809a1be",
+      "title": "Araştırma: Ollama deepseek-r1 performansı",
+      "content": "Konu: Ollama deepseek-r1 performansı\n\nBulunan Başlıca Kaynaklar ve Bilgiler:\n- 'Ollama deepseek-r1 performansı' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792872156.8520405,
+      "updated_at": 1792872156.8520405
+    },
+    {
+      "id": "note_92385787",
+      "title": "Araştırma: FastAPI async streaming",
+      "content": "Konu: FastAPI async streaming\n\nBulunan Başlıca Kaynaklar ve Bilgiler:\n- 'FastAPI async streaming' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792872437.4259105,
+      "updated_at": 1792872437.4259105
+    },
+    {
+      "id": "note_745c8fe1",
+      "title": "Araştırma: Ollama deepseek-r1 performansı",
+      "content": "Konu: Ollama deepseek-r1 performansı\n\nBulunan Başlıca Kaynaklar ve Bilgiler:\n- 'Ollama deepseek-r1 performansı' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792872437.5922117,
+      "updated_at": 1792872437.5922117
     }
   ]
 }
