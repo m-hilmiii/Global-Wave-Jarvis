@@ -1218,6 +1218,43 @@ async def api_jarvis_assistant_add_note(request: Request):
     data = await run_in_threadpool(personal_assistant.add_note, title=title, content=content, tags=tags)
     return {"status": "success", "result": data}
 
+from core_jarvis.task_coordinator import task_coordinator
+from core_jarvis.tools.infra_tool import infra_tool
+
+@app.get("/api/jarvis/jobs")
+async def api_jarvis_jobs(status: Optional[str] = None):
+    jobs = await run_in_threadpool(task_coordinator.list_jobs, status=status)
+    return {"status": "success", "jobs": jobs}
+
+@app.get("/api/jarvis/jobs/{job_id}")
+async def api_jarvis_job_detail(job_id: str):
+    job = await run_in_threadpool(task_coordinator.get_job, job_id)
+    if not job:
+        return JSONResponse({"status": "error", "message": "Job not found"}, status_code=404)
+    return {"status": "success", "job": job}
+
+@app.post("/api/jarvis/jobs/{job_id}/cancel")
+async def api_jarvis_job_cancel(job_id: str):
+    res = await run_in_threadpool(task_coordinator.cancel_job, job_id)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+@app.get("/api/jarvis/infra/docker")
+async def api_jarvis_infra_docker():
+    res = await run_in_threadpool(infra_tool.check_docker_status)
+    return {"status": "success", "docker": res}
+
+@app.get("/api/jarvis/infra/models")
+async def api_jarvis_infra_models():
+    res = await run_in_threadpool(infra_tool.get_ollama_models)
+    return {"status": "success", "models": res}
+
+@app.post("/api/jarvis/infra/route")
+async def api_jarvis_infra_route(request: Request):
+    payload = await request.json()
+    task_type = payload.get("task_type", "general")
+    res = await run_in_threadpool(infra_tool.route_model_for_task, task_type)
+    return {"status": "success", "routing": res}
+
 
 
 

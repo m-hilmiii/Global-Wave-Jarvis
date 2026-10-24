@@ -64,6 +64,14 @@ class SystemSpecialist:
     def rollback_file(self, snapshot_file: str, rel_dest: str, confirmed: bool = False) -> Dict[str, Any]:
         return system_tool.rollback_snapshot(snapshot_file=snapshot_file, relative_dest_path=rel_dest, confirmed_by_user=confirmed)
 
+    def check_docker(self) -> Dict[str, Any]:
+        from core_jarvis.tools.infra_tool import infra_tool
+        return infra_tool.check_docker_status()
+
+    def get_ai_models(self) -> Dict[str, Any]:
+        from core_jarvis.tools.infra_tool import infra_tool
+        return infra_tool.get_ollama_models()
+
 
 # ==============================================================================
 # 2. CodeSpecialist
@@ -223,6 +231,8 @@ class JarvisOrchestrator:
         self.content = ContentSpecialist()
         self.research = ResearchSpecialist()
         self.assistant = AssistantSpecialist()
+        from core_jarvis.task_coordinator import task_coordinator
+        self.coordinator = task_coordinator
         self.engine = autonomous_engine
         self.memory = reality_memory
 
@@ -311,6 +321,28 @@ class JarvisOrchestrator:
                 "specialist": "ContentSpecialist",
                 "intent": "check_pipeline_status",
                 "result": self.content.check_pipeline_status()
+            }
+
+        # 5. Infrastructure: Docker & Local AI Models
+        if any(k in prompt_lower for k in ["docker", "konteyner"]):
+            return {
+                "specialist": "SystemSpecialist",
+                "intent": "check_docker",
+                "result": self.system.check_docker()
+            }
+
+        if any(k in prompt_lower for k in ["yerel model", "ollama model", "hangi modeller"]):
+            return {
+                "specialist": "SystemSpecialist",
+                "intent": "get_ai_models",
+                "result": self.system.get_ai_models()
+            }
+
+        if any(k in prompt_lower for k in ["aktif görevler", "arka plan işleri", "görev kuyruğu", "iş durumu"]):
+            return {
+                "specialist": "TaskCoordinator",
+                "intent": "list_jobs",
+                "result": self.coordinator.list_jobs()
             }
 
         # Default: Fallback to General Autonomous Query or Brain

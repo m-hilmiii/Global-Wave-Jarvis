@@ -99,6 +99,46 @@
       "status": "completed",
       "created_at": 1792858724.6672704,
       "completed_at": 1792858724.6695957
+    },
+    {
+      "id": "task_6938893f",
+      "title": "API Görevi",
+      "category": "general",
+      "priority": "high",
+      "due_date": "2026-10-24",
+      "status": "completed",
+      "created_at": 1792859205.7841768,
+      "completed_at": 1792859205.7933545
+    },
+    {
+      "id": "task_99f5b919",
+      "title": "YouTube shorts yayınla",
+      "category": "general",
+      "priority": "normal",
+      "due_date": "2026-10-24",
+      "status": "pending",
+      "created_at": 1792859208.126083,
+      "completed_at": null
+    },
+    {
+      "id": "task_2fc028c9",
+      "title": "Gecikmiş Eski Görev",
+      "category": "general",
+      "priority": "high",
+      "due_date": "2026-10-22",
+      "status": "pending",
+      "created_at": 1792859208.1304324,
+      "completed_at": null
+    },
+    {
+      "id": "task_fdc2aeb4",
+      "title": "Antigravity Birim Testi",
+      "category": "development",
+      "priority": "urgent",
+      "due_date": "2026-10-24",
+      "status": "completed",
+      "created_at": 1792859209.2968802,
+      "completed_at": 1792859209.2990212
     }
   ],
   "reminders": [
@@ -127,6 +167,15 @@
       "recurring": null,
       "active": true,
       "created_at": 1792858724.6620626
+    },
+    {
+      "id": "rem_7dde5ac9",
+      "title": "Toplantı Hatırlatıcısı",
+      "datetime_iso": "2026-10-24T15:30:00",
+      "lead_minutes": 10,
+      "recurring": null,
+      "active": true,
+      "created_at": 1792859209.2924547
     }
   ],
   "notes": [
@@ -198,6 +247,35 @@
       ],
       "created_at": 1792858724.6646338,
       "updated_at": 1792858724.6646338
+    },
+    {
+      "id": "note_26dcbcd8",
+      "title": "Not Başlığı",
+      "content": "İçerik",
+      "tags": [
+        "api"
+      ],
+      "created_at": 1792859205.804866,
+      "updated_at": 1792859205.804866
+    },
+    {
+      "id": "note_429f21ba",
+      "title": "Hızlı Not",
+      "content": "Yeni proje fikri",
+      "tags": [],
+      "created_at": 1792859208.1280828,
+      "updated_at": 1792859208.1280828
+    },
+    {
+      "id": "note_0f1a9872",
+      "title": "Test Memosu",
+      "content": "Jarvis Stage 5 kişisel asistan entegre edildi.",
+      "tags": [
+        "jarvis",
+        "milestone"
+      ],
+      "created_at": 1792859209.2944162,
+      "updated_at": 1792859209.2944162
     }
   ]
 }
