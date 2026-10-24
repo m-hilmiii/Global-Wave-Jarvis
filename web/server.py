@@ -10,7 +10,7 @@ import shutil
 import uuid
 import threading
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 from urllib.parse import urlparse
 from starlette.concurrency import run_in_threadpool
@@ -1155,6 +1155,68 @@ async def api_jarvis_content_publish(request: Request):
         privacy_status=privacy_status
     )
     return {"status": "success" if res.get("success") else "error", "result": res}
+
+from core_jarvis.personal_assistant import personal_assistant
+
+@app.get("/api/jarvis/assistant/briefing")
+async def api_jarvis_assistant_briefing():
+    data = await run_in_threadpool(personal_assistant.get_daily_briefing)
+    return {"status": "success", "briefing": data}
+
+@app.get("/api/jarvis/assistant/tasks")
+async def api_jarvis_assistant_tasks(status: Optional[str] = None):
+    data = await run_in_threadpool(personal_assistant.get_tasks, status=status)
+    return {"status": "success", "tasks": data}
+
+@app.post("/api/jarvis/assistant/tasks")
+async def api_jarvis_assistant_add_task(request: Request):
+    payload = await request.json()
+    title = payload.get("title", "").strip()
+    priority = payload.get("priority", "normal")
+    due_date = payload.get("due_date")
+    category = payload.get("category", "general")
+    if not title:
+        return JSONResponse({"status": "error", "message": "Title is required"}, status_code=400)
+    data = await run_in_threadpool(personal_assistant.add_task, title=title, priority=priority, due_date=due_date, category=category)
+    return {"status": "success", "result": data}
+
+@app.post("/api/jarvis/assistant/tasks/{task_id}/complete")
+async def api_jarvis_assistant_complete_task(task_id: str):
+    data = await run_in_threadpool(personal_assistant.complete_task, task_id)
+    return {"status": "success" if data.get("success") else "error", "result": data}
+
+@app.get("/api/jarvis/assistant/reminders")
+async def api_jarvis_assistant_reminders():
+    data = await run_in_threadpool(personal_assistant.get_reminders)
+    return {"status": "success", "reminders": data}
+
+@app.post("/api/jarvis/assistant/reminders")
+async def api_jarvis_assistant_add_reminder(request: Request):
+    payload = await request.json()
+    title = payload.get("title", "").strip()
+    datetime_iso = payload.get("datetime_iso", "")
+    lead_minutes = int(payload.get("lead_minutes", 15))
+    recurring = payload.get("recurring")
+    if not title or not datetime_iso:
+        return JSONResponse({"status": "error", "message": "Title and datetime_iso required"}, status_code=400)
+    data = await run_in_threadpool(personal_assistant.add_reminder, title=title, datetime_iso=datetime_iso, lead_minutes=lead_minutes, recurring=recurring)
+    return {"status": "success", "result": data}
+
+@app.get("/api/jarvis/assistant/notes")
+async def api_jarvis_assistant_notes():
+    data = await run_in_threadpool(personal_assistant.get_notes)
+    return {"status": "success", "notes": data}
+
+@app.post("/api/jarvis/assistant/notes")
+async def api_jarvis_assistant_add_note(request: Request):
+    payload = await request.json()
+    title = payload.get("title", "").strip()
+    content = payload.get("content", "").strip()
+    tags = payload.get("tags", [])
+    if not title or not content:
+        return JSONResponse({"status": "error", "message": "Title and content required"}, status_code=400)
+    data = await run_in_threadpool(personal_assistant.add_note, title=title, content=content, tags=tags)
+    return {"status": "success", "result": data}
 
 
 

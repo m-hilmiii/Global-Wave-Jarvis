@@ -1,0 +1,203 @@
+{
+  "tasks": [
+    {
+      "id": "task_init_1",
+      "title": "Global Wave v5.0 Master Mimarisi Doğrulaması",
+      "category": "project",
+      "priority": "high",
+      "due_date": "2026-10-24",
+      "status": "completed",
+      "created_at": 1792854966.0194938,
+      "completed_at": 1792858566.0194938
+    },
+    {
+      "id": "task_init_2",
+      "title": "Zenvia içerik motoru kalite kontrolü (QC) testleri",
+      "category": "content",
+      "priority": "urgent",
+      "due_date": "2026-10-24",
+      "status": "in_progress",
+      "created_at": 1792856766.0194938,
+      "completed_at": null
+    },
+    {
+      "id": "task_c7f53e46",
+      "title": "API Görevi",
+      "category": "general",
+      "priority": "high",
+      "due_date": "2026-10-24",
+      "status": "completed",
+      "created_at": 1792858653.8305688,
+      "completed_at": 1792858653.8405879
+    },
+    {
+      "id": "task_bf06382b",
+      "title": "YouTube shorts yayınla",
+      "category": "general",
+      "priority": "normal",
+      "due_date": "2026-10-24",
+      "status": "pending",
+      "created_at": 1792858656.1788278,
+      "completed_at": null
+    },
+    {
+      "id": "task_d2c5817e",
+      "title": "Gecikmiş Eski Görev",
+      "category": "general",
+      "priority": "high",
+      "due_date": "2026-10-22",
+      "status": "pending",
+      "created_at": 1792858656.1827612,
+      "completed_at": null
+    },
+    {
+      "id": "task_84b0e111",
+      "title": "Antigravity Birim Testi",
+      "category": "development",
+      "priority": "urgent",
+      "due_date": "2026-10-24",
+      "status": "completed",
+      "created_at": 1792858657.3401175,
+      "completed_at": 1792858657.3423364
+    },
+    {
+      "id": "task_e7d32cf4",
+      "title": "API Görevi",
+      "category": "general",
+      "priority": "high",
+      "due_date": "2026-10-24",
+      "status": "completed",
+      "created_at": 1792858721.155657,
+      "completed_at": 1792858721.1636918
+    },
+    {
+      "id": "task_79cf1451",
+      "title": "YouTube shorts yayınla",
+      "category": "general",
+      "priority": "normal",
+      "due_date": "2026-10-24",
+      "status": "pending",
+      "created_at": 1792858723.493167,
+      "completed_at": null
+    },
+    {
+      "id": "task_645a2d3b",
+      "title": "Gecikmiş Eski Görev",
+      "category": "general",
+      "priority": "high",
+      "due_date": "2026-10-22",
+      "status": "pending",
+      "created_at": 1792858723.4984362,
+      "completed_at": null
+    },
+    {
+      "id": "task_0b0498fc",
+      "title": "Antigravity Birim Testi",
+      "category": "development",
+      "priority": "urgent",
+      "due_date": "2026-10-24",
+      "status": "completed",
+      "created_at": 1792858724.6672704,
+      "completed_at": 1792858724.6695957
+    }
+  ],
+  "reminders": [
+    {
+      "id": "rem_init_1",
+      "title": "YouTube Studio haftalık analitik kontrolü",
+      "datetime_iso": "2026-10-24T20:00:00",
+      "lead_minutes": 15,
+      "recurring": "weekly",
+      "active": true
+    },
+    {
+      "id": "rem_d8682b16",
+      "title": "Toplantı Hatırlatıcısı",
+      "datetime_iso": "2026-10-24T15:30:00",
+      "lead_minutes": 10,
+      "recurring": null,
+      "active": true,
+      "created_at": 1792858657.3351939
+    },
+    {
+      "id": "rem_53b3603c",
+      "title": "Toplantı Hatırlatıcısı",
+      "datetime_iso": "2026-10-24T15:30:00",
+      "lead_minutes": 10,
+      "recurring": null,
+      "active": true,
+      "created_at": 1792858724.6620626
+    }
+  ],
+  "notes": [
+    {
+      "id": "note_init_1",
+      "title": "Global Wave İçerik İlkeleri",
+      "content": "Shorts videolarında ilk 3 saniye dual-hook, 2.33 kelime/sn ritmi ve net bilgi kazanımı zorunludur.",
+      "tags": [
+        "content",
+        "standard"
+      ],
+      "created_at": 1792858566.0194938,
+      "updated_at": 1792858566.0194938
+    },
+    {
+      "id": "note_a122acf2",
+      "title": "Not Başlığı",
+      "content": "İçerik",
+      "tags": [
+        "api"
+      ],
+      "created_at": 1792858653.8506098,
+      "updated_at": 1792858653.8506098
+    },
+    {
+      "id": "note_fc8b9d32",
+      "title": "Hızlı Not",
+      "content": "Yeni proje fikri",
+      "tags": [],
+      "created_at": 1792858656.1798286,
+      "updated_at": 1792858656.1798286
+    },
+    {
+      "id": "note_768e9a40",
+      "title": "Test Memosu",
+      "content": "Jarvis Stage 5 kişisel asistan entegre edildi.",
+      "tags": [
+        "jarvis",
+        "milestone"
+      ],
+      "created_at": 1792858657.337247,
+      "updated_at": 1792858657.337247
+    },
+    {
+      "id": "note_35983ed0",
+      "title": "Not Başlığı",
+      "content": "İçerik",
+      "tags": [
+        "api"
+      ],
+      "created_at": 1792858721.172153,
+      "updated_at": 1792858721.172153
+    },
+    {
+      "id": "note_fbba23d7",
+      "title": "Hızlı Not",
+      "content": "Yeni proje fikri",
+      "tags": [],
+      "created_at": 1792858723.4963162,
+      "updated_at": 1792858723.4963162
+    },
+    {
+      "id": "note_c0fb3fad",
+      "title": "Test Memosu",
+      "content": "Jarvis Stage 5 kişisel asistan entegre edildi.",
+      "tags": [
+        "jarvis",
+        "milestone"
+      ],
+      "created_at": 1792858724.6646338,
+      "updated_at": 1792858724.6646338
+    }
+  ]
+}

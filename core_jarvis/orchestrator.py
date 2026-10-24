@@ -187,7 +187,34 @@ class ResearchSpecialist:
 
 
 # ==============================================================================
-# 5. Master JARVIS Orchestrator
+# 5. AssistantSpecialist (Personal Assistant, Daily Planner, Tasks, Notes)
+# ==============================================================================
+class AssistantSpecialist:
+    """Manages daily briefings, calendar reminders, tasks, and quick executive notes."""
+
+    def get_briefing(self) -> Dict[str, Any]:
+        from core_jarvis.personal_assistant import personal_assistant
+        return personal_assistant.get_daily_briefing()
+
+    def add_task(self, title: str, priority: str = "normal", due_date: Optional[str] = None) -> Dict[str, Any]:
+        from core_jarvis.personal_assistant import personal_assistant
+        return personal_assistant.add_task(title=title, priority=priority, due_date=due_date)
+
+    def complete_task(self, task_id: str) -> Dict[str, Any]:
+        from core_jarvis.personal_assistant import personal_assistant
+        return personal_assistant.complete_task(task_id=task_id)
+
+    def add_reminder(self, title: str, datetime_iso: str, lead_minutes: int = 15) -> Dict[str, Any]:
+        from core_jarvis.personal_assistant import personal_assistant
+        return personal_assistant.add_reminder(title=title, datetime_iso=datetime_iso, lead_minutes=lead_minutes)
+
+    def add_note(self, title: str, content: str, tags: Optional[List[str]] = None) -> Dict[str, Any]:
+        from core_jarvis.personal_assistant import personal_assistant
+        return personal_assistant.add_note(title=title, content=content, tags=tags)
+
+
+# ==============================================================================
+# 6. Master JARVIS Orchestrator
 # ==============================================================================
 class JarvisOrchestrator:
     def __init__(self):
@@ -195,6 +222,7 @@ class JarvisOrchestrator:
         self.code = CodeSpecialist()
         self.content = ContentSpecialist()
         self.research = ResearchSpecialist()
+        self.assistant = AssistantSpecialist()
         self.engine = autonomous_engine
         self.memory = reality_memory
 
@@ -203,6 +231,36 @@ class JarvisOrchestrator:
         High-level intent classifier and specialist dispatcher.
         """
         prompt_lower = user_prompt.lower().strip()
+
+        # 0. Personal Assistant Briefing & Agenda ("Jarvis, bugün ne yapmam gerekiyor?")
+        if any(k in prompt_lower for k in ["bugün ne yapmam gerekiyor", "bugün ne yapmalıyım", "ajandam", "günlük plan", "günlük brifing", "görevlerim"]):
+            briefing = self.assistant.get_briefing()
+            return {
+                "specialist": "AssistantSpecialist",
+                "intent": "daily_briefing",
+                "speak_text": briefing.get("executive_briefing_text"),
+                "result": briefing
+            }
+
+        # Quick Task Add
+        if "görev ekle" in prompt_lower or "yapılacak ekle" in prompt_lower:
+            task_title = user_prompt.split(":", 1)[1].strip() if ":" in user_prompt else user_prompt
+            res = self.assistant.add_task(title=task_title, priority="normal")
+            return {
+                "specialist": "AssistantSpecialist",
+                "intent": "add_task",
+                "result": res
+            }
+
+        # Quick Note Add
+        if "not al" in prompt_lower or "not ekle" in prompt_lower:
+            note_content = user_prompt.split(":", 1)[1].strip() if ":" in user_prompt else user_prompt
+            res = self.assistant.add_note(title="Hızlı Not", content=note_content)
+            return {
+                "specialist": "AssistantSpecialist",
+                "intent": "add_note",
+                "result": res
+            }
 
         # 1. 'Kaldığımız yerden devam et' (Truth-over-Memory context restoration)
         if any(k in prompt_lower for k in ["kaldığımız yerden", "nerede kaldık", "durum nedir", "resume"]):
