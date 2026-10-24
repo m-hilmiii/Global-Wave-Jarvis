@@ -1104,6 +1104,58 @@ async def api_jarvis_system_backup(request: Request):
     res = await run_in_threadpool(system_tool.create_snapshot, file_path, note)
     return {"status": "success" if res.get("success") else "error", "result": res}
 
+from engine.content_pipeline import content_pipeline
+
+@app.post("/api/jarvis/content/produce")
+async def api_jarvis_content_produce(request: Request):
+    payload = await request.json()
+    topic = payload.get("topic", "").strip()
+    target_duration = payload.get("target_duration", "45s")
+    orientation = payload.get("orientation", "vertical")
+    persona_id = payload.get("persona_id", "us_hustler")
+    if not topic:
+        return JSONResponse({"status": "error", "message": "Topic is required"}, status_code=400)
+    res = await run_in_threadpool(
+        content_pipeline.stage_1_produce_draft,
+        topic=topic,
+        target_duration=target_duration,
+        orientation=orientation,
+        persona_id=persona_id
+    )
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+@app.post("/api/jarvis/content/qc")
+async def api_jarvis_content_qc(request: Request):
+    payload = await request.json()
+    video_path = payload.get("video_path", "").strip()
+    script_data = payload.get("script_data", {})
+    if not video_path:
+        return JSONResponse({"status": "error", "message": "video_path is required"}, status_code=400)
+    res = await run_in_threadpool(content_pipeline.stage_2_quality_control, video_path, script_data)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+@app.post("/api/jarvis/content/publish")
+async def api_jarvis_content_publish(request: Request):
+    payload = await request.json()
+    video_path = payload.get("video_path", "").strip()
+    title = payload.get("title", "").strip()
+    description = payload.get("description", "").strip()
+    tags = payload.get("tags", [])
+    confirmed = bool(payload.get("confirm", False))
+    privacy_status = payload.get("privacy_status", "private")
+    if not video_path or not title:
+        return JSONResponse({"status": "error", "message": "video_path and title are required"}, status_code=400)
+    res = await run_in_threadpool(
+        content_pipeline.stage_3_prepare_and_publish,
+        video_path=video_path,
+        title=title,
+        description=description,
+        tags=tags,
+        confirmed_by_user=confirmed,
+        privacy_status=privacy_status
+    )
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
 
 
 

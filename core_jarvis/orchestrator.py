@@ -138,6 +138,30 @@ class ContentSpecialist:
             "output_dir": str(WORKSPACE_DIR / "output")
         }
 
+    def produce_draft(self, topic: str, target_duration: str = "45s", orientation: str = "vertical", persona_id: str = "us_hustler") -> Dict[str, Any]:
+        from engine.content_pipeline import content_pipeline
+        return content_pipeline.stage_1_produce_draft(
+            topic=topic,
+            target_duration=target_duration,
+            orientation=orientation,
+            persona_id=persona_id
+        )
+
+    def run_qc(self, video_path: str, script_data: Dict[str, Any]) -> Dict[str, Any]:
+        from engine.content_pipeline import content_pipeline
+        return content_pipeline.stage_2_quality_control(video_path=video_path, script_data=script_data)
+
+    def stage_publish(self, video_path: str, title: str, description: str, tags: List[str], confirmed: bool = False, privacy_status: str = "private") -> Dict[str, Any]:
+        from engine.content_pipeline import content_pipeline
+        return content_pipeline.stage_3_prepare_and_publish(
+            video_path=video_path,
+            title=title,
+            description=description,
+            tags=tags,
+            confirmed_by_user=confirmed,
+            privacy_status=privacy_status
+        )
+
 
 # ==============================================================================
 # 4. ResearchSpecialist
@@ -211,7 +235,19 @@ class JarvisOrchestrator:
                 "result": self.code.get_git_diff()
             }
 
-        # 4. 'Global Wave / Video Motoru durumu'
+        # 4. 'Global Wave / Video Üretimi veya Durumu'
+        if any(k in prompt_lower for k in ["video üret", "shorts üret", "içerik üret", "fikir hazırla"]):
+            # Extract topic if present (e.g., 'video üret: Yapay zeka devrimi' or 'shorts hazırla: Bitcoin')
+            topic = "Geleceğin Yapay Zeka Teknolojileri"
+            if ":" in user_prompt:
+                topic = user_prompt.split(":", 1)[1].strip()
+            return {
+                "specialist": "ContentSpecialist",
+                "intent": "produce_draft",
+                "topic": topic,
+                "result": self.content.produce_draft(topic=topic, target_duration="45s")
+            }
+
         if any(k in prompt_lower for k in ["video motoru", "global wave", "zenvia", "içerik fabrikası"]):
             return {
                 "specialist": "ContentSpecialist",
