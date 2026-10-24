@@ -28,6 +28,8 @@ class PermissionGuard:
             # Level 1: Automatic
             "read_logs": PermissionLevel.LEVEL_1_AUTO,
             "read_files": PermissionLevel.LEVEL_1_AUTO,
+            "file_read": PermissionLevel.LEVEL_1_AUTO,
+            "index_knowledge": PermissionLevel.LEVEL_1_AUTO,
             "system_telemetry": PermissionLevel.LEVEL_1_AUTO,
             "system_powershell_safe": PermissionLevel.LEVEL_1_AUTO,
             "git_diff": PermissionLevel.LEVEL_1_AUTO,

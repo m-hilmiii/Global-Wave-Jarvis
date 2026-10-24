@@ -1,9 +1,9 @@
 # 🧠 JARVIS Master Yetenek & Fonksiyon Kataloğu
 > **Sistem:** Global-Wave / Stark-Core Personal AI Operating System  
 > **Kullanıcı:** Mücahit Hilmi (Hitap: *Sayın Hilmi* / *Efendim*)  
-> **Versiyon:** v5.6 (Master Architecture - Autonomous Research Integration)  
+> **Versiyon:** v5.7 (Master Architecture - Local Knowledge RAG Engine)  
 > **Son Güncelleme:** 24 Ekim 2026  
-> **Doğrulama:** 96/96 Birim Testi Başarılı (`Ran 96 tests in 32.665s OK`)
+> **Doğrulama:** 103/103 Birim Testi Başarılı (`Ran 103 tests in 33.792s OK`)
 
 Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlarını, güvenlik kalkanını, API uç noktalarını ve tetikleyici komutlarını eksiksiz listeler. Yeni bir özellik eklendikçe güncellenir.
 
@@ -98,6 +98,13 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 - **Donanıma Özel Yerel Model Kıyaslama:** i5-14400F + AMD Radeon RX 9060 XT + 16GB RAM mimarisine göre modelleri değerlendirir. 16GB RAM için ~4.7-5.2 GB bellek tüketen 7B/8B modelleri (`qwen2.5-coder:7b`, `deepseek-r1:8b`, `qwen3:8b`) önerir; sistemi çökertecek 70B modelleri "Yetersiz Donanım" olarak raporlar.
 - **Yönetici Not Defterine Otomatik Arşivleme:** Araştırılan teknik konuları otomatik olarak `personal_assistant.add_note` ile `research` etiketiyle kaydeder.
 
+### I. Akıllı Dosya & Dokümantasyon İndeksleyici — Yerel RAG Motoru (`knowledge_indexer.py`)
+- **$0 Maliyetli BM25 Sıralama Motoru (Zero-Cost Local RAG):** Harici vektör veritabanı veya token ücreti ödemeden standart kütüphane BM25 algoritmasıyla binlerce doküman ve kod parçasını <10ms içinde arar.
+- **Çoklu Biçim ve Kod/Markdown Ayrıştırma:** `.md`, `.py`, `.txt`, `.json`, `.csv`, `.yaml` dosyalarını başlık (`#`) ve sınıf/fonksiyon (`def`, `class`) sınırlarına göre akıllı parçalara (chunk) böler.
+- **Hassas Dosya Kara Listesi:** `.env`, `session_token.key`, `.pem`, `client_secret*.json`, `id_rsa*` gibi kimlik ve şifreleme dosyalarını indekslemeye dahil etmez, sızdırma riskini sıfırlar.
+- **Artımlı İndeksleme & Önbellek (`.jarvis_cache/knowledge_index.json`):** Değişmeyen dosyaları diskte tararken atlar; sadece yeni ve güncellenen dosyaları indeksler.
+- **Doküman Yapısal Analizi & Özetleme:** Dosyanın satır sayısını, dosya boyutunu, sınıf/fonksiyon haritasını ve ana başlıklarını çıkarıp yönetici özeti üretir.
+
 ---
 
 ## 🗣️ 4. Jarvis Tetikleyici Cümleler (Sesli & Yazılı Sözlük)
@@ -118,6 +125,9 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | *"Not al: [Fikir]"* | `AssistantSpecialist` | Yönetici not defterine anlık memo ekler. |
 | *"Araştır: Ollama deepseek-r1 performansı"* | `ResearchSpecialist` | Web ve yerel havuzu tarar, bulguları özetler ve yönetici notlarına kaydeder. |
 | *"Donanım için en iyi modelleri karşılaştır"* | `ResearchSpecialist` | i5-14400F, RX 9060 XT ve 16GB RAM sınırlarına göre en uygun modelleri kıyaslar. |
+| *"Yerel dokümanlarda ara: permission guard"* | `ResearchSpecialist` | BM25 ile kod ve doküman havuzunu tarar, en alakalı dosyayı ve satır aralığını sunar. |
+| *"Doküman özetle: JARVIS_CAPABILITIES_MASTER.md"* | `ResearchSpecialist` | Dosya yapısını (satır, boyut, fonksiyon/başlık) analiz edip özet çıkarır. |
+| *"Bilgi tabanını güncelle"* | `ResearchSpecialist` | Çalışma alanı dosyalarını tarar ve `.jarvis_cache/knowledge_index.json` indeksini tazeler. |
 
 ---
 
@@ -149,6 +159,10 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | `/api/jarvis/research/query` | `POST` | Web araması yapar ve yönetici notuna kaydeder |
 | `/api/jarvis/research/hardware-models` | `POST` | Donanım sınırlarına göre yerel model karşılaştırması |
 | `/api/jarvis/research/fetch` | `POST` | Web sayfası içeriğini güvenli/temizlenmiş metin olarak çeker |
+| `/api/jarvis/knowledge/search` | `POST` | BM25 algoritması ile yerel doküman ve kodlarda arama yapar |
+| `/api/jarvis/knowledge/index` | `POST` | Çalışma alanındaki dokümanları tarar ve RAG indeksini yeniler |
+| `/api/jarvis/knowledge/summarize` | `POST` | Belirtilen dosyanın yapısını ve özetini çıkarır |
+| `/api/jarvis/knowledge/stats` | `GET` | İndekslenen dosya, parça (chunk) ve kelime istatistikleri |
 
 ---
 *Not: Bu dosya her yeni modül, araç veya yetenek entegrasyonunda otomatik olarak güncellenir.*

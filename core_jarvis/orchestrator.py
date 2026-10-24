@@ -205,6 +205,35 @@ class ResearchSpecialist:
         from core_jarvis.tools.browser_research_tool import browser_research_tool
         return browser_research_tool.fetch_page_content(url=url)
 
+    def search_local_docs(self, query: str, top_k: int = 5, file_filter: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Pure Python BM25 search across local project documentation, code, and notes ($0 cost).
+        """
+        from core_jarvis.tools.knowledge_indexer import knowledge_indexer
+        return knowledge_indexer.search(query=query, top_k=top_k, file_filter=file_filter)
+
+    def summarize_file(self, file_path: str) -> Dict[str, Any]:
+        """
+        Analyzes and produces an executive summary for a local file.
+        """
+        from core_jarvis.tools.knowledge_indexer import knowledge_indexer
+        return knowledge_indexer.summarize_document(file_path=file_path)
+
+    def index_workspace(self, force: bool = False) -> Dict[str, Any]:
+        """
+        Scans and updates the local BM25 knowledge index cache.
+        """
+        from core_jarvis.tools.knowledge_indexer import knowledge_indexer
+        return knowledge_indexer.index_workspace(force=force)
+
+    def get_index_stats(self) -> Dict[str, Any]:
+        """
+        Returns stats about indexed files, chunks, and last indexing date.
+        """
+        from core_jarvis.tools.knowledge_indexer import knowledge_indexer
+        return knowledge_indexer.get_index_stats()
+
+
 
 # ==============================================================================
 # 5. AssistantSpecialist (Personal Assistant, Daily Planner, Tasks, Notes)
@@ -357,7 +386,39 @@ class JarvisOrchestrator:
                 "result": self.coordinator.list_jobs()
             }
 
-        # 6. Autonomous Web & Documentation Research
+        # 6. Local Knowledge & Documentation RAG Engine
+        if any(k in prompt_lower for k in ["yerel doküman", "dosyalarda ara", "kodlarda ara", "bilgi tabanında ara", "dokümanlarda ara"]):
+            query = user_prompt.split(":", 1)[1].strip() if ":" in user_prompt else user_prompt
+            res = self.research.search_local_docs(query=query)
+            return {
+                "specialist": "ResearchSpecialist",
+                "intent": "search_local_docs",
+                "query": query,
+                "speak_text": res.get("executive_summary"),
+                "result": res
+            }
+
+        if any(k in prompt_lower for k in ["doküman özetle", "dosya özetle"]):
+            target_path = user_prompt.split(":", 1)[1].strip() if ":" in user_prompt else user_prompt
+            res = self.research.summarize_file(file_path=target_path)
+            return {
+                "specialist": "ResearchSpecialist",
+                "intent": "summarize_file",
+                "file_path": target_path,
+                "speak_text": res.get("lead_text") or res.get("error", "Özet hazırlandı."),
+                "result": res
+            }
+
+        if any(k in prompt_lower for k in ["bilgi tabanını güncelle", "dokümanları indeksle", "dosyaları indeksle"]):
+            res = self.research.index_workspace(force=True)
+            return {
+                "specialist": "ResearchSpecialist",
+                "intent": "index_workspace",
+                "speak_text": res.get("summary"),
+                "result": res
+            }
+
+        # 7. Autonomous Web & Documentation Research
         if any(k in prompt_lower for k in ["araştır", "araştırma", "web'de ara", "internette ara", "dokümantasyon"]):
             query = user_prompt.split(":", 1)[1].strip() if ":" in user_prompt else user_prompt
             res = self.research.research_topic(query=query, auto_note=True)

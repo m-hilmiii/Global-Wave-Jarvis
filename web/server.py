@@ -1283,7 +1283,46 @@ async def api_jarvis_research_fetch(request: Request):
     res = await run_in_threadpool(browser_research_tool.fetch_page_content, url=url)
     return {"status": "success" if res.get("success") else "error", "page": res}
 
+from core_jarvis.tools.knowledge_indexer import knowledge_indexer
+
+@app.post("/api/jarvis/knowledge/search")
+async def api_jarvis_knowledge_search(request: Request):
+    payload = await request.json()
+    query = payload.get("query", "").strip()
+    top_k = payload.get("top_k", 5)
+    file_filter = payload.get("file_filter")
+    if not query:
+        return JSONResponse({"status": "error", "message": "query is required"}, status_code=400)
+    res = await run_in_threadpool(knowledge_indexer.search, query, top_k=top_k, file_filter=file_filter)
+    return {"status": "success", "results": res}
+
+@app.post("/api/jarvis/knowledge/index")
+async def api_jarvis_knowledge_index(request: Request):
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        pass
+    force = payload.get("force", False)
+    res = await run_in_threadpool(knowledge_indexer.index_workspace, force=force)
+    return {"status": "success" if res.get("success") else "error", "index": res}
+
+@app.post("/api/jarvis/knowledge/summarize")
+async def api_jarvis_knowledge_summarize(request: Request):
+    payload = await request.json()
+    file_path = payload.get("file_path", "").strip()
+    if not file_path:
+        return JSONResponse({"status": "error", "message": "file_path is required"}, status_code=400)
+    res = await run_in_threadpool(knowledge_indexer.summarize_document, file_path=file_path)
+    return {"status": "success" if res.get("success") else "error", "document": res}
+
+@app.get("/api/jarvis/knowledge/stats")
+async def api_jarvis_knowledge_stats():
+    res = await run_in_threadpool(knowledge_indexer.get_index_stats)
+    return {"status": "success", "stats": res}
+
 from core_jarvis.whatsapp_daemon import whatsapp_daemon, INBOX_FILE
+
 
 
 @app.get("/api/jarvis/chats")

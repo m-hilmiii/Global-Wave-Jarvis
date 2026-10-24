@@ -72,3 +72,8 @@ core_jarvis/whatsapp_bridge/dist/
 
 # Local inspection and analysis text dumps
 kod_inceleme.txt
+
+# Jarvis Local Cache & Snapshot Backups
+.jarvis_cache/
+.jarvis_backups/
+
