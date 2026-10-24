@@ -1,9 +1,9 @@
 # 🧠 JARVIS Master Yetenek & Fonksiyon Kataloğu
 > **Sistem:** Global-Wave / Stark-Core Personal AI Operating System  
 > **Kullanıcı:** Mücahit Hilmi (Hitap: *Sayın Hilmi* / *Efendim*)  
-> **Versiyon:** v5.7 (Master Architecture - Local Knowledge RAG Engine)  
+> **Versiyon:** v5.8 (Master Architecture - Voice Interaction & Kokoro TTS Engine)  
 > **Son Güncelleme:** 24 Ekim 2026  
-> **Doğrulama:** 103/103 Birim Testi Başarılı (`Ran 103 tests in 33.792s OK`)
+> **Doğrulama:** 109/109 Birim Testi Başarılı (`Ran 109 tests in 49.584s OK`)
 
 Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlarını, güvenlik kalkanını, API uç noktalarını ve tetikleyici komutlarını eksiksiz listeler. Yeni bir özellik eklendikçe güncellenir.
 
@@ -105,6 +105,12 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 - **Artımlı İndeksleme & Önbellek (`.jarvis_cache/knowledge_index.json`):** Değişmeyen dosyaları diskte tararken atlar; sadece yeni ve güncellenen dosyaları indeksler.
 - **Doküman Yapısal Analizi & Özetleme:** Dosyanın satır sayısını, dosya boyutunu, sınıf/fonksiyon haritasını ve ana başlıklarını çıkarıp yönetici özeti üretir.
 
+### J. Sesli Yanıt & Canlı Tetikleyici — Wake-Word & Kokoro TTS Motoru (`voice_tool.py`)
+- **"Hey Jarvis" Sesli Uyanma (Wake-Word):** Kullanıcı ses veya metinle *"Hey Jarvis"*, *"Jarvis"*, *"Dinle Jarvis"* dediğinde uyanma kelimesini ayıklar ve komutu master orkestratöre yönlendirir.
+- **Metin Temizleme ve Fonetik Sadeleştirme:** Markdown işaretlerini (`**`, `#`, backtick, emoji, teknik etiketler) konuşmadan önce temizleyerek kulağa akıcı gelen insan dili üretir.
+- **100% Çevrimdışı Kokoro-82M ONNX Stüdyo Sesi ($0 Maliyet):** CPU üzerinde ~300MB RAM tüketerek stüdyo kalitesinde ses dosyaları üretir (`/output/jarvis_voices/`).
+- **Web Speech & Çift Katmanlı Seslendirme:** Web arayüzünde üretilen ses dosyasını oynatır; istenirse tarayıcı yerel seslendiricisi (`window.speechSynthesis`) ile sıfır gecikmeli yanıt verir.
+
 ---
 
 ## 🗣️ 4. Jarvis Tetikleyici Cümleler (Sesli & Yazılı Sözlük)
@@ -128,6 +134,8 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | *"Yerel dokümanlarda ara: permission guard"* | `ResearchSpecialist` | BM25 ile kod ve doküman havuzunu tarar, en alakalı dosyayı ve satır aralığını sunar. |
 | *"Doküman özetle: JARVIS_CAPABILITIES_MASTER.md"* | `ResearchSpecialist` | Dosya yapısını (satır, boyut, fonksiyon/başlık) analiz edip özet çıkarır. |
 | *"Bilgi tabanını güncelle"* | `ResearchSpecialist` | Çalışma alanı dosyalarını tarar ve `.jarvis_cache/knowledge_index.json` indeksini tazeler. |
+| *"Seslendir: Sistemler aktif efendim"* | `VoiceSpecialist` | Kokoro-82M ONNX ile metni seslendirir ve ses dosyasını üretir. |
+| *"Ses sistemi durumu"* | `VoiceSpecialist` | ONNX ağırlıkları, önbellekteki ses sayısı ve hazır ses motorlarını raporlar. |
 
 ---
 
@@ -163,6 +171,9 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | `/api/jarvis/knowledge/index` | `POST` | Çalışma alanındaki dokümanları tarar ve RAG indeksini yeniler |
 | `/api/jarvis/knowledge/summarize` | `POST` | Belirtilen dosyanın yapısını ve özetini çıkarır |
 | `/api/jarvis/knowledge/stats` | `GET` | İndekslenen dosya, parça (chunk) ve kelime istatistikleri |
+| `/api/jarvis/voice/command` | `POST` | Wake-word denetimiyle sesli komutu işler ve sesli yanıt üretir |
+| `/api/jarvis/voice/speak` | `POST` | Kokoro-82M ONNX ile metni seslendirir ve `.wav` URL'i döner |
+| `/api/jarvis/voice/status` | `GET` | Ses motoru, ONNX ağırlıkları ve önbellek durumu |
 
 ---
 *Not: Bu dosya her yeni modül, araç veya yetenek entegrasyonunda otomatik olarak güncellenir.*

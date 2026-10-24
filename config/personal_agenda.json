@@ -299,6 +299,46 @@
       "status": "completed",
       "created_at": 1792860797.2044177,
       "completed_at": 1792860797.2071838
+    },
+    {
+      "id": "task_fae3d1b0",
+      "title": "API Görevi",
+      "category": "general",
+      "priority": "high",
+      "due_date": "2026-10-24",
+      "status": "completed",
+      "created_at": 1792862192.995691,
+      "completed_at": 1792862193.004203
+    },
+    {
+      "id": "task_3e56b210",
+      "title": "YouTube shorts yayınla",
+      "category": "general",
+      "priority": "normal",
+      "due_date": "2026-10-24",
+      "status": "pending",
+      "created_at": 1792862195.270118,
+      "completed_at": null
+    },
+    {
+      "id": "task_3f3fdce2",
+      "title": "Gecikmiş Eski Görev",
+      "category": "general",
+      "priority": "high",
+      "due_date": "2026-10-22",
+      "status": "pending",
+      "created_at": 1792862195.2766342,
+      "completed_at": null
+    },
+    {
+      "id": "task_d492a27c",
+      "title": "Antigravity Birim Testi",
+      "category": "development",
+      "priority": "urgent",
+      "due_date": "2026-10-24",
+      "status": "completed",
+      "created_at": 1792862196.4074228,
+      "completed_at": 1792862196.4094276
     }
   ],
   "reminders": [
@@ -372,6 +412,15 @@
       "recurring": null,
       "active": true,
       "created_at": 1792860797.1969342
+    },
+    {
+      "id": "rem_7ba87542",
+      "title": "Toplantı Hatırlatıcısı",
+      "datetime_iso": "2026-10-24T15:30:00",
+      "lead_minutes": 10,
+      "recurring": null,
+      "active": true,
+      "created_at": 1792862196.4016435
     }
   ],
   "notes": [
@@ -720,6 +769,57 @@
       ],
       "created_at": 1792860797.2005713,
       "updated_at": 1792860797.2005713
+    },
+    {
+      "id": "note_b7f17684",
+      "title": "Araştırma: FastAPI async streaming",
+      "content": "Konu: FastAPI async streaming\n\nBulunan Başlıca Kaynaklar ve Bilgiler:\n- 'FastAPI async streaming' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792862189.1308892,
+      "updated_at": 1792862189.1308892
+    },
+    {
+      "id": "note_467ca682",
+      "title": "Araştırma: Ollama deepseek-r1 performansı",
+      "content": "Konu: Ollama deepseek-r1 performansı\n\nBulunan Başlıca Kaynaklar ve Bilgiler:\n- 'Ollama deepseek-r1 performansı' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792862189.300034,
+      "updated_at": 1792862189.300034
+    },
+    {
+      "id": "note_1a599134",
+      "title": "Not Başlığı",
+      "content": "İçerik",
+      "tags": [
+        "api"
+      ],
+      "created_at": 1792862193.0102067,
+      "updated_at": 1792862193.0102067
+    },
+    {
+      "id": "note_fe7f1b68",
+      "title": "Hızlı Not",
+      "content": "Yeni proje fikri",
+      "tags": [],
+      "created_at": 1792862195.2726223,
+      "updated_at": 1792862195.2726223
+    },
+    {
+      "id": "note_304ddf0d",
+      "title": "Test Memosu",
+      "content": "Jarvis Stage 5 kişisel asistan entegre edildi.",
+      "tags": [
+        "jarvis",
+        "milestone"
+      ],
+      "created_at": 1792862196.4042263,
+      "updated_at": 1792862196.4042263
     }
   ]
 }

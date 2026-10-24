@@ -2062,6 +2062,59 @@ document.addEventListener("DOMContentLoaded", () => {
             scrollToBottom();
         }
 
+        // --- Local Neural TTS & Browser Speech Synthesizer ---
+        let currentAudio = null;
+        function speakText(text, audioUrl = null) {
+            if (!text || !text.trim()) return;
+
+            // 1. If backend provided a pre-synthesized audio URL (Kokoro-82M), play it directly
+            if (audioUrl) {
+                if (currentAudio) {
+                    currentAudio.pause();
+                    currentAudio = null;
+                }
+                currentAudio = new Audio(audioUrl);
+                currentAudio.play().catch(e => console.warn("[Jarvis Audio Playback]", e));
+                return;
+            }
+
+            // 2. Request Kokoro-82M speech audio from backend /api/jarvis/voice/speak
+            authFetch("/api/jarvis/voice/speak", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: text })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "success" && data.speech && data.speech.audio_url) {
+                    if (currentAudio) {
+                        currentAudio.pause();
+                        currentAudio = null;
+                    }
+                    currentAudio = new Audio(data.speech.audio_url);
+                    currentAudio.play().catch(e => console.warn("[Jarvis Audio Playback]", e));
+                } else if ('speechSynthesis' in window) {
+                    // Fallback to browser Web Speech API
+                    window.speechSynthesis.cancel();
+                    const clean = text.replace(/[*_#`]/g, "").trim();
+                    const utterance = new SpeechSynthesisUtterance(clean);
+                    utterance.lang = "tr-TR";
+                    utterance.rate = 1.05;
+                    window.speechSynthesis.speak(utterance);
+                }
+            })
+            .catch(() => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                    const clean = text.replace(/[*_#`]/g, "").trim();
+                    const utterance = new SpeechSynthesisUtterance(clean);
+                    utterance.lang = "tr-TR";
+                    utterance.rate = 1.05;
+                    window.speechSynthesis.speak(utterance);
+                }
+            });
+        }
+
         // --- Send Action (Form Submit) ---
         async function handleSendMessage(text) {
             if (!text || !text.trim()) return;

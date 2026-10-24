@@ -1321,7 +1321,36 @@ async def api_jarvis_knowledge_stats():
     res = await run_in_threadpool(knowledge_indexer.get_index_stats)
     return {"status": "success", "stats": res}
 
+from core_jarvis.tools.voice_tool import voice_tool
+
+@app.post("/api/jarvis/voice/command")
+async def api_jarvis_voice_command(request: Request):
+    payload = await request.json()
+    text = payload.get("text", "").strip()
+    voice = payload.get("voice", "am_adam")
+    if not text:
+        return JSONResponse({"status": "error", "message": "text is required"}, status_code=400)
+    res = await run_in_threadpool(voice_tool.process_voice_command, user_input=text, voice_name=voice)
+    return {"status": "success", "voice_response": res}
+
+@app.post("/api/jarvis/voice/speak")
+async def api_jarvis_voice_speak(request: Request):
+    payload = await request.json()
+    text = payload.get("text", "").strip()
+    voice = payload.get("voice", "am_adam")
+    speed = payload.get("speed", 1.05)
+    if not text:
+        return JSONResponse({"status": "error", "message": "text is required"}, status_code=400)
+    res = await run_in_threadpool(voice_tool.synthesize_speech, text=text, voice_name=voice, speed=speed)
+    return {"status": "success" if res.get("success") else "error", "speech": res}
+
+@app.get("/api/jarvis/voice/status")
+async def api_jarvis_voice_status():
+    res = await run_in_threadpool(voice_tool.get_status)
+    return {"status": "success", "voice_status": res}
+
 from core_jarvis.whatsapp_daemon import whatsapp_daemon, INBOX_FILE
+
 
 
 

@@ -263,7 +263,26 @@ class AssistantSpecialist:
 
 
 # ==============================================================================
-# 6. Master JARVIS Orchestrator
+# 6. VoiceSpecialist (Wake-Word, Kokoro-82M Local Neural TTS & Speech Dispatch)
+# ==============================================================================
+class VoiceSpecialist:
+    """Manages wake-word parsing, speech synthesis via Kokoro-82M ONNX, and voice dispatch."""
+
+    def synthesize_speech(self, text: str, voice_name: str = "am_adam", speed: float = 1.05) -> Dict[str, Any]:
+        from core_jarvis.tools.voice_tool import voice_tool
+        return voice_tool.synthesize_speech(text=text, voice_name=voice_name, speed=speed)
+
+    def process_voice_command(self, user_input: str, voice_name: str = "am_adam") -> Dict[str, Any]:
+        from core_jarvis.tools.voice_tool import voice_tool
+        return voice_tool.process_voice_command(user_input=user_input, voice_name=voice_name)
+
+    def get_status(self) -> Dict[str, Any]:
+        from core_jarvis.tools.voice_tool import voice_tool
+        return voice_tool.get_status()
+
+
+# ==============================================================================
+# 7. Master JARVIS Orchestrator
 # ==============================================================================
 class JarvisOrchestrator:
     def __init__(self):
@@ -272,6 +291,7 @@ class JarvisOrchestrator:
         self.content = ContentSpecialist()
         self.research = ResearchSpecialist()
         self.assistant = AssistantSpecialist()
+        self.voice = VoiceSpecialist()
         from core_jarvis.task_coordinator import task_coordinator
         self.coordinator = task_coordinator
         self.engine = autonomous_engine
@@ -442,6 +462,26 @@ class JarvisOrchestrator:
                 "intent": "compare_models",
                 "category": cat,
                 "speak_text": res.get("executive_summary"),
+                "result": res
+            }
+
+        # 8. Voice & Speech Subsystem
+        if any(k in prompt_lower for k in ["seslendir:", "bunu söyle:", "sesli oku:"]):
+            speech_text = user_prompt.split(":", 1)[1].strip() if ":" in user_prompt else user_prompt
+            res = self.voice.synthesize_speech(text=speech_text)
+            return {
+                "specialist": "VoiceSpecialist",
+                "intent": "synthesize_speech",
+                "speak_text": speech_text,
+                "result": res
+            }
+
+        if any(k in prompt_lower for k in ["ses sistemi durumu", "kokoro durumu", "mikrofon durumu"]):
+            res = self.voice.get_status()
+            return {
+                "specialist": "VoiceSpecialist",
+                "intent": "voice_status",
+                "speak_text": f"Ses motoru hazır. Kokoro-82M ONNX devrede, {res.get('cached_audio_files', 0)} ses dosyası önbellekte.",
                 "result": res
             }
 
