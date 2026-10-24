@@ -66,3 +66,9 @@ config/upload_history.json
 # Local Session Keys
 config/session_token.key
 *.key
+
+# TypeScript compiled bridge
+core_jarvis/whatsapp_bridge/dist/
+
+# Local inspection and analysis text dumps
+kod_inceleme.txt

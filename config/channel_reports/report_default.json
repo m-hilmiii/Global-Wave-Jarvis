@@ -1,15 +1,16 @@
 {
   "sentiment_summary": "İzleyici sadakati yüksek (%80); anlatım temposu ve karaoke altyazı akışı takdir topluyor.",
   "audience_demands": [
-    "Ses tonu ve kelime kelime yanan altyazı inanılmaz akıcı, tebrikler!"
+    "Yapay zeka sırları hakkında shorts içerikleri"
   ],
   "strengths": [
     "Karaoke altyazı temposu ve dinamik seslendirme izleyiciyi ekranda tutuyor.",
-    "ShortGPT geçiş ses efektleri retention oranını artırıyor."
+    "ShortGPT geçiş ses efektleri retention oranını artırıyor.",
+    "Ses tonu ve kelime kelime yanan altyazı akıcılığı takdir ediliyor."
   ],
   "weaknesses_to_avoid": [
-    "Ses tonu ve kelime kelime yanan altyazı inanılmaz akıcı, tebrikler!",
-    "Yapay zeka sırları hakkında da bir shorts gelsin lütfen!"
+    "İlk 3 saniyede izleyiciyi yakalayamayan durağan girişlerden kaçın",
+    "Görsel ile anlatım arasındaki tematik uyumsuzluklardan kaçın"
   ],
   "persona_tuning": {
     "humor_level": "Hafif sarkastik, zeki",

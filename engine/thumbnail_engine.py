@@ -1,3 +1,4 @@
+import hashlib
 """
 Global Wave - Automated High-CTR Thumbnail Engine (Faz 5)
 Generates 1280x720 YouTube thumbnails engineered for maximum Click-Through-Rate (CTR).
@@ -136,7 +137,8 @@ def generate_thumbnail(
 
     if base_img is None and pexels_key:
         clean_kw = re.sub(r'[^a-zA-Z0-9\s]', '', topic).strip()[:30]
-        temp_photo = os.path.join(TEMP_WORKSPACE, f"thumb_bg_{abs(hash(clean_kw))}.jpg")
+        kw_hash = hashlib.sha256(clean_kw.encode("utf-8")).hexdigest()[:10]
+        temp_photo = os.path.join(TEMP_WORKSPACE, f"thumb_bg_{kw_hash}.jpg")
         if fetch_pexels_photo(clean_kw, pexels_key, temp_photo):
             try:
                 base_img = Image.open(temp_photo).convert("RGB")
@@ -215,7 +217,8 @@ def generate_thumbnail(
 
     # 6. Save Final Image
     if not out_path:
-        out_name = f"thumb_{abs(hash(topic))}_{random.randint(100, 999)}.jpg"
+        topic_hash = hashlib.sha256(topic.encode("utf-8")).hexdigest()[:10]
+        out_name = f"thumb_{topic_hash}_{random.randint(100, 999)}.jpg"
         out_path = str(THUMBNAILS_DIR / out_name)
 
     base_img.save(out_path, format="JPEG", quality=92)

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict
 from datetime import datetime
 from urllib.parse import urlparse
+from starlette.concurrency import run_in_threadpool
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -151,8 +152,13 @@ async def generate_stream_ticket(request: Request):
     if not req_token or req_token != LOCAL_SESSION_TOKEN:
         return JSONResponse({"status": "error", "message": "Unauthorized: Geçersiz veya eksik X-Local-Token."}, status_code=401)
     ticket = str(uuid.uuid4())
+    now = time.time()
     with STREAM_TICKETS_LOCK:
-        STREAM_TICKETS[ticket] = time.time() + 60 # 60 seconds TTL
+        # Prune expired tickets to prevent unbounded memory growth
+        expired = [k for k, exp in STREAM_TICKETS.items() if exp <= now]
+        for k in expired:
+            STREAM_TICKETS.pop(k, None)
+        STREAM_TICKETS[ticket] = now + 60 # 60 seconds TTL
     return {"ticket": ticket, "expires_in": 60}
 
 @app.get("/api/session/token")
@@ -178,8 +184,14 @@ def sync_task_status(task_id: str, percent: int, stage: str, message: str, video
         "message": message,
         "video_url": video_url,
         "status": "completed" if percent >= 100 else ("error" if stage == "error" else "running"),
-        "task_data": task_data or {}
+        "task_data": task_data or {},
+        "timestamp": time.time()
     }
+    # Memory bounding: Cap in-memory task dictionary to prevent memory leaks on long runs
+    if len(TASKS) > 75:
+        sorted_keys = sorted(TASKS.keys(), key=lambda k: TASKS[k].get("timestamp", 0))
+        for k in sorted_keys[:-50]:
+            TASKS.pop(k, None)
     update_task_checkpoint(task_id, percent, stage, message, video_url=video_url, task_data=task_data)
 
 def run_video_generation_pipeline(
@@ -515,31 +527,33 @@ async def regenerate_single_scene(task_id: str, request: Request):
     active_kw = target_scene.get("visual_keyword", "")
     
     print(f"[REPAIR] Regenerating scene {scene_id} with keyword: {active_kw}...")
-    new_raw_clip = get_clip_for_scene(
-        scene_id,
-        active_kw,
-        target_duration,
-        task_temp_dir,
-        force_refresh=True
-    )
-    
-    norm_clip_path = os.path.join(task_temp_dir, f"normalized_clip_{scene_id}.mp4")
-    normalize_clip(new_raw_clip, norm_clip_path, target_duration, resolution=resolution)
-    normalized_clips[scene_id] = norm_clip_path
-    task_data["normalized_clips"] = normalized_clips
-    task_data["scenes"] = scenes
-    
-    scene_durations = [ch["duration"] for ch in audio_chunks]
-    new_video_path = render_master_video(
-        normalized_clips=normalized_clips,
-        master_speech_mp3=task_data["master_speech_mp3"],
-        subtitle_ass_path=task_data["subtitle_ass_path"],
-        total_audio_duration=task_data["total_duration"],
-        task_temp_dir=task_temp_dir,
-        bgm_volume=task_data.get("bgm_volume", 0.15),
-        enable_bgm=task_data.get("enable_bgm", True),
-        scene_durations=scene_durations
-    )
+    def _do_regenerate():
+        new_raw_clip = get_clip_for_scene(
+            scene_id,
+            active_kw,
+            target_duration,
+            task_temp_dir,
+            force_refresh=True
+        )
+        norm_clip_path = os.path.join(task_temp_dir, f"normalized_clip_{scene_id}.mp4")
+        normalize_clip(new_raw_clip, norm_clip_path, target_duration, resolution=resolution)
+        normalized_clips[scene_id] = norm_clip_path
+        task_data["normalized_clips"] = normalized_clips
+        task_data["scenes"] = scenes
+        
+        scene_durations = [ch["duration"] for ch in audio_chunks]
+        return render_master_video(
+            normalized_clips=normalized_clips,
+            master_speech_mp3=task_data["master_speech_mp3"],
+            subtitle_ass_path=task_data["subtitle_ass_path"],
+            total_audio_duration=task_data["total_duration"],
+            task_temp_dir=task_temp_dir,
+            bgm_volume=task_data.get("bgm_volume", 0.15),
+            enable_bgm=task_data.get("enable_bgm", True),
+            scene_durations=scene_durations
+        )
+
+    new_video_path = await run_in_threadpool(_do_regenerate)
     
     video_filename = os.path.basename(new_video_path)
     video_url = f"/output/{video_filename}"
@@ -613,9 +627,12 @@ async def get_ai_feedback_report(channel_id: str):
 
 @app.post("/api/feedback/analyze/{channel_id}")
 async def trigger_ai_feedback_analysis(channel_id: str):
-    profile = get_channel_profile()
-    title = profile.get("title", "Mücahit Hilmi") if profile else "Mücahit Hilmi"
-    report = run_feedback_analysis(channel_id, channel_title=title)
+    def _do_feedback():
+        profile = get_channel_profile()
+        title = profile.get("title", "Mücahit Hilmi") if profile else "Mücahit Hilmi"
+        return run_feedback_analysis(channel_id, channel_title=title)
+
+    report = await run_in_threadpool(_do_feedback)
     return {"status": "success", "report": report}
 
 # =========================================================================
@@ -754,14 +771,15 @@ async def upload_to_youtube(request: Request):
     video_path = str(resolved_video)
         
     try:
-        res = upload_short_video(
+        res = await run_in_threadpool(
+            upload_short_video,
             video_path=video_path,
             title=title,
             description=description,
             privacy_status=privacy_status
         )
         if res.get("status") == "success" and task_id:
-            update_task_youtube(task_id, res.get("url"))
+            await run_in_threadpool(update_task_youtube, task_id, res.get("url"))
         return res
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
@@ -830,7 +848,9 @@ async def api_generate_thumbnail(request: Request):
         if not any(bg_p.is_relative_to(ad) for ad in allowed_dirs) or not bg_p.is_file():
             custom_bg = None
     
-    thumb_path = generate_thumbnail(topic, style_preset=style_preset, custom_bg_path=custom_bg)
+    thumb_path = await run_in_threadpool(
+        generate_thumbnail, topic, style_preset=style_preset, custom_bg_path=custom_bg
+    )
     filename = os.path.basename(thumb_path)
     return {
         "status": "success",
@@ -844,7 +864,7 @@ async def api_niche_analyze(request: Request):
     channel = data.get("channel", "").strip()
     if not channel:
         return JSONResponse({"status": "error", "message": "Channel handle or URL required"}, status_code=400)
-    analysis = analyze_competitor(channel)
+    analysis = await run_in_threadpool(analyze_competitor, channel)
     return {"status": "success", "analysis": analysis}
 
 @app.post("/api/niche/discover")
@@ -852,7 +872,7 @@ async def api_niche_discover(request: Request):
     data = await request.json()
     keyword = data.get("keyword", "technology").strip()
     country = data.get("country", "us").strip()
-    niches = discover_niche(keyword, country_code=country)
+    niches = await run_in_threadpool(discover_niche, keyword, country_code=country)
     return {"status": "success", "niches": niches}
 
 @app.post("/api/translate")
@@ -860,7 +880,7 @@ async def api_translate(request: Request):
     data = await request.json()
     script_data = data.get("script_data", {})
     target_persona_id = data.get("target_persona_id", "es_narrator")
-    translated = translate_script(script_data, target_persona_id)
+    translated = await run_in_threadpool(translate_script, script_data, target_persona_id)
     return {"status": "success", "translated_script": translated}
 
 @app.get("/api/warmup/checklist")
@@ -889,7 +909,7 @@ async def api_jarvis_chat(request: Request):
     msg = data.get("message", "").strip()
     if not msg:
         return JSONResponse({"status": "error", "message": "Message required"}, status_code=400)
-    res = jarvis_brain.process_message(msg)
+    res = await run_in_threadpool(jarvis_brain.process_message, msg)
     return {"status": "success", "result": res}
 
 @app.post("/api/jarvis/draft/confirm")
@@ -905,7 +925,7 @@ async def api_jarvis_draft_confirm(request: Request):
             {"status": "error", "message": "Geçerli ve açık bir taslak kimliği (draft_id) belirtilmelidir."},
             status_code=400
         )
-    res = jarvis_brain.confirm_pending_draft(draft_id)
+    res = await run_in_threadpool(jarvis_brain.confirm_pending_draft, draft_id)
     action = res.get("action_taken")
     if action == "whatsapp_dispatched":
         return {"status": "success", "result": res}
@@ -927,7 +947,7 @@ async def api_jarvis_draft_cancel(request: Request):
             {"status": "error", "message": "Geçerli ve açık bir taslak kimliği (draft_id) belirtilmelidir."},
             status_code=400
         )
-    res = jarvis_brain.cancel_pending_draft(draft_id)
+    res = await run_in_threadpool(jarvis_brain.cancel_pending_draft, draft_id)
     return {"status": "success", "result": res}
 
 @app.get("/api/jarvis/telemetry")
@@ -975,7 +995,7 @@ async def api_jarvis_chat_send(identifier: str, request: Request):
     contact = contacts_mgr.find_contact(identifier)
     phone = contact["phone"] if contact else identifier
     name = contact["name"] if contact else identifier
-    res = whatsapp_tool.send_message_to_phone(phone, text, recipient_name=name)
+    res = await run_in_threadpool(whatsapp_tool.send_message_to_phone, phone, text, recipient_name=name)
     return {"status": "success", "result": res}
 
 @app.post("/api/jarvis/message/delete")
@@ -984,7 +1004,7 @@ async def api_jarvis_message_delete(request: Request):
     jid = data.get("jid", "")
     msg_id = data.get("message_id", "")
     everyone = data.get("everyone", True)
-    res = whatsapp_daemon.delete_message(jid, msg_id, everyone=everyone)
+    res = await run_in_threadpool(whatsapp_daemon.delete_message, jid, msg_id, everyone=everyone)
     return {"status": "success", "result": res}
 
 @app.get("/api/jarvis/inbox/check_new")
@@ -1062,18 +1082,21 @@ async def api_jarvis_transcribe(request: Request):
                 with open(temp_file, "wb") as f:
                     f.write(content)
                     
-                from engine.subtitle_whisper import get_whisper_model
-                model = get_whisper_model()
+                def _do_transcribe(fpath: str, prompt_text: str) -> str:
+                    from engine.subtitle_whisper import get_whisper_model
+                    model = get_whisper_model()
+                    segments, _ = model.transcribe(
+                        fpath,
+                        language="tr",
+                        initial_prompt=prompt_text,
+                        beam_size=5,
+                        vad_filter=True,
+                        condition_on_previous_text=False
+                    )
+                    return " ".join([s.text for s in segments]).strip()
+
                 prompt = "Merhaba JARVIS, Mücahit Hilmi, Global-Wave, WhatsApp üzerinden mesaj gönder, rehbere kişi ekle, halini hatrını sor, nasılsın, iyi misin, ilet, yaz, kontrol et, Emre, Babam, Annem, Adem."
-                segments, _ = model.transcribe(
-                    str(temp_file),
-                    language="tr",
-                    initial_prompt=prompt,
-                    beam_size=5,
-                    vad_filter=True,
-                    condition_on_previous_text=False
-                )
-                text = " ".join([s.text for s in segments]).strip()
+                text = await run_in_threadpool(_do_transcribe, str(temp_file), prompt)
                 
                 # Phonetic clean-up for common Turkish STT mishearings
                 text = re.sub(r'\b(?:üründür|döndür|yöndür)\b', 'gönder', text, flags=re.IGNORECASE)

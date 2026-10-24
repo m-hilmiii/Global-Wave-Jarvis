@@ -82,16 +82,24 @@ class VRAMGuard:
         return True
 
     def clean_memory(self):
-        """Forces garbage collection and unloads idle models."""
+        """Forces Python garbage collection and unloads active models from RX 9060 XT VRAM & host RAM."""
         try:
             gc.collect()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("GC collection failed: %s", exc)
 
-        try:
-            subprocess.run(["ollama", "stop", "qwen2.5:7b"], capture_output=True, timeout=5)
-        except Exception:
-            pass
+        active_models = ["qwen3:14b", "qwen3:8b", "mistral-nemo:12b"]
+        for model_name in active_models:
+            try:
+                subprocess.run(
+                    ["ollama", "stop", model_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False
+                )
+            except Exception as exc:
+                logger.warning("Could not stop Ollama model %s: %s", model_name, exc)
 
     def prepare_for_diffusion(self):
         """Pre-flight sequence before running LTX-2.5 or Z-Image."""

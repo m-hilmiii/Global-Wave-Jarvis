@@ -37,13 +37,41 @@ class WhatsAppDaemon:
         self.process: Optional[subprocess.Popen] = None
         self.status = "disconnected"
         self.latest_qr: Optional[str] = None
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.socket_ready = threading.Event()
         self.pending_replies: Dict[str, Dict[str, Any]] = {}
         self.reply_events: Dict[str, threading.Event] = {}
 
         if self.is_authenticated():
             self.start_bridge()
+
+    def _read_inbox_locked(self) -> List[Dict[str, Any]]:
+        """Thread-safe read of whatsapp_inbox.json under self.lock."""
+        with self.lock:
+            if not INBOX_FILE.exists():
+                return []
+            try:
+                with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"[WhatsApp] Failed to read inbox file: {e}")
+                return []
+
+    def _atomic_write_inbox(self, data: List[Dict[str, Any]]) -> None:
+        """Atomically writes inbox using a .tmp file and replace to eliminate race conditions."""
+        with self.lock:
+            tmp_file = INBOX_FILE.with_suffix(".tmp")
+            try:
+                with open(tmp_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                tmp_file.replace(INBOX_FILE)
+            except Exception as e:
+                logger.error(f"[WhatsApp] Atomic inbox write failed: {e}")
+                if tmp_file.exists():
+                    try:
+                        tmp_file.unlink()
+                    except Exception:
+                        pass
 
     def is_authenticated(self) -> bool:
         creds = AUTH_DIR / "creds.json"
@@ -227,13 +255,7 @@ class WhatsAppDaemon:
         now_str = datetime.now().strftime("%H:%M")
 
         with self.lock:
-            inbox = []
-            if INBOX_FILE.exists():
-                try:
-                    with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
-                        inbox = json.load(f)
-                except Exception:
-                    inbox = []
+            inbox = self._read_inbox_locked()
 
             # Avoid duplicates
             if any(m.get("id") == msg_id for m in inbox):
@@ -251,44 +273,23 @@ class WhatsAppDaemon:
             }
             inbox.append(entry)
             inbox = inbox[-100:]  # Keep latest 100 messages
-
-            try:
-                with open(INBOX_FILE, "w", encoding="utf-8") as f:
-                    json.dump(inbox, f, ensure_ascii=False, indent=2)
-                logger.info(f"[WhatsApp] Incoming from {sender_name}: '{text}'")
-            except Exception as e:
-                logger.error(f"[WhatsApp] Error saving inbox: {e}")
+            self._atomic_write_inbox(inbox)
+            logger.info(f"[WhatsApp] Incoming from {sender_name}: '{text}'")
 
     def get_inbox(self, limit: int = 10, unread_only: bool = False) -> List[Dict[str, Any]]:
-        with self.lock:
-            if not INBOX_FILE.exists():
-                return []
-            try:
-                with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
-                    messages = json.load(f)
-            except Exception:
-                return []
-
-            if unread_only:
-                messages = [m for m in messages if m.get("unread", True)]
-
-            return messages[-limit:]
+        messages = self._read_inbox_locked()
+        if unread_only:
+            messages = [m for m in messages if m.get("unread", True)]
+        return messages[-limit:]
 
     def mark_all_read(self):
         with self.lock:
-            if not INBOX_FILE.exists():
+            messages = self._read_inbox_locked()
+            if not messages:
                 return
-            try:
-                with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
-                    messages = json.load(f)
-                for m in messages:
-                    m["unread"] = False
-                with open(INBOX_FILE, "w", encoding="utf-8") as f:
-                    json.dump(messages, f, ensure_ascii=False, indent=2)
-            except json.JSONDecodeError:
-                pass  # Ignore non-JSON stdout logs from node process
-            except Exception as e:
-                logger.error(f"[WhatsApp Daemon Stdout Error] {e}")
+            for m in messages:
+                m["unread"] = False
+            self._atomic_write_inbox(messages)
 
     def send_message(self, phone: str, text: str) -> Dict[str, Any]:
         """Sends a real WhatsApp message with a unique request_id and synchronously waits for server delivery confirmation."""
@@ -369,20 +370,10 @@ class WhatsAppDaemon:
                     "from_me": True
                 }
                 with self.lock:
-                    inbox = []
-                    if INBOX_FILE.exists():
-                        try:
-                            with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
-                                inbox = json.load(f)
-                        except Exception:
-                            inbox = []
+                    inbox = self._read_inbox_locked()
                     inbox.append(out_entry)
                     inbox = inbox[-150:]
-                    try:
-                        with open(INBOX_FILE, "w", encoding="utf-8") as f:
-                            json.dump(inbox, f, ensure_ascii=False, indent=2)
-                    except Exception:
-                        pass
+                    self._atomic_write_inbox(inbox)
 
                 return {
                     "success": True,
@@ -450,15 +441,9 @@ class WhatsAppDaemon:
                 if confirmed and result and result.get("success"):
                     # Confirmed by Baileys: Now clean up local inbox
                     with self.lock:
-                        if INBOX_FILE.exists():
-                            try:
-                                with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
-                                    inbox = json.load(f)
-                                inbox = [m for m in inbox if m.get("id") != message_id]
-                                with open(INBOX_FILE, "w", encoding="utf-8") as f:
-                                    json.dump(inbox, f, ensure_ascii=False, indent=2)
-                            except Exception:
-                                pass
+                        inbox = self._read_inbox_locked()
+                        inbox = [m for m in inbox if m.get("id") != message_id]
+                        self._atomic_write_inbox(inbox)
                     return {"success": True, "status": "delete_requested", "message": "Silme talebi WhatsApp sunucusuna iletildi (delete_requested).", "request_id": request_id}
                 elif result and not result.get("success"):
                     return {"success": False, "error": f"WhatsApp silme hatası: {result.get('error')}", "request_id": request_id}
@@ -472,15 +457,9 @@ class WhatsAppDaemon:
 
         # Local deletion only ("Benden Sil")
         with self.lock:
-            if INBOX_FILE.exists():
-                try:
-                    with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
-                        inbox = json.load(f)
-                    inbox = [m for m in inbox if m.get("id") != message_id]
-                    with open(INBOX_FILE, "w", encoding="utf-8") as f:
-                        json.dump(inbox, f, ensure_ascii=False, indent=2)
-                except Exception:
-                    pass
+            inbox = self._read_inbox_locked()
+            inbox = [m for m in inbox if m.get("id") != message_id]
+            self._atomic_write_inbox(inbox)
         return {"success": True, "message": "Mesaj yerel sohbet geçmişinden silindi."}
 
     def get_chats_overview(self) -> List[Dict[str, Any]]:
@@ -493,13 +472,7 @@ class WhatsAppDaemon:
             except Exception:
                 contacts = []
 
-        inbox = []
-        if INBOX_FILE.exists():
-            try:
-                with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
-                    inbox = json.load(f)
-            except Exception:
-                inbox = []
+        inbox = self._read_inbox_locked()
 
         overview = []
         for c in contacts:
@@ -581,13 +554,7 @@ class WhatsAppDaemon:
             except Exception:
                 pass
 
-        inbox = []
-        if INBOX_FILE.exists():
-            try:
-                with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
-                    inbox = json.load(f)
-            except Exception:
-                inbox = []
+        inbox = self._read_inbox_locked()
 
         history = []
         for m in inbox:
@@ -622,17 +589,11 @@ class WhatsAppDaemon:
             return
 
         with self.lock:
-            if INBOX_FILE.exists():
-                try:
-                    with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
-                        inbox = json.load(f)
-                    for m in inbox:
-                        if m.get("id") in msg_ids:
-                            m["unread"] = False
-                    with open(INBOX_FILE, "w", encoding="utf-8") as f:
-                        json.dump(inbox, f, ensure_ascii=False, indent=2)
-                except Exception:
-                    pass
+            inbox = self._read_inbox_locked()
+            for m in inbox:
+                if m.get("id") in msg_ids:
+                    m["unread"] = False
+            self._atomic_write_inbox(inbox)
 
     def get_status(self) -> Dict[str, Any]:
         return {

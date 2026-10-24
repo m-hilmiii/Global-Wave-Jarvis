@@ -7,6 +7,7 @@ import re
 import random
 import subprocess
 import requests
+import hashlib
 from pathlib import Path
 from config.settings import load_settings, get_ffmpeg_bin, ASSETS_DIR, TEMP_WORKSPACE
 from engine.laya_decision_engine import laya_engine
@@ -136,7 +137,7 @@ def download_video_cached(url: str, keyword: str, force_refresh: bool = False, o
 
     orient_prefix = "land" if orientation in ["landscape", "horizontal"] else "port"
     clean_kw = re.sub(r'[^a-zA-Z0-9_]', '_', sanitize_keyword(keyword))[:25]
-    url_hash = str(abs(hash(url)))[:10]
+    url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
     out_path = CACHE_DIR / f"clip_{orient_prefix}_{clean_kw}_{url_hash}.mp4"
     
     if out_path.exists() and not force_refresh and out_path.stat().st_size > 1024:
@@ -179,7 +180,7 @@ def get_clip_for_scene(
     force_refresh: bool = False,
     orientation: str = "portrait"
 ) -> str:
-    routed_query = laya_engine.route_broll_keyword(visual_keyword, default_kw="technology")
+    routed_query = laya_engine.route_broll_keyword(visual_keyword, default_kw=visual_keyword)
     clean_kw = sanitize_keyword(routed_query)
     
     settings = load_settings()

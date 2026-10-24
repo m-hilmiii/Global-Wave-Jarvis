@@ -7,6 +7,7 @@ Hybrid Pattern: Deterministic Hard Rules + Multilingual Decision Model.
 """
 import os
 import time
+import re
 import threading
 from typing import List, Dict, Any, Optional
 
@@ -56,24 +57,21 @@ class LayaDecisionEngine:
             self.is_ready = False
 
     def _hard_rule_broll(self, text: str) -> Optional[str]:
-        """Awesome-Jev Guardrail Pattern: Instant exact rule match before neural inference."""
+        """Awesome-Jev Guardrail Pattern: Instant exact rule match with strict word boundaries to prevent substring collisions."""
         t = text.lower()
-        if any(w in t for w in ["yapay zeka", "ai", "robot", "sunucu", "yazılım", "kodlama"]):
-            return "artificial intelligence robotics"
-        if any(w in t for w in ["kripto", "bitcoin", "borsa", "para", "grafik", "hisse", "finans"]):
-            return "financial crypto market"
-        if any(w in t for w in ["uzay", "gezegen", "karadelik", "roket", "galaksi", "astronot"]):
-            return "deep space cosmos"
-        if any(w in t for w in ["lüks", "luks", "spor araba", "gökdelen", "penthouse"]):
-            return "luxury urban lifestyle"
-        if any(w in t for w in ["orman", "şelale", "selale", "okyanus", "doğa", "doga"]):
-            return "cinematic nature landscape"
-        if any(w in t for w in ["piramit", "antik", "gladyatör", "tarih", "imparatorluk"]):
-            return "ancient history mystery"
-        if any(w in t for w in ["hacker", "siber", "şifre", "sızıntı"]):
-            return "cyber security hacker"
-        if any(w in t for w in ["laboratuvar", "dna", "mikroskop", "aşı"]):
-            return "modern science laboratory"
+        rules = [
+            (r"\b(yapay zeka|ai|robot|sunucu|yazılım|yazilim|kodlama)\b", "artificial intelligence robotics"),
+            (r"\b(kripto|bitcoin|borsa|para|grafik|hisse|finans)\b", "financial crypto market"),
+            (r"\b(uzay|gezegen|karadelik|roket|galaksi|astronot)\b", "deep space cosmos"),
+            (r"\b(lüks|luks|spor araba|gökdelen|gokdelen|penthouse)\b", "luxury urban lifestyle"),
+            (r"\b(orman|şelale|selale|okyanus|doğa|doga)\b", "cinematic nature landscape"),
+            (r"\b(piramit|antik|gladyatör|gladyator|tarih|imparatorluk)\b", "ancient history mystery"),
+            (r"\b(hacker|siber|şifre|sifre|sızıntı|sizinti)\b", "cyber security hacker"),
+            (r"\b(laboratuvar|dna|mikroskop|aşı|asi)\b", "modern science laboratory"),
+        ]
+        for pattern, category in rules:
+            if re.search(pattern, t):
+                return category
         return None
 
     def route_broll_keyword(self, scene_text: str, default_kw: str = "technology") -> str:
@@ -196,20 +194,29 @@ class LayaDecisionEngine:
             return self._heuristic_comment_analysis(cleaned)
 
     def _heuristic_comment_analysis(self, comments: List[str]) -> Dict[str, Any]:
-        pos_words = ["harika", "guzel", "tebrik", "eline saglik", "super", "efsane", "bayildim"]
-        neg_words = ["kotu", "ses", "duyulmuyor", "berbat", "sikayet", "hizli", "anlasilmiyor"]
-        req_words = ["yap", "ceker misin", "gelsin", "lutfen", "istiyoruz", "anlat"]
+        pos_words = ["harika", "guzel", "tebrik", "eline saglik", "super", "efsane", "bayildim", "akici", "mukemmel"]
+        # Contextual negative patterns: prevent isolated words like 'ses' or 'hizli' from poisoning positive comments
+        neg_patterns = [
+            r"\b(kotu|berbat|sikayet|anlasilmiyor|rezalet|berbat|duyulmuyor)\b",
+            r"\b(ses\s+(kotu|berbat|kisik|anlasilmiyor|gelmiyor|duyulmuyor|cok kotu))\b",
+            r"\b(cok\s+hizli|asiri\s+hizli|yetisemiyorum)\b",
+        ]
+        req_words = ["yap", "ceker misin", "gelsin", "lutfen", "istiyoruz", "anlat", "yeni video"]
 
         pos, neg = 0, 0
         demands, complaints = [], []
         for c in comments:
             low = c.lower()
-            if any(w in low for w in pos_words):
+            is_pos = any(w in low for w in pos_words)
+            is_neg = any(re.search(pat, low) for pat in neg_patterns)
+            
+            if is_pos and not is_neg:
                 pos += 1
-            if any(w in low for w in neg_words):
+            elif is_neg:
                 neg += 1
                 complaints.append(c)
-            if any(w in low for w in req_words):
+                
+            if any(w in low for w in req_words) and not is_neg:
                 demands.append(c)
 
         total = max(1, len(comments))

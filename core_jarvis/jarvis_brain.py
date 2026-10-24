@@ -1,5 +1,3 @@
-import threading
-import uuid
 """
 Global-Wawe / Stark-Core - JARVIS Executive AI Brain
 100% Real-World Architecture powered by local Qwen 3 (8B) via Ollama.
@@ -16,6 +14,8 @@ import re
 import time
 import json
 import logging
+import threading
+import uuid
 import requests
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -29,13 +29,22 @@ from core_jarvis.tools.gmail_tool import gmail_tool
 
 logger = logging.getLogger("Jarvis.Brain")
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+def get_ollama_url() -> str:
+    """Returns Ollama host URL from settings, falling back to localhost or env var."""
+    try:
+        from config.settings import load_settings
+        s = load_settings()
+        return s.get("ollama_host", "http://127.0.0.1:11434")
+    except Exception:
+        return os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+
+OLLAMA_URL = get_ollama_url()
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 YT_TOKEN_FILE = CONFIG_DIR / "youtube_tokens.json"
 
 def detect_best_model() -> str:
     try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
+        r = requests.get(f"{get_ollama_url()}/api/tags", timeout=3)
         if r.status_code == 200:
             installed = [m.get("name") for m in r.json().get("models", [])]
             for pref in ["qwen3:8b", "qwen3:14b", "llama3.1:8b", "qwen2.5-coder:7b", "mistral-nemo:12b"]:
@@ -231,7 +240,16 @@ class JarvisBrain:
         unread_inbox = whatsapp_tool.get_inbox(limit=5, unread_only=True)
         inbox_summary = [{"kimden": m["sender_name"], "mesaj": m["text"], "saat": m.get("time", ""), "okunmadı": m.get("unread", False)} for m in unread_inbox]
 
+        memory_summary = memory_graph.get_context_summary()
+        relevant_memories = memory_graph.search_memories(user_text, limit=3)
+        mem_str = memory_summary
+        if relevant_memories:
+            mem_str += "\nİlgili Hatırlananlar:\n" + "\n".join(f"- {m['key_term']}: {m['content']}" for m in relevant_memories)
+
         system_instruction = f"""{JARVIS_SYSTEM_PROMPT}
+
+HAFIZA VE KURALLAR:
+{mem_str}
 
 KAYITLI REHBER:
 {json.dumps(contacts_summary, ensure_ascii=False, indent=2)}
@@ -274,15 +292,19 @@ JSON ŞEMASI:
   "hud_reply": "..."
 }}
 """
+        messages_payload = [{"role": "system", "content": system_instruction}]
+        if hasattr(self, "conversation_history") and self.conversation_history:
+            for turn in self.conversation_history[-6:]:
+                if isinstance(turn, dict) and "role" in turn and "content" in turn:
+                    messages_payload.append({"role": turn["role"], "content": turn["content"]})
+        messages_payload.append({"role": "user", "content": user_text})
+
         try:
             resp = requests.post(
-                f"{OLLAMA_URL}/api/chat",
+                f"{get_ollama_url()}/api/chat",
                 json={
                     "model": self.model_name,
-                    "messages": [
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": user_text}
-                    ],
+                    "messages": messages_payload,
                     "stream": False,
                     "format": "json",
                     "options": {"temperature": 0.2}
