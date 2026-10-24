@@ -2407,12 +2407,15 @@ document.addEventListener("DOMContentLoaded", () => {
         // Hardware & VRAM Telemetry Loop
         async function updateTelemetry() {
             try {
-                const r = await authFetch("/api/jarvis/telemetry");
+                const r = await authFetch("/api/jarvis/system/telemetry");
                 const d = await r.json();
-                if (d.status === "success" && d.metrics) {
+                if (d.status === "success" && d.telemetry) {
                     const el = document.getElementById("jarvisVramText");
                     if (el) {
-                        el.textContent = `RAM: %${d.metrics.ram_used_pct} (%${d.metrics.swap_used_pct} Swap)`;
+                        const ram = d.telemetry.ram;
+                        const cpu = d.telemetry.cpu;
+                        el.textContent = `RAM: %${ram.usage_percent} | CPU: %${cpu.usage_percent}`;
+                        el.title = `i5-14400F (${cpu.usage_percent}%) | RX 9060 XT | RAM: ${ram.used_gb}/${ram.total_gb} GB`;
                     }
                 }
             } catch(e) {}
