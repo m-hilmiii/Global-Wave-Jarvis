@@ -1060,6 +1060,50 @@ async def api_jarvis_security_audit():
         "audit_trail": permission_guard.get_audit_trail(limit=50)
     }
 
+from core_jarvis.tools.system_tool import system_tool
+from core_jarvis.reality_memory import reality_memory
+from core_jarvis.orchestrator import orchestrator
+
+@app.get("/api/jarvis/system/telemetry")
+async def api_jarvis_system_telemetry():
+    data = await run_in_threadpool(system_tool.get_hardware_telemetry)
+    return {"status": "success", "telemetry": data}
+
+@app.get("/api/jarvis/reality/state")
+async def api_jarvis_reality_state():
+    data = await run_in_threadpool(reality_memory.resume_context)
+    return {"status": "success", "reality": data}
+
+@app.post("/api/jarvis/orchestrator/dispatch")
+async def api_jarvis_orchestrator_dispatch(request: Request):
+    payload = await request.json()
+    prompt = payload.get("prompt", "").strip()
+    confirmed = bool(payload.get("confirmed", False))
+    if not prompt:
+        return JSONResponse({"status": "error", "message": "Prompt is required"}, status_code=400)
+    res = await run_in_threadpool(orchestrator.handle_intent, prompt, confirmed)
+    return {"status": "success", "result": res}
+
+@app.post("/api/jarvis/system/powershell")
+async def api_jarvis_system_powershell(request: Request):
+    payload = await request.json()
+    cmd = payload.get("command", "").strip()
+    confirmed = bool(payload.get("confirmed", False))
+    if not cmd:
+        return JSONResponse({"status": "error", "message": "Command is required"}, status_code=400)
+    res = await run_in_threadpool(system_tool.run_safe_powershell, cmd, confirmed)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+@app.post("/api/jarvis/system/backup")
+async def api_jarvis_system_backup(request: Request):
+    payload = await request.json()
+    file_path = payload.get("file_path", "").strip()
+    note = payload.get("note", "api_backup").strip()
+    if not file_path:
+        return JSONResponse({"status": "error", "message": "file_path is required"}, status_code=400)
+    res = await run_in_threadpool(system_tool.create_snapshot, file_path, note)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
 
 
 

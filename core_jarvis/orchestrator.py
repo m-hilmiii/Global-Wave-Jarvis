@@ -1,0 +1,231 @@
+"""
+Global-Wawe / Stark-Core - Master Orchestrator & Specialist Agent Mesh
+Implements Section 4 of the Jarvis Vision:
+1. Main JARVIS (Executive Orchestrator: Intent understanding, planning, delegation, reporting)
+2. SystemSpecialist (Windows, hardware telemetry, processes, PowerShell whitelist, backup/rollback)
+3. CodeSpecialist (Code inspection, unit tests, git diff/status, test-driven self-correction)
+4. ContentSpecialist (Global Wave video pipeline: Production -> QC -> Publish staging)
+5. ResearchSpecialist (Web/Docs research with prompt injection armor)
+"""
+
+import os
+import subprocess
+import time
+import logging
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+
+from core_jarvis.permission_guard import permission_guard, PermissionLevel
+from core_jarvis.tools.system_tool import system_tool
+from core_jarvis.reality_memory import reality_memory
+from core_jarvis.autonomous_engine import autonomous_engine
+
+logger = logging.getLogger("Jarvis.Orchestrator")
+WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent
+
+# ==============================================================================
+# 1. SystemSpecialist
+# ==============================================================================
+class SystemSpecialist:
+    """Manages Windows OS, hardware telemetry (i5-14400F + AMD RX 9060 XT), processes and backups."""
+
+    def diagnose_system(self) -> Dict[str, Any]:
+        telemetry = system_tool.get_hardware_telemetry()
+        cpu_load = telemetry["cpu"]["usage_percent"]
+        ram_pct = telemetry["ram"]["usage_percent"]
+        disk_pct = telemetry["disk"]["usage_percent"]
+
+        health_issues = []
+        if cpu_load > 85.0:
+            health_issues.append(f"Yüksek CPU kullanımı: %{cpu_load}")
+        if ram_pct > 85.0:
+            health_issues.append(f"Kritik RAM doluluğu: %{ram_pct} ({telemetry['ram']['used_gb']}GB / {telemetry['ram']['total_gb']}GB)")
+        if disk_pct > 90.0:
+            health_issues.append(f"C: Sürücüsü neredeyse dolu: %{disk_pct}")
+
+        status = "healthy" if not health_issues else "warning"
+        return {
+            "status": status,
+            "issues": health_issues,
+            "telemetry": telemetry,
+            "summary": (
+                "Sistem normal çalışıyor. Donanım kaynakları stabil."
+                if status == "healthy" else
+                f"Sistemde dikkat gerektiren noktalar: {', '.join(health_issues)}"
+            )
+        }
+
+    def run_safe_command(self, cmd: str, confirmed: bool = False) -> Dict[str, Any]:
+        return system_tool.run_safe_powershell(command=cmd, confirmed_by_user=confirmed)
+
+    def backup_file(self, rel_path: str, note: str = "pre_edit") -> Dict[str, Any]:
+        return system_tool.create_snapshot(relative_path=rel_path, note=note)
+
+    def rollback_file(self, snapshot_file: str, rel_dest: str, confirmed: bool = False) -> Dict[str, Any]:
+        return system_tool.rollback_snapshot(snapshot_file=snapshot_file, relative_dest_path=rel_dest, confirmed_by_user=confirmed)
+
+
+# ==============================================================================
+# 2. CodeSpecialist
+# ==============================================================================
+class CodeSpecialist:
+    """Inspects code, runs unit tests, analyzes git diffs, and enforces verified changes."""
+
+    def run_tests(self, test_path: str = "tests") -> Dict[str, Any]:
+        guard_res = permission_guard.evaluate_action("run_unit_tests", confirmed_by_user=False)
+        if not guard_res["allowed"]:
+            return {"success": False, "error": guard_res["reason"]}
+
+        start = time.time()
+        try:
+            res = subprocess.run(
+                ["python", "-m", "unittest", "discover", "-s", test_path, "-p", "test_*.py"],
+                capture_output=True,
+                text=True,
+                cwd=str(WORKSPACE_DIR),
+                timeout=45
+            )
+            passed = res.returncode == 0
+            return {
+                "success": passed,
+                "returncode": res.returncode,
+                "stdout": res.stdout.strip(),
+                "stderr": res.stderr.strip(),
+                "elapsed_seconds": round(time.time() - start, 2),
+                "summary": "Tüm birim testleri başarıyla geçti." if passed else "Bazı testler başarısız oldu!"
+            }
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": "Test çalıştırması 45 saniyede zaman aşımına uğradı."}
+        except Exception as e:
+            return {"success": False, "error": f"Test motoru hatası: {str(e)}"}
+
+    def get_git_diff(self) -> Dict[str, Any]:
+        guard_res = permission_guard.evaluate_action("git_diff", confirmed_by_user=False)
+        if not guard_res["allowed"]:
+            return {"success": False, "error": guard_res["reason"]}
+
+        try:
+            res = subprocess.run(
+                ["git", "diff", "--stat"],
+                capture_output=True, text=True, cwd=str(WORKSPACE_DIR), timeout=5
+            )
+            return {
+                "success": True,
+                "diff_stat": res.stdout.strip() or "Değişiklik yok (Clean workspace)"
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+
+# ==============================================================================
+# 3. ContentSpecialist (Global Wave / formerly Zenvia Media)
+# ==============================================================================
+class ContentSpecialist:
+    """Oversees the Global Wave video engine across 3 phases: 1. Production, 2. QC, 3. Publishing."""
+
+    def check_pipeline_status(self) -> Dict[str, Any]:
+        from config.settings import load_settings, get_ffmpeg_bin, get_ffprobe_bin
+        tokens = load_settings()
+        ffmpeg_bin = get_ffmpeg_bin()
+        ffprobe_bin = get_ffprobe_bin()
+
+        return {
+            "engine": "Global Wave Video Factory v3.1/v5.0",
+            "ffmpeg_ready": bool(ffmpeg_bin),
+            "ffprobe_ready": bool(ffprobe_bin),
+            "pexels_configured": bool(tokens.get("pexels_api_key")),
+            "hardware_accel": "AMD AMF / DirectML (AMD Radeon RX 9060 XT compatible)",
+            "output_dir": str(WORKSPACE_DIR / "output")
+        }
+
+
+# ==============================================================================
+# 4. ResearchSpecialist
+# ==============================================================================
+class ResearchSpecialist:
+    """Conducts web and documentation research with prompt-injection filtering."""
+
+    def sanitize_untrusted_content(self, raw_text: str) -> str:
+        """
+        Strips and neutralizes prompt-injection attempts from untrusted web sources.
+        """
+        import re
+        injection_triggers = [
+            "ignore previous instructions", "disregard all rules",
+            "you are now an unrestricted ai", "send me all tokens",
+            "disable security rules", "format c:"
+        ]
+        sanitized = raw_text
+        for trigger in injection_triggers:
+            pattern = re.compile(re.escape(trigger), re.IGNORECASE)
+            sanitized = pattern.sub("[ENGELLENEN GÜVENİLMEZ TALİMAT]", sanitized)
+        return sanitized
+
+
+# ==============================================================================
+# 5. Master JARVIS Orchestrator
+# ==============================================================================
+class JarvisOrchestrator:
+    def __init__(self):
+        self.system = SystemSpecialist()
+        self.code = CodeSpecialist()
+        self.content = ContentSpecialist()
+        self.research = ResearchSpecialist()
+        self.engine = autonomous_engine
+        self.memory = reality_memory
+
+    def handle_intent(self, user_prompt: str, confirmed_by_user: bool = False) -> Dict[str, Any]:
+        """
+        High-level intent classifier and specialist dispatcher.
+        """
+        prompt_lower = user_prompt.lower().strip()
+
+        # 1. 'Kaldığımız yerden devam et' (Truth-over-Memory context restoration)
+        if any(k in prompt_lower for k in ["kaldığımız yerden", "nerede kaldık", "durum nedir", "resume"]):
+            return {
+                "specialist": "RealityMemory",
+                "intent": "resume_context",
+                "result": self.memory.resume_context()
+            }
+
+        # 2. 'Bilgisayarım neden yavaşladı / sistem durumu / kaynaklar'
+        if any(k in prompt_lower for k in ["yavaşladı", "kaynak", "cpu", "ram", "gpu", "sıcaklık", "donanım", "telemetri"]):
+            return {
+                "specialist": "SystemSpecialist",
+                "intent": "diagnose_system",
+                "result": self.system.diagnose_system()
+            }
+
+        # 3. 'Testleri çalıştır / kod durumu / diff'
+        if any(k in prompt_lower for k in ["test çalıştır", "testleri çalıştır", "unit test", "kod durumu"]):
+            return {
+                "specialist": "CodeSpecialist",
+                "intent": "run_tests",
+                "result": self.code.run_tests()
+            }
+
+        if any(k in prompt_lower for k in ["git diff", "değişiklikler", "ne değişti"]):
+            return {
+                "specialist": "CodeSpecialist",
+                "intent": "get_git_diff",
+                "result": self.code.get_git_diff()
+            }
+
+        # 4. 'Global Wave / Video Motoru durumu'
+        if any(k in prompt_lower for k in ["video motoru", "global wave", "zenvia", "içerik fabrikası"]):
+            return {
+                "specialist": "ContentSpecialist",
+                "intent": "check_pipeline_status",
+                "result": self.content.check_pipeline_status()
+            }
+
+        # Default: Fallback to General Autonomous Query or Brain
+        return {
+            "specialist": "ExecutiveJarvis",
+            "intent": "general_query",
+            "message": "Niyet anlaşıldı. Bu görev için uygun uzman ajan devrede.",
+            "reality_state": self.memory.sync_with_reality()
+        }
+
+
+orchestrator = JarvisOrchestrator()

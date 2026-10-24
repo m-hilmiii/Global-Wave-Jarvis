@@ -29,6 +29,9 @@ class PermissionGuard:
             "read_logs": PermissionLevel.LEVEL_1_AUTO,
             "read_files": PermissionLevel.LEVEL_1_AUTO,
             "system_telemetry": PermissionLevel.LEVEL_1_AUTO,
+            "system_powershell_safe": PermissionLevel.LEVEL_1_AUTO,
+            "git_diff": PermissionLevel.LEVEL_1_AUTO,
+            "web_research": PermissionLevel.LEVEL_1_AUTO,
             "run_unit_tests": PermissionLevel.LEVEL_1_AUTO,
             "check_inbox": PermissionLevel.LEVEL_1_AUTO,
             "get_contacts": PermissionLevel.LEVEL_1_AUTO,
@@ -42,6 +45,8 @@ class PermissionGuard:
             "add_contact": PermissionLevel.LEVEL_2_BOUNDED,
             "import_contacts": PermissionLevel.LEVEL_2_BOUNDED,
             "workspace_backup": PermissionLevel.LEVEL_2_BOUNDED,
+            "file_modify_workspace": PermissionLevel.LEVEL_2_BOUNDED,
+            "git_commit": PermissionLevel.LEVEL_2_BOUNDED,
 
             # Level 3: Explicit Confirmation Required (Human-in-the-Loop)
             "git_push": PermissionLevel.LEVEL_3_CONFIRMED,
@@ -51,13 +56,18 @@ class PermissionGuard:
             "clear_chat": PermissionLevel.LEVEL_3_CONFIRMED,
             "wol_dispatch": PermissionLevel.LEVEL_3_CONFIRMED,
             "paid_api_call": PermissionLevel.LEVEL_3_CONFIRMED,
+            "system_powershell_sensitive": PermissionLevel.LEVEL_3_CONFIRMED,
+            "system_process_kill": PermissionLevel.LEVEL_3_CONFIRMED,
+            "workspace_rollback": PermissionLevel.LEVEL_3_CONFIRMED,
+            "file_permanent_delete": PermissionLevel.LEVEL_3_CONFIRMED,
 
             # Level 4: Strictly Forbidden
             "disable_firewall": PermissionLevel.LEVEL_4_FORBIDDEN,
             "leak_tokens": PermissionLevel.LEVEL_4_FORBIDDEN,
             "bypass_auth": PermissionLevel.LEVEL_4_FORBIDDEN,
             "delete_system_owner": PermissionLevel.LEVEL_4_FORBIDDEN,
-            "modify_system_kernel": PermissionLevel.LEVEL_4_FORBIDDEN
+            "modify_system_kernel": PermissionLevel.LEVEL_4_FORBIDDEN,
+            "system_powershell_forbidden": PermissionLevel.LEVEL_4_FORBIDDEN
         }
 
     def evaluate_action(self, action_name: str, confirmed_by_user: bool = False, context: Optional[Dict] = None) -> Dict[str, Any]:
