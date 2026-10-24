@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 from typing import Dict
 from datetime import datetime
+from urllib.parse import urlparse
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles

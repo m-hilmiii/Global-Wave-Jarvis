@@ -70,5 +70,27 @@ class TestApiSecurityEndpoints(unittest.TestCase):
         self.assertIn("Desteklenmeyen veya geçersiz", res.json().get("message", ""))
 
 
+    def test_legitimate_local_origin_accepted(self):
+        # Local origin http://127.0.0.1:8000 must pass origin filter
+        res = self.client.post(
+            "/api/generate",
+            json={"topic": "   "},
+            headers={**self.auth_headers, "Origin": "http://127.0.0.1:8000"}
+        )
+        # Must pass origin validation without 403 and reach endpoint logic (400 for empty topic)
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("boş bırakılamaz", res.json().get("message", ""))
+
+    def test_external_cross_origin_rejected(self):
+        # External cross-origin request must be strictly rejected with 403
+        res = self.client.post(
+            "/api/generate",
+            json={"topic": "Test"},
+            headers={**self.auth_headers, "Origin": "http://malicious-external-site.com"}
+        )
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("Forbidden: Cross-origin request rejected.", res.json().get("message", ""))
+
+
 if __name__ == "__main__":
     unittest.main()
