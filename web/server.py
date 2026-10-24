@@ -1255,10 +1255,36 @@ async def api_jarvis_infra_route(request: Request):
     res = await run_in_threadpool(infra_tool.route_model_for_task, task_type)
     return {"status": "success", "routing": res}
 
+from core_jarvis.tools.browser_research_tool import browser_research_tool
 
+@app.post("/api/jarvis/research/query")
+async def api_jarvis_research_query(request: Request):
+    payload = await request.json()
+    query = payload.get("query", "").strip()
+    auto_note = payload.get("auto_note", True)
+    if not query:
+        return JSONResponse({"status": "error", "message": "query is required"}, status_code=400)
+    res = await run_in_threadpool(browser_research_tool.conduct_research_and_archive, query, auto_note=auto_note)
+    return {"status": "success", "research": res}
 
+@app.post("/api/jarvis/research/hardware-models")
+async def api_jarvis_research_models(request: Request):
+    payload = await request.json()
+    category = payload.get("category", "coding")
+    res = await run_in_threadpool(browser_research_tool.compare_hardware_models, category=category)
+    return {"status": "success", "comparison": res}
+
+@app.post("/api/jarvis/research/fetch")
+async def api_jarvis_research_fetch(request: Request):
+    payload = await request.json()
+    url = payload.get("url", "").strip()
+    if not url:
+        return JSONResponse({"status": "error", "message": "url is required"}, status_code=400)
+    res = await run_in_threadpool(browser_research_tool.fetch_page_content, url=url)
+    return {"status": "success" if res.get("success") else "error", "page": res}
 
 from core_jarvis.whatsapp_daemon import whatsapp_daemon, INBOX_FILE
+
 
 @app.get("/api/jarvis/chats")
 async def api_jarvis_chats():

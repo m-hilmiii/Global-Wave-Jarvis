@@ -1,9 +1,9 @@
 # 🧠 JARVIS Master Yetenek & Fonksiyon Kataloğu
 > **Sistem:** Global-Wave / Stark-Core Personal AI Operating System  
 > **Kullanıcı:** Mücahit Hilmi (Hitap: *Sayın Hilmi* / *Efendim*)  
-> **Versiyon:** v5.5 (Master Architecture)  
+> **Versiyon:** v5.6 (Master Architecture - Autonomous Research Integration)  
 > **Son Güncelleme:** 24 Ekim 2026  
-> **Doğrulama:** 90/90 Birim Testi Başarılı (`Ran 90 tests in 32.790s OK`)
+> **Doğrulama:** 96/96 Birim Testi Başarılı (`Ran 96 tests in 32.665s OK`)
 
 Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlarını, güvenlik kalkanını, API uç noktalarını ve tetikleyici komutlarını eksiksiz listeler. Yeni bir özellik eklendikçe güncellenir.
 
@@ -92,6 +92,12 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 - **Akraba & Aile Protokolü:** Babaya (Yaşar Ünal) ve Anneye kesinlikle "Sayın Babam" gibi robotik hitaplar kullanmaz; sıcak ve saygılı Türk aile diline uygun hitap eder.
 - **HITL Taslak Ayrımı:** Mesaj taslağı hazırlar, kullanıcı onaylamadan asla karşı tarafa göndermez.
 
+### H. Otonom Web & Dokümantasyon Araştırma Motoru (`browser_research_tool.py`)
+- **$0 Maliyetli Web Taraması (Zero-Cost Web Search):** Harici arama motoru API'lerine para ödemeden DuckDuckGo HTML ağ geçidi üzerinden anlık arama yapar ve özet snippet'leri çeker.
+- **Prompt-Injection Zırhı:** Güvenilmeyen web sitelerinden gelebilecek talimatları ("ignore previous instructions", "disregard all rules", "send me all tokens", "format c:", vb.) tarar ve `[ENGELLENEN GÜVENİLMEZ TALİMAT]` olarak temizleyerek sistem promptunu korur.
+- **Donanıma Özel Yerel Model Kıyaslama:** i5-14400F + AMD Radeon RX 9060 XT + 16GB RAM mimarisine göre modelleri değerlendirir. 16GB RAM için ~4.7-5.2 GB bellek tüketen 7B/8B modelleri (`qwen2.5-coder:7b`, `deepseek-r1:8b`, `qwen3:8b`) önerir; sistemi çökertecek 70B modelleri "Yetersiz Donanım" olarak raporlar.
+- **Yönetici Not Defterine Otomatik Arşivleme:** Araştırılan teknik konuları otomatik olarak `personal_assistant.add_note` ile `research` etiketiyle kaydeder.
+
 ---
 
 ## 🗣️ 4. Jarvis Tetikleyici Cümleler (Sesli & Yazılı Sözlük)
@@ -110,6 +116,8 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | *"Aktif görevler / kuyruk ne durumda?"* | `TaskCoordinator` | Arka planda devam eden işlerin % ilerlemesini ve kalan süresini sunar. |
 | *"Görev ekle: Yeni Shorts planla"* | `AssistantSpecialist` | Kişisel ajandaya öncelikli yeni görev kaydeder. |
 | *"Not al: [Fikir]"* | `AssistantSpecialist` | Yönetici not defterine anlık memo ekler. |
+| *"Araştır: Ollama deepseek-r1 performansı"* | `ResearchSpecialist` | Web ve yerel havuzu tarar, bulguları özetler ve yönetici notlarına kaydeder. |
+| *"Donanım için en iyi modelleri karşılaştır"* | `ResearchSpecialist` | i5-14400F, RX 9060 XT ve 16GB RAM sınırlarına göre en uygun modelleri kıyaslar. |
 
 ---
 
@@ -138,6 +146,9 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | `/api/jarvis/infra/docker` | `GET` | Docker daemon ve konteyner durumu |
 | `/api/jarvis/infra/models` | `GET` | Yerel Ollama modelleri |
 | `/api/jarvis/infra/route` | `POST` | $0 maliyetli optimal model seçici |
+| `/api/jarvis/research/query` | `POST` | Web araması yapar ve yönetici notuna kaydeder |
+| `/api/jarvis/research/hardware-models` | `POST` | Donanım sınırlarına göre yerel model karşılaştırması |
+| `/api/jarvis/research/fetch` | `POST` | Web sayfası içeriğini güvenli/temizlenmiş metin olarak çeker |
 
 ---
 *Not: Bu dosya her yeni modül, araç veya yetenek entegrasyonunda otomatik olarak güncellenir.*
