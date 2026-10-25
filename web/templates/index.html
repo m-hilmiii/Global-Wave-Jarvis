@@ -223,6 +223,33 @@
                     </div>
                 </div>
 
+                <!-- WhatsApp QR Code Pairing & History Sync Modal -->
+                <div id="whatsappQrModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+                    <div class="bg-dark-900 border border-emerald-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center relative">
+                        <button id="closeQrModalBtn" class="absolute top-4 right-4 text-slate-400 hover:text-white text-sm">
+                            <i class="fa-solid fa-xmark text-lg"></i>
+                        </button>
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto text-2xl">
+                            <i class="fa-brands fa-whatsapp"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-white font-display">WhatsApp QR Bağlantısı & Geçmiş Senkronizasyonu</h3>
+                            <p class="text-xs text-slate-400 mt-1">Telefonunuzdan <strong class="text-emerald-300">WhatsApp &rarr; Bağlı Cihazlar &rarr; Cihaz Bağla</strong> menüsünü açıp karekodu okutun.</p>
+                        </div>
+                        <div id="qrCodeContainer" class="w-64 h-64 mx-auto bg-dark-950 border border-slate-800 rounded-xl flex flex-col items-center justify-center p-3 overflow-hidden">
+                            <div id="qrLoadingSpinner" class="space-y-3 text-center">
+                                <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-400"></i>
+                                <p id="qrStatusText" class="text-xs text-slate-300 font-mono">Yeni QR kodu üretiliyor, lütfen 3-5 saniye bekleyin...</p>
+                            </div>
+                            <img id="qrCodeImage" src="" alt="WhatsApp QR" class="hidden w-full h-full object-contain rounded-lg bg-white p-2" />
+                        </div>
+                        <div class="text-[11px] text-slate-400 font-mono bg-dark-950/80 border border-slate-800/80 rounded-lg p-2.5">
+                            <i class="fa-solid fa-circle-info text-cyan-400 mr-1"></i>
+                            QR okutulduktan sonra geçmiş sohbetleriniz otomatik olarak eşitlenecek ve bu pencere kapanacaktır.
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Top Telemetry & Controls Ribbon (Compact shrink-0) -->
                 <div class="shrink-0 grid grid-cols-2 md:grid-cols-4 gap-2.5">
                     <div class="bg-dark-850/90 border border-cyan-500/30 rounded-xl px-3 py-2 flex items-center space-x-2.5 shadow-md backdrop-blur-md">
@@ -231,7 +258,7 @@
                         </div>
                         <div class="min-w-0">
                             <div class="text-[9px] text-slate-400 uppercase font-mono tracking-wider">Yönetici Beyin</div>
-                            <div class="text-xs font-bold text-cyan-300 font-mono truncate">JARVIS (Qwen 3 - 8B)</div>
+                            <div id="jarvisBrainTitleText" class="text-xs font-bold text-cyan-300 font-mono truncate">JARVIS God Mode v3.0 (14B)</div>
                         </div>
                     </div>
 
@@ -321,10 +348,16 @@
                                     <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></div>
                                     <span class="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">İletişim & Rehber</span>
                                 </div>
-                                <button id="addContactModalBtn" title="Rehber Yönetimi ve İçe Aktarma" class="text-xs bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 px-2.5 py-1 rounded-lg transition-all flex items-center space-x-1.5 shadow-sm">
-                                    <i class="fa-solid fa-address-book text-[11px] text-cyan-400"></i>
-                                    <span>Rehber Paneli</span>
-                                </button>
+                                <div class="flex items-center space-x-1.5">
+                                    <button id="importChatExportBtn" title="WhatsApp Sohbetini Dışa Aktarılmış .txt dosyasından İçe Aktar" class="text-xs bg-dark-850 hover:bg-dark-800 border border-emerald-500/30 text-emerald-300 px-2 py-1 rounded-lg transition-all flex items-center space-x-1 shadow-sm">
+                                        <i class="fa-solid fa-file-import text-[11px] text-emerald-400"></i>
+                                        <span class="hidden sm:inline">Sohbet Aktar (.txt)</span>
+                                    </button>
+                                    <button id="addContactModalBtn" title="Rehber Yönetimi ve İçe Aktarma" class="text-xs bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 px-2.5 py-1 rounded-lg transition-all flex items-center space-x-1.5 shadow-sm">
+                                        <i class="fa-solid fa-address-book text-[11px] text-cyan-400"></i>
+                                        <span>Rehber</span>
+                                    </button>
+                                </div>
                             </div>
                             <div class="relative">
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-2 text-xs text-slate-500"></i>
@@ -383,6 +416,21 @@
                                 <button id="backToJarvisBtn" title="JARVIS Asistanına Dön ve Talimat Ver" class="hidden px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/40 text-cyan-300 text-[11px] font-bold flex items-center space-x-1.5 transition-all shadow-sm shadow-cyan-950/50 animate-pulse">
                                     <i class="fa-solid fa-atom"></i>
                                     <span>JARVIS'e Dön</span>
+                                </button>
+                                <!-- Auto-Dispatch Toggle (Zero-Click Mode) -->
+                                <button id="btnAutoDispatchToggle" title="Otomatik Yanıt Gönderimi (Açık: Onaysız Direkt Gönderir / Kapalı: Taslak Onayı İster)" class="px-2 py-1 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/40 text-indigo-300 text-xs font-medium flex items-center space-x-1 transition-all">
+                                    <i class="fa-solid fa-bolt text-indigo-400 text-[11px]"></i>
+                                    <span id="autoDispatchLabel" class="hidden md:inline">Oto: Kapalı</span>
+                                </button>
+                                <!-- AI Delegate Toggle (Meşgul Modu) -->
+                                <button id="btnAiDelegateToggle" title="AI Vekil (Meşgul Modu: Sen meşgulken gelen mesajları JARVIS bir insan gibi kibarca yanıtlar)" class="px-2 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-300 text-xs font-medium flex items-center space-x-1 transition-all">
+                                    <i class="fa-solid fa-robot text-purple-400 text-[11px]"></i>
+                                    <span id="aiDelegateLabel" class="hidden md:inline">Meşgul Modu</span>
+                                </button>
+                                <!-- Reconnect & Sync History -->
+                                <button id="btnReconnectSync" title="WhatsApp Oturumunu ve Geçmişini Baileys Store ile Yeniden Senkronize Et (QR Tazeleyici)" class="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-medium flex items-center space-x-1 transition-all">
+                                    <i class="fa-solid fa-arrows-rotate text-emerald-400 text-[11px]"></i>
+                                    <span class="hidden lg:inline">Geçmişi Eşitle</span>
                                 </button>
                                 <button id="chatVoiceCallBtn" title="WhatsApp Sohbetini Aç (wa.me)" class="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-medium flex items-center space-x-1 transition-all">
                                     <i class="fa-brands fa-whatsapp text-[11px] text-emerald-400"></i>
@@ -484,7 +532,10 @@
                                 <button type="button" id="jarvisMicBtn" title="Mikrofon ile Sesli Konuş" class="bg-dark-950 border border-cyan-500/30 hover:border-cyan-400 text-cyan-400 w-10 h-10 rounded-xl flex items-center justify-center text-sm transition-all shadow-md shrink-0">
                                     <i class="fa-solid fa-microphone"></i>
                                 </button>
-                                <input type="text" id="jarvisChatInput" placeholder="JARVIS ile konuşun: 'Adem'e mesaj hazırla', 'Babam ne yazmış?'..." class="flex-1 bg-dark-950 border border-cyan-500/30 rounded-xl px-4 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-all font-sans">
+                                <button type="button" id="jarvisVisionBtn" title="Ekranıma Bak (Vision & Hata Analizi)" class="bg-dark-950 border border-purple-500/30 hover:border-purple-400 text-purple-400 w-10 h-10 rounded-xl flex items-center justify-center text-sm transition-all shadow-md shrink-0">
+                                    <i class="fa-solid fa-eye"></i>
+                                </button>
+                                <input type="text" id="jarvisChatInput" placeholder="JARVIS ile konuşun: 'Ekranıma bak', 'Bugün ne yapmalıyım?', 'Video üret'..." class="flex-1 bg-dark-950 border border-cyan-500/30 rounded-xl px-4 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-all font-sans">
                                 <button type="button" id="jarvisAiDraftBtn" title="JARVIS ile bu kişiye özel şık yanıt tasarla" class="hidden bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 font-semibold px-3 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-sm shrink-0">
                                     <i class="fa-solid fa-wand-magic-sparkles text-indigo-400 text-[11px]"></i>
                                     <span>Yanıt Tasarla</span>
@@ -1352,7 +1403,7 @@
                             </div>
 
                             <div class="w-60 h-[426px] bg-dark-950 rounded-xl border border-slate-800 overflow-hidden relative shadow-2xl flex items-center justify-center">
-                                <video id="studioVideoPlayer" class="w-full h-full object-cover hidden" controls autoplay playsinline loop preload="auto"></video>
+                                <video id="studioVideoPlayer" class="w-full h-full object-cover hidden" controls playsinline loop preload="metadata"></video>
                                 <div id="studioVideoEmpty" class="text-center p-6 text-slate-600">
                                     <i class="fa-solid fa-film text-4xl mb-3"></i>
                                     <p class="text-xs font-mono">Henüz video yüklenmedi</p>

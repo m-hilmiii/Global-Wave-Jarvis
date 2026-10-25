@@ -6,11 +6,17 @@ import unittest
 import json
 import tempfile
 from pathlib import Path
-from starlette.testclient import TestClient
+try:
+    from fastapi.testclient import TestClient
+    from web.server import app
+    HAS_FASTAPI = True
+except ImportError:
+    HAS_FASTAPI = False
+    TestClient = None
+    app = None
 
 from core_jarvis.tools.contacts import ContactsManager
 from core_jarvis.jarvis_brain import jarvis_brain
-from web.server import app
 
 class TestContactsAndChatManagement(unittest.TestCase):
     def setUp(self):
@@ -120,6 +126,7 @@ END:VCARD
         self.assertEqual(res.get("action_taken"), "chat_cleared")
         self.assertEqual(len(jarvis_brain.conversation_history), 0)
 
+    @unittest.skipUnless(HAS_FASTAPI, "FastAPI not installed in current test environment")
     def test_api_endpoints_contacts_and_chat_clear(self):
         from web.server import LOCAL_SESSION_TOKEN
         client = TestClient(app)
@@ -143,6 +150,23 @@ END:VCARD
         clear_res = client.post("/api/jarvis/chat/clear", headers=headers)
         self.assertEqual(clear_res.status_code, 200)
         self.assertEqual(clear_res.json().get("status"), "success")
+
+    def test_import_google_csv_and_sqlite_sync(self):
+        csv_data = """First Name,Middle Name,Last Name,Phone 1 - Value
+MehmetTest,,ÖzcanTest,0532 999 88 77 ::: 0532-999-8877
+ZeynepTest,,KayaTest,+90544 111 22 33
+"""
+        res = self.mgr.import_google_csv(csv_data)
+        self.assertEqual(res["added"], 2)
+        found = self.mgr.find_contact("MehmetTest")
+        self.assertIsNotNone(found)
+        self.assertIn("05329998877", found["phone"])
+
+        # Verify SQLite synchronization
+        from db.database import get_all_contacts_from_db
+        db_contacts = get_all_contacts_from_db()
+        self.assertGreaterEqual(len(db_contacts), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1349,6 +1349,25 @@ async def api_jarvis_voice_status():
     res = await run_in_threadpool(voice_tool.get_status)
     return {"status": "success", "voice_status": res}
 
+from core_jarvis.tools.vision_tool import vision_tool
+
+@app.post("/api/jarvis/vision/inspect")
+async def api_jarvis_vision_inspect(request: Request):
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        pass
+    prompt = payload.get("prompt", "Ekrandaki içeriği açıkla")
+    mode = payload.get("mode", "general")
+    res = await run_in_threadpool(vision_tool.analyze_screen, user_prompt=prompt, mode=mode)
+    return {"status": "success" if res.get("success") else "error", "vision": res}
+
+@app.get("/api/jarvis/vision/capture")
+async def api_jarvis_vision_capture():
+    res = await run_in_threadpool(vision_tool.capture_screen)
+    return {"status": "success" if res.get("success") else "error", "capture": res}
+
 from core_jarvis.daemon_manager import daemon_manager
 
 @app.get("/api/jarvis/daemon/status")
@@ -1430,16 +1449,82 @@ async def api_jarvis_message_delete(request: Request):
 async def api_jarvis_inbox_check_new(since: float = 0):
     overview = whatsapp_daemon.get_chats_overview()
     new_msgs = []
+    since_norm = whatsapp_daemon._normalize_timestamp(since)
     if INBOX_FILE.exists():
         try:
             with open(INBOX_FILE, "r", encoding="utf-8-sig") as f:
                 inbox = json.load(f)
             for m in inbox:
-                if m.get("timestamp", 0) > since and not m.get("from_me") and m.get("unread"):
+                m_ts = whatsapp_daemon._normalize_timestamp(m.get("timestamp", 0))
+                if m_ts > since_norm and not m.get("from_me") and m.get("unread"):
                     new_msgs.append(m)
         except Exception:
             pass
     return {"status": "success", "overview": overview, "new_messages": new_msgs}
+
+@app.get("/api/jarvis/settings/whatsapp_auto_dispatch")
+async def api_jarvis_get_auto_dispatch():
+    from core_jarvis.jarvis_brain import jarvis_brain
+    return {"status": "success", "auto_dispatch": jarvis_brain.auto_dispatch_whatsapp}
+
+@app.post("/api/jarvis/settings/whatsapp_auto_dispatch")
+async def api_jarvis_set_auto_dispatch(request: Request):
+    data = await request.json()
+    enabled = bool(data.get("enabled", False))
+    from core_jarvis.jarvis_brain import jarvis_brain
+    val = jarvis_brain.set_auto_dispatch_whatsapp(enabled)
+    return {"status": "success", "auto_dispatch": val}
+
+@app.get("/api/jarvis/settings/ai_delegate")
+async def api_jarvis_get_ai_delegate():
+    return {
+        "status": "success",
+        "active": whatsapp_daemon.ai_delegate_active,
+        "targets": whatsapp_daemon.ai_delegate_targets,
+        "logs": whatsapp_daemon.ai_delegate_logs
+    }
+
+@app.post("/api/jarvis/settings/ai_delegate")
+async def api_jarvis_set_ai_delegate(request: Request):
+    data = await request.json()
+    action = data.get("action", "toggle")
+    target = data.get("target")
+    if action == "enable":
+        whatsapp_daemon.enable_ai_delegate(target)
+    elif action == "disable":
+        logs = whatsapp_daemon.disable_ai_delegate()
+        return {"status": "success", "active": False, "logs": logs}
+    elif action == "toggle":
+        if whatsapp_daemon.ai_delegate_active:
+            logs = whatsapp_daemon.disable_ai_delegate()
+            return {"status": "success", "active": False, "logs": logs}
+        else:
+            whatsapp_daemon.enable_ai_delegate(target)
+    return {
+        "status": "success",
+        "active": whatsapp_daemon.ai_delegate_active,
+        "targets": whatsapp_daemon.ai_delegate_targets
+    }
+
+@app.post("/api/jarvis/whatsapp/reconnect_sync")
+async def api_jarvis_whatsapp_reconnect_sync():
+    res = await run_in_threadpool(whatsapp_daemon.reconnect_and_sync)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+@app.get("/api/jarvis/whatsapp/qr_status")
+async def api_jarvis_whatsapp_qr_status():
+    st = whatsapp_daemon.get_status()
+    return {"status": "success", **st}
+
+@app.post("/api/jarvis/whatsapp/import_chat_export")
+async def api_jarvis_whatsapp_import_chat_export(request: Request):
+    data = await request.json()
+    contact_name = data.get("contact_name", "")
+    content = data.get("content", "")
+    if not contact_name or not content:
+        return JSONResponse({"status": "error", "message": "Kişi adı ve sohbet metni gereklidir."}, status_code=400)
+    res = await run_in_threadpool(whatsapp_daemon.import_chat_export, contact_name, content)
+    return {"status": "success" if res.get("success") else "error", "result": res}
 
 @app.post("/api/jarvis/transcribe")
 async def api_jarvis_transcribe(request: Request):
@@ -1532,3 +1617,59 @@ async def api_jarvis_transcribe(request: Request):
                         temp_file.unlink()
                     except Exception:
                         pass
+
+
+from core_jarvis.tools.model_manager import model_manager
+from core_jarvis.autonomous_engine import autonomous_engine
+from core_jarvis.reality_memory import reality_memory
+from core_jarvis.tools.system_tool import system_tool
+from core_jarvis.proactive_daemon import proactive_watchdog
+
+# Start background proactive watchdog thread
+try:
+    proactive_watchdog.start()
+except Exception as _w_err:
+    logger.debug(f"Watchdog auto-start skipped: {_w_err}")
+
+
+@app.get("/api/jarvis/models/arsenal")
+async def api_jarvis_models_arsenal():
+    res = await run_in_threadpool(model_manager.get_arsenal_status)
+    return {"status": "success", "arsenal": res}
+
+
+@app.post("/api/jarvis/autonomous/execute")
+async def api_jarvis_autonomous_execute(request: Request):
+    payload = await request.json()
+    goal = payload.get("goal", "").strip()
+    max_steps = int(payload.get("max_steps", 5))
+    if not goal:
+        return JSONResponse({"status": "error", "message": "goal is required"}, status_code=400)
+    res = await run_in_threadpool(autonomous_engine.plan_and_execute_goal, goal, max_steps=max_steps)
+    return {"status": "success", "report": res}
+
+
+@app.get("/api/jarvis/project/resume")
+async def api_jarvis_project_resume():
+    res = await run_in_threadpool(reality_memory.resume_context)
+    return {"status": "success", "resume": res}
+
+
+@app.get("/api/jarvis/system/diagnose")
+async def api_jarvis_system_diagnose():
+    res = await run_in_threadpool(system_tool.diagnose_system_bottlenecks)
+    return {"status": "success", "diagnosis": res}
+
+
+@app.post("/api/jarvis/files/organize")
+async def api_jarvis_files_organize(request: Request):
+    payload = await request.json() if request.headers.get("content-length") else {}
+    preview_only = bool(payload.get("preview_only", True))
+    res = await run_in_threadpool(system_tool.organize_downloads_folder, preview_only=preview_only)
+    return {"status": "success", "result": res}
+
+
+@app.get("/api/jarvis/watchdog/alerts")
+async def api_jarvis_watchdog_alerts():
+    res = await run_in_threadpool(proactive_watchdog.get_recent_alerts, 10)
+    return {"status": "success", "alerts": res}

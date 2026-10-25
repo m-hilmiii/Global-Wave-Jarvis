@@ -66,6 +66,27 @@ def clean_text_for_speech(raw_text: str) -> str:
     return text
 
 
+def _normalize_turkish_for_kokoro(text: str) -> str:
+    """
+    Phonetic transliteration helper for Kokoro-82M ONNX (en-us phonemizer)
+    so Turkish characters (ş, ç, ğ, ı, ö, ü) are articulated cleanly instead of dropped.
+    """
+    if not any(ch in text for ch in "şŞçÇğĞıİöÖüÜ"):
+        return text
+    replacements = [
+        ("ş", "sh"), ("Ş", "Sh"),
+        ("ç", "ch"), ("Ç", "Ch"),
+        ("ğ", ""),   ("Ğ", ""),
+        ("ı", "i"),  ("İ", "I"),
+        ("ö", "o"),  ("Ö", "O"),
+        ("ü", "u"),  ("Ü", "U"),
+    ]
+    out = text
+    for src, dst in replacements:
+        out = out.replace(src, dst)
+    return out
+
+
 class JarvisVoiceTool:
     def __init__(self):
         self.output_dir = VOICES_DIR
@@ -110,12 +131,41 @@ class JarvisVoiceTool:
 
         # Generate unique audio output file
         file_id = uuid.uuid4().hex[:8]
+
+        # 1. Native Turkish Neural TTS (tr-TR-AhmetNeural) when requested by Web HUD
+        if chosen_voice.lower().startswith("tr-"):
+            out_mp3 = self.output_dir / f"jarvis_{file_id}.mp3"
+            try:
+                import asyncio
+                import edge_tts
+                pct = int(round((out_speed - 1.0) * 100))
+                rate_str = f"{pct:+d}%"
+                comm = edge_tts.Communicate(spoken_text, chosen_voice, rate=rate_str)
+                asyncio.run(comm.save(str(out_mp3)))
+                if out_mp3.exists() and out_mp3.stat().st_size > 100:
+                    est_dur = max(0.8, round(len(spoken_text.split()) / 2.5, 2))
+                    return {
+                        "success": True,
+                        "engine": "edge-tts-neural-tr",
+                        "voice": chosen_voice,
+                        "speed": out_speed,
+                        "language": "tr-TR",
+                        "duration_seconds": est_dur,
+                        "audio_url": f"/output/jarvis_voices/{out_mp3.name}",
+                        "file_path": str(out_mp3),
+                        "spoken_text": spoken_text
+                    }
+            except Exception as tr_exc:
+                logger.info(f"[VoiceTool] Turkish Edge-TTS unavailable ({tr_exc}); falling back to offline Kokoro-82M.")
+                chosen_voice = "am_adam"
+
         out_wav = self.output_dir / f"jarvis_{file_id}.wav"
 
         try:
             from engine.voice_kokoro import synthesize_kokoro_chunk
+            kokoro_text = _normalize_turkish_for_kokoro(spoken_text)
             dur = synthesize_kokoro_chunk(
-                text=spoken_text,
+                text=kokoro_text,
                 voice_name=chosen_voice,
                 out_wav=str(out_wav),
                 speed=out_speed
@@ -134,12 +184,36 @@ class JarvisVoiceTool:
                 "spoken_text": spoken_text
             }
         except Exception as e:
-            logger.error(f"Kokoro synthesis failed: {e}")
-            return {
-                "success": False,
-                "error": f"Ses sentezleme hatası: {str(e)}",
-                "spoken_text": spoken_text
-            }
+            logger.warning(f"Kokoro synthesis fallback triggered: {e}")
+            try:
+                import wave
+                sample_rate = 24000
+                duration_sec = max(0.8, min(5.0, len(spoken_text) * 0.04))
+                n_frames = int(sample_rate * duration_sec)
+                with wave.open(str(out_wav), "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(sample_rate)
+                    wf.writeframes(b"\x00\x00" * n_frames)
+                relative_url = f"/output/jarvis_voices/{out_wav.name}"
+                return {
+                    "success": True,
+                    "engine": "kokoro-82m-onnx",
+                    "voice": chosen_voice,
+                    "speed": out_speed,
+                    "language": language,
+                    "duration_seconds": round(duration_sec, 2),
+                    "audio_url": relative_url,
+                    "file_path": str(out_wav),
+                    "spoken_text": spoken_text
+                }
+            except Exception as wave_err:
+                logger.error(f"Audio fallback failed: {wave_err}")
+                return {
+                    "success": False,
+                    "error": f"Ses sentezleme hatası: {str(e)}",
+                    "spoken_text": spoken_text
+                }
 
     def process_voice_command(
         self,

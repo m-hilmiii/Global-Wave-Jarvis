@@ -169,5 +169,134 @@ class AutonomousEngine:
         reality_memory.sync_with_reality()
         return report
 
+    def decompose_goal_into_steps(self, goal: str, max_steps: int = 5) -> List[Dict[str, Any]]:
+        """
+        Decomposes a compound natural language goal into executable specialist steps
+        (capped at max_steps=5 to prevent infinite loops).
+        """
+        g_low = goal.lower()
+        steps: List[Dict[str, Any]] = []
+
+        if any(k in g_low for k in ["git diff", "ne değişti", "değişiklik", "git durum"]):
+            steps.append({
+                "action": "git_status",
+                "tool": "git_diff",
+                "description": "Çalışma alanındaki Git değişikliklerini incele"
+            })
+        if any(k in g_low for k in ["test", "birim test", "doğrula"]):
+            steps.append({
+                "action": "run_tests",
+                "tool": "code_tests",
+                "description": "Proje birim testlerini çalıştır ve doğrula"
+            })
+        if any(k in g_low for k in ["sistem durum", "telemetri", "donanım", "ram", "vram"]):
+            steps.append({
+                "action": "get_telemetry",
+                "tool": "system_status",
+                "description": "Donanım, RAM ve VRAM telemetrisini oku"
+            })
+        if any(k in g_low for k in ["ekran", "görüntü", "hataya bak"]):
+            steps.append({
+                "action": "file_read",
+                "tool": "screen_inspect",
+                "description": "Aktif ekran görüntüsünü yakala ve Qwen2.5-VL ile analiz et"
+            })
+        if any(k in g_low for k in ["araştır", "web", "internet"]):
+            steps.append({
+                "action": "web_search",
+                "tool": "web_research",
+                "query": goal,
+                "description": f"Web araştırması yürüt: {goal[:50]}"
+            })
+        if any(k in g_low for k in ["brifing", "ajanda", "günlük özet"]):
+            steps.append({
+                "action": "get_daily_briefing",
+                "tool": "daily_briefing",
+                "description": "Günlük yönetici brifingini derle"
+            })
+        if any(k in g_low for k in ["not al", "notlara kaydet", "raporu kaydet", "kaydet"]):
+            steps.append({
+                "action": "add_note",
+                "tool": "add_note",
+                "description": "Elde edilen bulguları yönetici notlarına arşivle"
+            })
+
+        if not steps:
+            steps.append({
+                "action": "get_telemetry",
+                "tool": "system_status",
+                "description": f"Hedef analizi ve sistem kontrolü: {goal[:50]}"
+            })
+
+        return steps[:max_steps]
+
+    def plan_and_execute_goal(self, goal: str, max_steps: int = 5, user_confirmed: bool = False) -> Dict[str, Any]:
+        """
+        End-to-end 7-Step Autonomous Goal Planner & Executor:
+        Decomposes a compound directive into up to 5 verified steps and executes them sequentially.
+        """
+        plan_steps = self.decompose_goal_into_steps(goal, max_steps=max_steps)
+        accumulated_notes: List[str] = []
+
+        def _step_executor(step: Dict[str, Any]) -> Dict[str, Any]:
+            tool = step.get("tool", "")
+            if tool == "git_diff":
+                from core_jarvis.orchestrator import orchestrator
+                res = orchestrator.code.get_git_diff()
+                out = res.get("output", "Kaydedilmemiş değişiklik yok.")
+                accumulated_notes.append(f"[Git Diff]: {out[:300]}")
+                return {"success": True, "message": out[:300]}
+
+            if tool == "code_tests":
+                from core_jarvis.orchestrator import orchestrator
+                res = orchestrator.code.run_tests()
+                ok = res.get("success", False)
+                msg = "Tüm testler geçti." if ok else f"Test hatası: {res.get('error', '')}"
+                accumulated_notes.append(f"[Testler]: {msg}")
+                return {"success": ok, "message": msg, "error": res.get("error", "")}
+
+            if tool == "system_status":
+                from core_jarvis.vram_guard import vram_guard
+                m = vram_guard.get_system_metrics()
+                msg = f"RAM %{m.get('ram_used_pct')} dolu ({m.get('ram_available_gb')} GB boş)."
+                accumulated_notes.append(f"[Telemetri]: {msg}")
+                return {"success": True, "message": msg}
+
+            if tool == "screen_inspect":
+                from core_jarvis.tools.vision_tool import vision_tool
+                res = vision_tool.analyze_screen(prompt=goal, mode="general")
+                msg = res.get("analysis", "Ekran incelendi.")
+                accumulated_notes.append(f"[Ekran]: {msg[:250]}")
+                return {"success": res.get("success", True), "message": msg}
+
+            if tool == "web_research":
+                from core_jarvis.tools.browser_research_tool import browser_research_tool
+                res = browser_research_tool.conduct_research_and_archive(topic=step.get("query", goal), auto_note=False)
+                msg = res.get("summary_text", "")
+                accumulated_notes.append(f"[Web Araştırması]: {msg[:300]}")
+                return {"success": True, "message": msg}
+
+            if tool == "daily_briefing":
+                from core_jarvis.personal_assistant import personal_assistant
+                b = personal_assistant.get_daily_briefing()
+                msg = b.get("speak_text", "")
+                accumulated_notes.append(f"[Brifing]: {msg}")
+                return {"success": True, "message": msg}
+
+            if tool == "add_note":
+                from core_jarvis.personal_assistant import personal_assistant
+                body = "\n".join(accumulated_notes) if accumulated_notes else goal
+                personal_assistant.add_note(title=f"Otonom Görev Raporu: {goal[:35]}", content=body, tags=["autonomous"])
+                return {"success": True, "message": "Bulgular yönetici notlarına kaydedildi."}
+
+            return {"success": True, "message": "Adım tamamlandı."}
+
+        return self.run_goal_loop(
+            goal=goal,
+            plan_steps=plan_steps,
+            executor_func=_step_executor,
+            user_confirmed=user_confirmed
+        )
+
 
 autonomous_engine = AutonomousEngine()

@@ -5,7 +5,10 @@ dynamic ASS subtitles where each spoken word lights up in vibrant yellow/green.
 """
 import os
 import re
-from faster_whisper import WhisperModel
+try:
+    from faster_whisper import WhisperModel
+except ImportError:
+    WhisperModel = None
 
 _WHISPER_MODEL = None
 

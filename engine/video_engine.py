@@ -18,6 +18,32 @@ from pathlib import Path
 from config.settings import get_ffmpeg_bin, load_settings, ASSETS_DIR, OUTPUT_DIR, TEMP_WORKSPACE
 from engine.sfx_engine import build_transition_sfx_track
 
+_detected_encoder_flags = None
+
+def get_video_encoder_flags(ffmpeg_bin: str) -> list:
+    """
+    Auto-detects AMD AMF (h264_amf) hardware acceleration for AMD Radeon RX 9060 XT.
+    Falls back gracefully to libx264 CPU encoding if AMF is not available or errors.
+    """
+    global _detected_encoder_flags
+    if _detected_encoder_flags is not None:
+        return list(_detected_encoder_flags)
+
+    try:
+        res = subprocess.run([ffmpeg_bin, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=3)
+        encoders = res.stdout or ""
+        if "h264_amf" in encoders:
+            test_cmd = [ffmpeg_bin, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.05", "-c:v", "h264_amf", "-f", "null", "-"]
+            test_run = subprocess.run(test_cmd, capture_output=True, text=True, timeout=3)
+            if test_run.returncode == 0:
+                _detected_encoder_flags = ["-c:v", "h264_amf", "-quality", "speed"]
+                return list(_detected_encoder_flags)
+    except Exception:
+        pass
+
+    _detected_encoder_flags = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]
+    return list(_detected_encoder_flags)
+
 def offset_ass_subtitles(input_ass_path: str, output_ass_path: str, offset_seconds: float) -> str:
     """
     Offsets all Dialogue start and end timestamps in an ASS subtitle file by offset_seconds.
@@ -111,15 +137,14 @@ def normalize_clip(
             "setsar=1"
         )
 
+    encoder_flags = get_video_encoder_flags(ffmpeg_bin)
     cmd = [
         ffmpeg_bin, "-y",
         "-stream_loop", "-1",
         "-i", input_mp4,
         "-t", f"{target_duration:.3f}",
         "-vf", vf,
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "22",
+        *encoder_flags,
         "-an",
         out_mp4
     ]
@@ -258,6 +283,7 @@ def render_master_video(
         else:
             filter_parts.append(f"{mix_inputs}anull[aout]")
 
+        encoder_flags = get_video_encoder_flags(ffmpeg_bin)
         filter_complex_str = ";".join(filter_parts)
         cmd_master = [
             ffmpeg_bin, "-y",
@@ -265,9 +291,7 @@ def render_master_video(
             "-filter_complex", filter_complex_str,
             "-map", "[vout]",
             "-map", "[aout]",
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "20",
+            *encoder_flags,
             "-c:a", "aac",
             "-b:a", "192k",
             "-t", f"{total_video_duration:.3f}",
@@ -277,13 +301,12 @@ def render_master_video(
             temp_master
         ]
     else:
+        encoder_flags = get_video_encoder_flags(ffmpeg_bin)
         cmd_master = [
             ffmpeg_bin, "-y",
             *inputs,
             "-vf", vf_chain,
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "20",
+            *encoder_flags,
             "-c:a", "aac",
             "-b:a", "192k",
             "-t", f"{total_video_duration:.3f}",

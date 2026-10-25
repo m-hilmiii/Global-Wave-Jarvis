@@ -242,6 +242,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (tabName === "analytics") {
             loadAnalyticsData();
         }
+        if (tabName !== "studio" && studioVideoPlayer) {
+            try { studioVideoPlayer.pause(); } catch (e) {}
+        }
     };
 
     if (sidebarNav) {
@@ -740,9 +743,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (studioActiveTitle) studioActiveTitle.textContent = video.topic || "The 370 Million Dollar Rocket Disaster";
         
         if (studioVideoPlayer) {
+            studioVideoPlayer.autoplay = false;
             studioVideoPlayer.src = video.video_url;
             studioVideoPlayer.classList.remove("hidden");
             studioVideoPlayer.load();
+            try { studioVideoPlayer.pause(); } catch (e) {}
         }
         if (studioVideoEmpty) studioVideoEmpty.classList.add("hidden");
         if (studioDownloadBtn) studioDownloadBtn.href = video.video_url;
@@ -1655,6 +1660,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const formEl = document.getElementById("jarvisChatForm");
         const sendBtn = document.getElementById("jarvisSendBtn");
         const micBtn = document.getElementById("jarvisMicBtn");
+        const visionBtn = document.getElementById("jarvisVisionBtn");
         const aiDraftBtn = document.getElementById("jarvisAiDraftBtn");
         const activeTitleEl = document.getElementById("activeChatTitle");
         const activeSubEl = document.getElementById("activeChatSubtitle");
@@ -1672,6 +1678,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const voiceCallBtn = document.getElementById("chatVoiceCallBtn");
         const deleteForMeBtn = document.getElementById("chatDeleteForMeBtn");
         const deleteForEveryoneBtn = document.getElementById("chatDeleteForEveryoneBtn");
+        const autoDispatchBtn = document.getElementById("btnAutoDispatchToggle");
+        const autoDispatchLabel = document.getElementById("autoDispatchLabel");
+        const aiDelegateBtn = document.getElementById("btnAiDelegateToggle");
+        const aiDelegateLabel = document.getElementById("aiDelegateLabel");
+        const reconnectSyncBtn = document.getElementById("btnReconnectSync");
+        const importChatExportBtn = document.getElementById("importChatExportBtn");
         const searchInputEl = document.getElementById("jarvisChatSearchInput");
         const voiceToggleEl = document.getElementById("jarvisVoiceToggle");
         const contactCountBadge = document.getElementById("contactCountBadge");
@@ -1907,6 +1919,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const safeText = escapeHtml(text);
             let formatted = safeText
+                .replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, '<pre class="my-2 p-3 rounded-xl bg-slate-950/95 border border-cyan-500/30 font-mono text-xs text-emerald-300 overflow-x-auto custom-scrollbar"><code>$2</code></pre>')
+                .replace(/`([^`\n]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-amber-300 font-mono text-xs">$1</code>')
                 .replace(/\*\*(.*?)\*\*/g, '<strong class="text-cyan-300">$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em class="text-slate-300">$1</em>')
                 .replace(/\n/g, "<br>");
@@ -2113,6 +2127,18 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
+        function appendDateSeparator(dateStr) {
+            const div = document.createElement("div");
+            div.className = "flex items-center justify-center my-3";
+            div.innerHTML = `
+                <div class="px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-[10px] font-mono text-slate-400 shadow-sm flex items-center space-x-1.5">
+                    <i class="fa-regular fa-calendar-days text-cyan-400"></i>
+                    <span>${escapeHtml(dateStr)}</span>
+                </div>
+            `;
+            feedEl.appendChild(div);
+        }
+
         // --- Load & Render Specific Contact Messages ---
         async function loadContactMessages(contactQuery) {
             feedEl.innerHTML = `
@@ -2128,9 +2154,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (data.status === "success" && Array.isArray(data.messages) && data.messages.length > 0) {
                     currentMessages = data.messages;
+                    let lastDateStr = "";
                     data.messages.forEach(m => {
                         const isMe = m.from_me === true || m.sender_jid === "me";
                         const sender = isMe ? "Mücahit Hilmi" : (m.sender_name || contactQuery);
+                        
+                        // Render clean date separator between different days
+                        const dateLabel = m.date || (m.timestamp ? new Date(m.timestamp > 1e11 ? m.timestamp : m.timestamp * 1000).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }) : "");
+                        if (dateLabel && dateLabel !== lastDateStr) {
+                            lastDateStr = dateLabel;
+                            appendDateSeparator(dateLabel);
+                        }
+
                         appendMessage(sender, m.text, isMe, "", {
                             time: m.time,
                             messageId: m.id,
@@ -2159,6 +2194,15 @@ document.addEventListener("DOMContentLoaded", () => {
         // --- Local Neural TTS & Browser Speech Synthesizer ---
         let currentAudio = null;
         function speakText(text, audioUrl = null) {
+            if (!voiceToggleEl || !voiceToggleEl.checked) {
+                if (currentAudio) {
+                    currentAudio.pause();
+                    currentAudio = null;
+                }
+                if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+                if (window.setVoiceVisualizerActive) window.setVoiceVisualizerActive(false);
+                return;
+            }
             if (!text || !text.trim()) return;
 
             // 1. If backend provided a pre-synthesized audio URL (Kokoro-82M), play it directly
@@ -2176,11 +2220,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
-            // 2. Request Kokoro-82M speech audio from backend /api/jarvis/voice/speak
+            // 2. Request neural speech audio from backend /api/jarvis/voice/speak
             authFetch("/api/jarvis/voice/speak", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: text })
+                body: JSON.stringify({ text: text, voice: "tr-TR-AhmetNeural" })
             })
             .then(res => res.json())
             .then(data => {
@@ -2246,10 +2290,40 @@ document.addEventListener("DOMContentLoaded", () => {
                         const reply = data.result.reply;
                         let extraHtml = "";
 
+                        // Specialist Model & Domain Badge + DeepSeek-R1 / Qwen3 <think> Chain-of-Thought Drawer
+                        if (data.result.thinking_trace) {
+                            const safeThink = escapeHtml(data.result.thinking_trace).replace(/\n/g, "<br>");
+                            extraHtml += `
+                                <details class="mt-2.5 rounded-xl bg-purple-950/30 border border-purple-500/30 p-2.5 text-xs">
+                                    <summary class="cursor-pointer font-mono text-purple-300 font-semibold select-none">
+                                        <i class="fa-solid fa-brain mr-1.5"></i>Derin Muhakeme Zinciri (&lt;think&gt;)
+                                    </summary>
+                                    <div class="mt-2 pt-2 border-t border-purple-500/20 text-slate-300 font-mono text-[11px] leading-relaxed">
+                                        ${safeThink}
+                                    </div>
+                                </details>
+                            `;
+                        }
+
+                        if (data.result.model_used) {
+                            const domMap = {
+                                "coding": "💻 Kod Doktoru",
+                                "reasoning": "🔬 Derin Muhakeme",
+                                "primary_brain": "🧠 Ana Beyin"
+                            };
+                            const domLabel = domMap[data.result.specialist_domain] || "🧠 Bilişsel Çekirdek";
+                            extraHtml += `
+                                <div class="mt-2 pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                                    <span>${domLabel}</span>
+                                    <span class="px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/30 text-cyan-300">${escapeHtml(data.result.model_used)}</span>
+                                </div>
+                            `;
+                        }
+
                         // If JARVIS generated a draft, render interactive Human-In-The-Loop confirmation card
                         if (data.result.action_taken === "draft_created" || data.result.action_taken === "draft_revised") {
                             const activeDraftId = data.result.draft ? data.result.draft.draft_id : "";
-                            extraHtml = `
+                            extraHtml += `
                                 <div id="draftActionsBox" class="mt-3 pt-3 border-t border-cyan-500/30 flex items-center gap-2">
                                     <button onclick="window.confirmJarvisDraft(this, '${activeDraftId}')" class="px-3.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm">
                                         <i class="fa-solid fa-paper-plane text-emerald-400"></i> Onayla ve Gönder
@@ -2333,6 +2407,38 @@ document.addEventListener("DOMContentLoaded", () => {
                 const targetName = activeChat.short_name;
                 switchChat({ id: "jarvis", name: "JARVIS Core", short_name: "JARVIS", isAi: true });
                 handleSendMessage(`${targetName} kişisinin son mesajlarını analiz et ve bana ne yanıt vermem gerektiğini söyle`);
+            });
+        }
+
+        // --- JARVIS Vision: Screen Awareness ("Ekranıma Bak") ---
+        if (visionBtn) {
+            visionBtn.addEventListener("click", async () => {
+                appendMessage("Sistem", "👁️ JARVIS ekranınızı inceliyor...", false);
+                visionBtn.disabled = true;
+                visionBtn.classList.add("animate-pulse");
+                try {
+                    const res = await authFetch("/api/jarvis/vision/inspect", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            prompt: "Ekrandaki mevcut içeriği, aktif pencereyi ve varsa hata/uyarıları incele",
+                            mode: "general"
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.status === "success" && data.vision) {
+                        const analysis = data.vision.analysis;
+                        appendMessage("JARVIS Vision", analysis, false);
+                        speakText(analysis);
+                    } else {
+                        appendMessage("JARVIS Core", "Ekran analizi tamamlanamadı efendim.", false);
+                    }
+                } catch (err) {
+                    appendMessage("JARVIS Core", "Ekran tarama sırasında bir hata oluştu: " + err.message, false);
+                } finally {
+                    visionBtn.disabled = false;
+                    visionBtn.classList.remove("animate-pulse");
+                }
             });
         }
 
@@ -2469,6 +2575,273 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         };
 
+        // --- WhatsApp Auto-Dispatch Toggle (Zero-Click Mode) ---
+        let isAutoDispatchEnabled = false;
+        async function fetchAutoDispatchStatus() {
+            try {
+                const res = await authFetch("/api/jarvis/settings/whatsapp_auto_dispatch");
+                const data = await res.json();
+                if (data.status === "success") {
+                    isAutoDispatchEnabled = Boolean(data.auto_dispatch);
+                    updateAutoDispatchUI();
+                }
+            } catch (e) {}
+        }
+        function updateAutoDispatchUI() {
+            if (!autoDispatchBtn || !autoDispatchLabel) return;
+            if (isAutoDispatchEnabled) {
+                autoDispatchBtn.className = "px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold flex items-center space-x-1 shadow-sm";
+                autoDispatchLabel.textContent = "Oto: Açık";
+                autoDispatchBtn.title = "Otomatik Gönderim AÇIK: Mesajlar onay beklemeden doğrudan iletilir.";
+            } else {
+                autoDispatchBtn.className = "px-2 py-1 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/40 text-indigo-300 text-xs font-medium flex items-center space-x-1 transition-all";
+                autoDispatchLabel.textContent = "Oto: Kapalı";
+                autoDispatchBtn.title = "Otomatik Gönderim KAPALI: Mesajlar taslak olarak onayınıza sunulur.";
+            }
+        }
+        if (autoDispatchBtn) {
+            autoDispatchBtn.addEventListener("click", async () => {
+                const nextVal = !isAutoDispatchEnabled;
+                try {
+                    const res = await authFetch("/api/jarvis/settings/whatsapp_auto_dispatch", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ enabled: nextVal })
+                    });
+                    const data = await res.json();
+                    if (data.status === "success") {
+                        isAutoDispatchEnabled = data.auto_dispatch;
+                        updateAutoDispatchUI();
+                        speakText(isAutoDispatchEnabled ? "WhatsApp otomatik mesaj gönderimi açıldı efendim." : "WhatsApp onaylı mesaj modu açıldı efendim.");
+                    }
+                } catch (err) {
+                    alert("Ayar güncellenemedi: " + err.message);
+                }
+            });
+            fetchAutoDispatchStatus();
+        }
+
+        // --- AI Delegate / Meşgul Modu Toggle ---
+        let isAiDelegateActive = false;
+        async function fetchAiDelegateStatus() {
+            try {
+                const res = await authFetch("/api/jarvis/settings/ai_delegate");
+                const data = await res.json();
+                if (data.status === "success") {
+                    isAiDelegateActive = Boolean(data.active);
+                    updateAiDelegateUI();
+                }
+            } catch (e) {}
+        }
+        function updateAiDelegateUI() {
+            if (!aiDelegateBtn || !aiDelegateLabel) return;
+            if (isAiDelegateActive) {
+                aiDelegateBtn.className = "px-2 py-1 rounded-lg bg-purple-500/30 border border-purple-400 text-purple-200 text-xs font-bold flex items-center space-x-1 shadow-md shadow-purple-950/50 animate-pulse";
+                aiDelegateLabel.textContent = "Meşgul: Aktif";
+                aiDelegateBtn.title = "AI Vekil AKTİF: Siz meşgulken gelen mesajları JARVIS karşılar.";
+            } else {
+                aiDelegateBtn.className = "px-2 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-300 text-xs font-medium flex items-center space-x-1 transition-all";
+                aiDelegateLabel.textContent = "Meşgul Modu";
+                aiDelegateBtn.title = "AI Vekil PASİF: Meşgul modunu açmak için tıklayın.";
+            }
+        }
+        if (aiDelegateBtn) {
+            aiDelegateBtn.addEventListener("click", async () => {
+                const targetHint = (activeChat && activeChat.id !== "jarvis") ? activeChat.short_name : null;
+                const promptMsg = isAiDelegateActive
+                    ? "Meşgul modunu sonlandırmak ve görüşme özetini almak istiyor musunuz?"
+                    : `Meşgul modunu devreye almak istiyor musunuz? ${targetHint ? `("${targetHint}" için vekillik yapılacak)` : '(Tüm gelen mesajlar için vekillik yapılacak)'}`;
+                if (!confirm(promptMsg)) return;
+
+                try {
+                    const res = await authFetch("/api/jarvis/settings/ai_delegate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "toggle", target: targetHint })
+                    });
+                    const data = await res.json();
+                    if (data.status === "success") {
+                        isAiDelegateActive = Boolean(data.active);
+                        updateAiDelegateUI();
+                        if (!isAiDelegateActive && Array.isArray(data.logs) && data.logs.length > 0) {
+                            const summaryText = data.logs.map(l => `• ${l.sender_name}: "${l.incoming_text}" -> "${l.jarvis_reply}"`).join("\n");
+                            alert("Meşgul Modu Boyunca Yapılan Görüşmeler:\n\n" + summaryText);
+                        }
+                        speakText(isAiDelegateActive ? "Meşgul modu açıldı efendim. Mesajları ben karşılayacağım." : "Meşgul modu kapatıldı efendim.");
+                    }
+                } catch (err) {
+                    alert("Meşgul modu değiştirilemedi: " + err.message);
+                }
+            });
+            fetchAiDelegateStatus();
+        }
+
+        // --- Reconnect & Sync History (QR Modal & Live Polling) ---
+        const qrModal = document.getElementById("whatsappQrModal");
+        const closeQrModalBtn = document.getElementById("closeQrModalBtn");
+        const qrLoadingSpinner = document.getElementById("qrLoadingSpinner");
+        const qrStatusText = document.getElementById("qrStatusText");
+        const qrCodeImage = document.getElementById("qrCodeImage");
+        let qrPollInterval = null;
+
+        function stopQrPolling() {
+            if (qrPollInterval) {
+                clearInterval(qrPollInterval);
+                qrPollInterval = null;
+            }
+        }
+
+        if (closeQrModalBtn && qrModal) {
+            closeQrModalBtn.addEventListener("click", () => {
+                qrModal.classList.add("hidden");
+                stopQrPolling();
+            });
+        }
+
+        window.openWhatsAppPairingModal = function() {
+            if (!qrModal) return;
+            qrModal.classList.remove("hidden");
+            if (qrLoadingSpinner) qrLoadingSpinner.classList.remove("hidden");
+            if (qrCodeImage) {
+                qrCodeImage.classList.add("hidden");
+                qrCodeImage.src = "";
+            }
+            if (qrStatusText) qrStatusText.textContent = "Yeni QR kodu üretiliyor, lütfen 3-5 saniye bekleyin...";
+
+            const modalOpenedAt = Date.now() - 1500;
+            stopQrPolling();
+            let pollCount = 0;
+            qrPollInterval = setInterval(async () => {
+                pollCount++;
+                try {
+                    let st = null;
+                    try {
+                        const rStatic = await fetch(`/output/whatsapp_media/qr_status.json?t=${Date.now()}`, { cache: "no-store" });
+                        if (rStatic.ok) {
+                            const parsed = await rStatic.json();
+                            if (!parsed.updated_at || parsed.updated_at >= modalOpenedAt) {
+                                st = parsed;
+                            }
+                        }
+                    } catch (_) {}
+
+                    if (!st || (!st.qr_image && !st.is_connected && st.status !== "connected")) {
+                        try {
+                            const rApi = await authFetch("/api/jarvis/whatsapp/qr_status");
+                            if (rApi.ok) {
+                                const apiData = await rApi.json();
+                                if (apiData && (apiData.qr_image || apiData.is_connected || apiData.status === "connected")) {
+                                    st = apiData;
+                                }
+                            }
+                        } catch (_) {}
+                    }
+
+                    if (st && (st.is_connected || st.status === "connected")) {
+                        stopQrPolling();
+                        if (qrCodeImage) qrCodeImage.classList.add("hidden");
+                        if (qrLoadingSpinner) qrLoadingSpinner.classList.remove("hidden");
+                        if (qrStatusText) {
+                            qrStatusText.innerHTML = '<span class="text-emerald-400 font-bold text-sm">✅ WhatsApp Bağlantısı Kuruldu!</span><br/>Geçmiş mesajlarınız senkronize ediliyor...';
+                        }
+                        speakText("WhatsApp bağlantısı başarıyla kuruldu efendim. Sohbet geçmişiniz senkronize ediliyor.");
+                        setTimeout(() => {
+                            qrModal.classList.add("hidden");
+                            loadChatsList();
+                        }, 2500);
+                        return;
+                    }
+                    if (st && st.qr_image) {
+                        if (qrLoadingSpinner) qrLoadingSpinner.classList.add("hidden");
+                        if (qrCodeImage) {
+                            qrCodeImage.src = st.qr_image;
+                            qrCodeImage.classList.remove("hidden");
+                        }
+                    } else if (pollCount > 80) {
+                        stopQrPolling();
+                        if (qrStatusText) qrStatusText.textContent = "QR kodu zaman aşımına uğradı. Lütfen tekrar deneyin.";
+                    }
+                } catch (err) {}
+            }, 1500);
+        };
+
+        if (reconnectSyncBtn) {
+            reconnectSyncBtn.addEventListener("click", async () => {
+                const ok = confirm("WhatsApp oturumu sıfırlanıp Baileys mağazası (Store) ile tam geçmiş senkronizasyonu başlatılsın mı?\n\nBu işlem ekranda açılacak penceredeki yeni QR kodunu telefonunuzdan okutmanızı gerektirecektir.");
+                if (!ok) return;
+
+                reconnectSyncBtn.disabled = true;
+                reconnectSyncBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> Sıfırlanıyor...';
+                try {
+                    window.openWhatsAppPairingModal();
+                    const res = await authFetch("/api/jarvis/whatsapp/reconnect_sync", { method: "POST" });
+                    const data = await res.json();
+                    if (data.status === "success") {
+                        if (data.result && data.result.qr_image && qrCodeImage) {
+                            if (qrLoadingSpinner) qrLoadingSpinner.classList.add("hidden");
+                            qrCodeImage.src = data.result.qr_image;
+                            qrCodeImage.classList.remove("hidden");
+                        }
+                        speakText("WhatsApp oturumu sıfırlandı efendim. Lütfen ekrandaki QR kodunu telefonunuzla okutun.");
+                    } else {
+                        if (qrModal) qrModal.classList.add("hidden");
+                        stopQrPolling();
+                        alert("Hata: " + (data.result ? data.result.error : "Bilinmeyen hata"));
+                    }
+                } catch (e) {
+                    if (qrModal) qrModal.classList.add("hidden");
+                    stopQrPolling();
+                    alert("Senkronizasyon isteği başarısız: " + e.message);
+                } finally {
+                    reconnectSyncBtn.disabled = false;
+                    reconnectSyncBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate text-emerald-400 text-[11px]"></i><span class="hidden lg:inline">Geçmişi Eşitle</span>';
+                }
+            });
+        }
+
+        // --- WhatsApp Chat Export Import (.txt) ---
+        if (importChatExportBtn) {
+            importChatExportBtn.addEventListener("click", () => {
+                const contactDefault = (activeChat && activeChat.id !== "jarvis") ? activeChat.short_name : "Babam";
+                const contactName = prompt("Hangi kişi için WhatsApp sohbet dışa aktarma dosyası (.txt) yüklemek istiyorsunuz?", contactDefault);
+                if (!contactName) return;
+
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = ".txt";
+                input.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async (evt) => {
+                        const content = evt.target.result;
+                        try {
+                            const res = await authFetch("/api/jarvis/whatsapp/import_chat_export", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ contact_name: contactName, content: content })
+                            });
+                            const data = await res.json();
+                            if (data.status === "success") {
+                                alert(`Tebrikler! ${contactName} kişisine ait ${data.result.count} adet geçmiş mesaj başarıyla içe aktarıldı.`);
+                                speakText(`${contactName} kişisine ait geçmiş mesajlar aktarıldı efendim.`);
+                                loadChatsList();
+                                if (activeChat && activeChat.short_name.toLowerCase() === contactName.toLowerCase()) {
+                                    loadContactMessages(contactName);
+                                }
+                            } else {
+                                alert("İçe aktarma hatası: " + (data.message || data.result?.error));
+                            }
+                        } catch (err) {
+                            alert("Bağlantı hatası: " + err.message);
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            });
+        }
+
         // --- AI Smart Reply / Draft Helper for Active Contact ---
         if (aiDraftBtn) {
             aiDraftBtn.addEventListener("click", () => {
@@ -2535,15 +2908,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // --- Live WhatsApp Inbound Message Poller (Every 3.5s) ---
+        let lastOverviewSignature = "";
         async function checkInboundMessages() {
             try {
                 const res = await authFetch(`/api/jarvis/inbox/check_new?since=${lastPolledTimestamp}`);
                 const data = await res.json();
                 if (data.status === "success") {
+                    let hasNew = false;
                     if (Array.isArray(data.new_messages) && data.new_messages.length > 0) {
+                        hasNew = true;
                         data.new_messages.forEach(m => {
-                            if (m.timestamp > lastPolledTimestamp) {
-                                lastPolledTimestamp = m.timestamp;
+                            const normTs = m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp;
+                            if (normTs > lastPolledTimestamp) {
+                                lastPolledTimestamp = normTs;
                             }
                             showInboundToast(m.sender_name || "Bilinmeyen Kişi", m.time, m.text);
 
@@ -2554,7 +2931,11 @@ document.addEventListener("DOMContentLoaded", () => {
                                 appendMessage(m.sender_name, m.text, false, "", { time: m.time, messageId: m.id, fromMe: false, media: m.media });
                             }
                         });
-                        if (Array.isArray(data.overview)) {
+                    }
+                    if (Array.isArray(data.overview)) {
+                        const sig = data.overview.slice(0, 10).map(c => `${c.id}:${c.timestamp}:${c.last_text}`).join("|");
+                        if (sig !== lastOverviewSignature || hasNew) {
+                            lastOverviewSignature = sig;
                             allContacts = data.overview;
                             renderContactsList(allContacts);
                         }

@@ -194,13 +194,91 @@ async function main() {
         fs.mkdirSync(mediaDir, { recursive: true });
     }
     const { state, saveCreds } = await (0, baileys_1.useMultiFileAuthState)(authDir);
-    const { version } = await (0, baileys_1.fetchLatestWaWebVersion)().catch(() => ({
+    const { version } = await Promise.race([
+        (0, baileys_1.fetchLatestWaWebVersion)(),
+        new Promise((resolve) => setTimeout(() => resolve({ version: [2, 3000, 1051456098] }), 3500))
+    ]).catch(() => ({
         version: [2, 3000, 1051456098],
     }));
+    const qrStatusPath = path.join(mediaDir, "qr_status.json");
+    function writeBridgeStatus(statusObj) {
+        try {
+            if (!fs.existsSync(mediaDir))
+                fs.mkdirSync(mediaDir, { recursive: true });
+            fs.writeFileSync(qrStatusPath, JSON.stringify(statusObj, null, 2), "utf-8");
+        }
+        catch (e) { }
+    }
+    writeBridgeStatus({
+        status: "connecting",
+        is_connected: false,
+        has_qr: false,
+        qr_image: null,
+        updated_at: Date.now(),
+    });
+    const storePath = path.resolve(authDir, "..", "..", "data", "baileys_store.json");
+    const storeData = { messages: {}, contacts: {}, chats: {} };
+    const sentByBridgeIds = new Set();
+    const recentSentTexts = new Map();
+    const store = {
+        readFromFile(fp) {
+            try {
+                if (fs.existsSync(fp)) {
+                    const parsed = JSON.parse(fs.readFileSync(fp, "utf-8"));
+                    if (parsed && typeof parsed.messages === "object") {
+                        storeData.messages = parsed.messages;
+                    }
+                    if (parsed && typeof parsed.contacts === "object") {
+                        storeData.contacts = parsed.contacts;
+                    }
+                    if (parsed && typeof parsed.chats === "object") {
+                        storeData.chats = parsed.chats;
+                    }
+                }
+            }
+            catch (e) {
+                console.error("[Store Read Warning]", e);
+            }
+        },
+        writeToFile(fp) {
+            try {
+                const dir = path.dirname(fp);
+                if (!fs.existsSync(dir))
+                    fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(fp, JSON.stringify(storeData, null, 2), "utf-8");
+            }
+            catch (e) { }
+        },
+        upsertMessage(jid, msgObj) {
+            if (!jid || jid === "status@broadcast")
+                return;
+            if (!storeData.messages[jid])
+                storeData.messages[jid] = [];
+            const arr = storeData.messages[jid];
+            const mId = msgObj?.key?.id;
+            if (mId && arr.some((x) => x?.key?.id === mId))
+                return;
+            arr.push(msgObj);
+            if (arr.length > 250) {
+                storeData.messages[jid] = arr.slice(-250);
+            }
+        },
+        loadMessages(jid, limit = 50) {
+            const arr = storeData.messages[jid] || [];
+            return arr.slice(-limit);
+        }
+    };
+    store.readFromFile(storePath);
+    setInterval(() => {
+        store.writeToFile(storePath);
+    }, 15000);
+
     let sock = null;
+    let activeVersion = version;
+    const makeWASocketFn = baileys_1.makeWASocket || (typeof baileys_1.default === "function" ? baileys_1.default : baileys_1.default?.default);
     function startSocket() {
-        sock = (0, baileys_1.default)({
-            version,
+        sock = makeWASocketFn({
+            version: activeVersion,
             auth: state,
             logger: silentLogger,
             printQRInTerminal: false,
@@ -215,40 +293,70 @@ async function main() {
             const { connection, lastDisconnect, qr } = update;
             if (qr) {
                 qrcodeTerminal.generate(qr, { small: true });
+                let qrDataUrl = "";
                 try {
-                    const qrDataUrl = await qrcode_1.default.toDataURL(qr, { margin: 2, scale: 8 });
+                    qrDataUrl = await qrcode_1.default.toDataURL(qr, { margin: 2, scale: 8 });
                     const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>JARVIS WhatsApp QR</title></head><body style="background:#0b0f19;color:#58a6ff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:sans-serif;"><div style="background:#161b26;padding:32px;border-radius:16px;text-align:center;"><h2>JARVIS WhatsApp Bağlantısı</h2><img src="${qrDataUrl}" width="320" height="320" /></div></body></html>`;
                     fs.writeFileSync(path.join(authDir, "qr.html"), htmlContent, "utf-8");
                 }
                 catch (err) {
                     console.error("[QR Render Warning]", err);
                 }
-                emit({ type: "qr", data: qr });
+                writeBridgeStatus({
+                    status: "qr_ready",
+                    is_connected: false,
+                    has_qr: true,
+                    qr_data: qr,
+                    qr_image: qrDataUrl,
+                    updated_at: Date.now(),
+                });
+                emit({ type: "qr", data: qr, qr_image: qrDataUrl });
             }
             if (connection === "close") {
                 const statusCode = lastDisconnect?.error?.output?.statusCode ?? 500;
+                const errMsg = lastDisconnect?.error?.message || String(lastDisconnect?.error || "");
+                if (statusCode === 405) {
+                    activeVersion = [2, 3000, 1051456098];
+                }
                 if (statusCode === baileys_1.DisconnectReason.loggedOut) {
+                    writeBridgeStatus({
+                        status: "disconnected",
+                        is_connected: false,
+                        has_qr: false,
+                        qr_image: null,
+                        error: "Logged out from WhatsApp",
+                        updated_at: Date.now(),
+                    });
                     emit({ type: "status", status: "disconnected" });
                     emit({ type: "error", message: "Logged out from WhatsApp" });
                 }
                 else {
-                    emit({ type: "status", status: "disconnected" });
+                    emit({ type: "status", status: "disconnected", reason: errMsg, code: statusCode });
                     setTimeout(startSocket, 2500);
                 }
             }
             else if (connection === "open") {
+                writeBridgeStatus({
+                    status: "connected",
+                    is_connected: true,
+                    has_qr: false,
+                    qr_image: null,
+                    updated_at: Date.now(),
+                });
                 emit({ type: "status", status: "connected" });
             }
         });
         sock.ev.on("messages.upsert", async ({ messages }) => {
             for (const msg of messages) {
-                if (!msg.message || msg.key.fromMe)
+                if (!msg.message)
                     continue;
+                const isFromMe = Boolean(msg.key.fromMe);
                 const chatJid = msg.key.remoteJid || "";
                 if (!chatJid || chatJid === "status@broadcast")
                     continue;
-                const senderJid = msg.key.participant || chatJid;
-                const pushName = msg.pushName || "";
+                store.upsertMessage(chatJid, msg);
+                const senderJid = msg.key.participant || (isFromMe ? "me" : chatJid);
+                const pushName = isFromMe ? "Mücahit Hilmi (Ben)" : (msg.pushName || "");
                 let text = extractMessageText(msg.message).trim();
                 // Check and download any attached media (Image, PDF, ZIP, Audio, Video)
                 const mediaInfo = await extractAndDownloadMedia(msg, mediaDir);
@@ -266,16 +374,108 @@ async function main() {
                     };
                     text = typeLabels[mediaInfo.media_type] || `[Dosya: ${mediaInfo.file_name}]`;
                 }
+                const msgTimestamp = typeof msg.messageTimestamp === "number"
+                    ? msg.messageTimestamp
+                    : Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000);
+                const msgId = msg.key.id || "";
+                const nowMs = Date.now();
+                for (const [k, ts] of recentSentTexts.entries()) {
+                    if (nowMs - ts > 30000) recentSentTexts.delete(k);
+                }
+                const sentByJarvis = Boolean(
+                    (msgId && sentByBridgeIds.has(msgId)) ||
+                    (isFromMe && text && recentSentTexts.has(text))
+                );
                 // Single-writer architecture: emit full event to Python WhatsAppDaemon
                 emit({
                     type: "message",
                     jid: chatJid,
                     sender: senderJid,
                     text,
-                    message_id: msg.key.id,
+                    message_id: msgId,
                     pushName,
                     media: mediaInfo,
+                    from_me: isFromMe,
+                    sent_by_jarvis: sentByJarvis,
+                    timestamp: msgTimestamp,
                 });
+            }
+        });
+        sock.ev.on("contacts.upsert", (contacts) => {
+            if (Array.isArray(contacts)) {
+                for (const c of contacts) {
+                    if (c && c.id) {
+                        storeData.contacts[c.id] = Object.assign(storeData.contacts[c.id] || {}, c);
+                    }
+                }
+            }
+        });
+        sock.ev.on("contacts.update", (updates) => {
+            if (Array.isArray(updates)) {
+                for (const u of updates) {
+                    if (u && u.id) {
+                        storeData.contacts[u.id] = Object.assign(storeData.contacts[u.id] || {}, u);
+                    }
+                }
+            }
+        });
+        sock.ev.on("chats.upsert", (chats) => {
+            if (Array.isArray(chats)) {
+                for (const ch of chats) {
+                    if (ch && ch.id) {
+                        storeData.chats[ch.id] = Object.assign(storeData.chats[ch.id] || {}, ch);
+                    }
+                }
+            }
+        });
+        sock.ev.on("messaging-history.set", async ({ chats, contacts, messages }) => {
+            if (Array.isArray(contacts)) {
+                for (const c of contacts) {
+                    if (c && c.id) {
+                        storeData.contacts[c.id] = Object.assign(storeData.contacts[c.id] || {}, c);
+                    }
+                }
+            }
+            if (Array.isArray(chats)) {
+                for (const ch of chats) {
+                    if (ch && ch.id) {
+                        storeData.chats[ch.id] = Object.assign(storeData.chats[ch.id] || {}, ch);
+                    }
+                }
+            }
+            if (Array.isArray(messages)) {
+                const batch = [];
+                for (const msg of messages) {
+                    if (!msg.message)
+                        continue;
+                    const isFromMe = Boolean(msg.key.fromMe);
+                    const chatJid = msg.key.remoteJid || "";
+                    if (!chatJid || chatJid === "status@broadcast")
+                        continue;
+                    store.upsertMessage(chatJid, msg);
+                    const senderJid = msg.key.participant || (isFromMe ? "me" : chatJid);
+                    const pushName = isFromMe ? "Mücahit Hilmi (Ben)" : (msg.pushName || "");
+                    const text = extractMessageText(msg.message).trim();
+                    if (!text)
+                        continue;
+                    const msgTimestamp = typeof msg.messageTimestamp === "number"
+                        ? msg.messageTimestamp
+                        : Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000);
+                    batch.push({
+                        jid: chatJid,
+                        sender: senderJid,
+                        text,
+                        message_id: msg.key.id,
+                        pushName,
+                        from_me: isFromMe,
+                        timestamp: msgTimestamp,
+                        is_history: true,
+                    });
+                }
+                store.writeToFile(storePath);
+                if (batch.length > 0) {
+                    emit({ type: "history_batch", messages: batch });
+                }
             }
         });
     }
@@ -298,7 +498,13 @@ async function main() {
         }
         if (cmd.type === "send" && sock) {
             try {
+                if (cmd.text) {
+                    recentSentTexts.set(String(cmd.text).trim(), Date.now());
+                }
                 const sentMsg = await sock.sendMessage(cmd.jid, { text: cmd.text });
+                if (sentMsg?.key?.id) {
+                    sentByBridgeIds.add(sentMsg.key.id);
+                }
                 emit({
                     type: "sent",
                     jid: cmd.jid,
@@ -312,6 +518,63 @@ async function main() {
                     message: err?.message ?? String(err),
                     request_id: cmd.request_id,
                     jid: cmd.jid,
+                });
+            }
+        }
+        else if (cmd.type === "send_voice" && sock) {
+            try {
+                const audioBuffer = fs.readFileSync(cmd.file_path);
+                recentSentTexts.set("🎤 [Sesli Mesaj]", Date.now());
+                const sentMsg = await sock.sendMessage(cmd.jid, {
+                    audio: audioBuffer,
+                    mimetype: "audio/ogg; codecs=opus",
+                    ptt: true,
+                });
+                if (sentMsg?.key?.id) {
+                    sentByBridgeIds.add(sentMsg.key.id);
+                }
+                emit({
+                    type: "sent",
+                    jid: cmd.jid,
+                    request_id: cmd.request_id,
+                    message_id: sentMsg?.key?.id,
+                });
+            }
+            catch (err) {
+                emit({
+                    type: "error",
+                    message: err?.message ?? String(err),
+                    request_id: cmd.request_id,
+                    jid: cmd.jid,
+                });
+            }
+        }
+        else if (cmd.type === "get_chat_messages" && sock) {
+            try {
+                const limit = cmd.limit || 50;
+                const msgs = store.loadMessages(cmd.jid, limit);
+                const cleanMsgs = (msgs || []).map((m) => ({
+                    id: m.key.id,
+                    chat_jid: m.key.remoteJid,
+                    sender_jid: m.key.participant || (m.key.fromMe ? "me" : m.key.remoteJid),
+                    sender_name: m.key.fromMe ? "Mücahit Hilmi (Ben)" : (m.pushName || ""),
+                    text: extractMessageText(m.message).trim(),
+                    time: new Date((Number(m.messageTimestamp) || Date.now() / 1000) * 1000).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+                    timestamp: Number(m.messageTimestamp) || Date.now() / 1000,
+                    from_me: Boolean(m.key.fromMe),
+                })).filter((x) => x.text);
+                emit({
+                    type: "chat_messages_loaded",
+                    jid: cmd.jid,
+                    request_id: cmd.request_id,
+                    messages: cleanMsgs,
+                });
+            }
+            catch (err) {
+                emit({
+                    type: "error",
+                    message: err?.message ?? String(err),
+                    request_id: cmd.request_id,
                 });
             }
         }
@@ -337,6 +600,14 @@ async function main() {
                     request_id: cmd.request_id,
                     jid: cmd.jid,
                 });
+            }
+        }
+        else if (cmd.type === "presence" && sock) {
+            try {
+                await sock.sendPresenceUpdate(cmd.status || "composing", cmd.jid);
+            }
+            catch (err) {
+                // Non-fatal presence error
             }
         }
         else if (cmd.type === "disconnect" && sock) {

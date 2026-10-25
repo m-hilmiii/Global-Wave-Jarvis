@@ -77,3 +77,13 @@ kod_inceleme.txt
 .jarvis_cache/
 .jarvis_backups/
 
+
+# Personal Contacts & Real-World Data
+data/contacts.csv
+data/*.csv
+data/whatsapp_pushnames.json
+data/baileys_store.json
+
+# Runtime History, Agenda & State
+config/personal_agenda.json
+config/jarvis_reality_state.json

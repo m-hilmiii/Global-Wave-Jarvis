@@ -1,4 +1,4 @@
-﻿"""
+"""
 Global Wave - Configuration & Token Manager
 Handles API keys, paths, and system discovery without hardcoded credentials.
 Strict schema validation, thread-safe writes, and safe boolean parsing.
@@ -45,7 +45,8 @@ DEFAULT_CONFIG = {
     "enable_bgm": True,
     "font_name": "Arial",
     "allow_remote_ollama": False,
-    "strict_local": False
+    "strict_local": False,
+    "auto_dispatch_whatsapp": False
 }
 
 ALLOWED_SETTING_KEYS = {
@@ -67,7 +68,8 @@ ALLOWED_SETTING_KEYS = {
     "enable_bgm",
     "font_name",
     "allow_remote_ollama",
-    "strict_local"
+    "strict_local",
+    "auto_dispatch_whatsapp"
 }
 
 def parse_bool(v) -> bool:

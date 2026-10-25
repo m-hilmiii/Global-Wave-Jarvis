@@ -29,7 +29,7 @@ class ContactsManager:
                 import shutil
                 shutil.copy(example_file, self.file_path)
             else:
-                with open(self.file_path, "w", encoding="utf-8-sig") as f:
+                with open(self.file_path, "w", encoding="utf-8") as f:
                     json.dump({"contacts": []}, f, indent=2, ensure_ascii=False)
 
     def get_all(self) -> List[Dict]:
@@ -42,9 +42,14 @@ class ContactsManager:
     def _save_all(self, contacts: List[Dict]):
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_file = self.file_path.with_suffix(".tmp")
-        with open(tmp_file, "w", encoding="utf-8-sig") as f:
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump({"contacts": contacts}, f, indent=2, ensure_ascii=False)
         tmp_file.replace(self.file_path)
+        try:
+            from db.database import sync_contacts_to_db
+            sync_contacts_to_db(contacts)
+        except Exception as e:
+            logger.debug(f"[Contacts] SQLite sync skipped or error: {e}")
 
     def find_contact(self, name_query: str) -> Optional[Dict]:
         """Fuzzy-matches a name against contacts bidirectionally, by relationship, full name, and tokens."""
@@ -54,36 +59,59 @@ class ContactsManager:
         # Strip Turkish suffixes like 'a, 'e, 'ın, 'in, 'ye, 'ya, 'a, kişisine, adlı
         q_clean = re.sub(r"['’][a-zA-ZçğıöşüÇĞİÖŞÜ]+", "", q).strip()
         q_clean = re.sub(r"\b(kişisine|adlı\s+kişiye|kişi|adlı|adındaki|adında|numarasına)\b", "", q_clean).strip()
-        
+        q_digits = "".join(ch for ch in q if ch.isdigit())
+
         all_c = self.get_all()
 
-        # 0. Self references (Mücahit Hilmi)
-        if any(term in q_clean for term in ["kendim", "kendi", "bana", "benim", "mücahit", "hilmi", "patron"]):
+        # 0. Exact ID, Exact Name/Full Name, Exact LID, or Exact 10-digit Phone Match FIRST (unambiguous)
+        exact_matches = []
+        for c in all_c:
+            c_id = str(c.get("id", "")).lower().strip()
+            c_name = c.get("name", "").lower().strip()
+            c_full = c.get("full_name", "").lower().strip()
+            c_lid = str(c.get("lid", "")).strip()
+            if q == c_id or q_clean == c_name or q_clean == c_full or (c_lid and len(c_lid) >= 8 and (q == c_lid or q.split("@")[0] == c_lid)):
+                exact_matches.append(c)
+                continue
+            if len(q_digits) >= 10:
+                c_phones = [c.get("phone", "")] + list(c.get("alt_phones", []) or [])
+                for cp in c_phones:
+                    cp_digits = "".join(ch for ch in str(cp) if ch.isdigit())
+                    if len(cp_digits) >= 10 and cp_digits[-10:] == q_digits[-10:] and not cp_digits.startswith("9696"):
+                        exact_matches.append(c)
+                        break
+        if len(exact_matches) == 1:
+            return exact_matches[0]
+        elif len(exact_matches) > 1:
+            for em in exact_matches:
+                if em.get("id") in ("c_owner", "c_annem", "c_babam"):
+                    return em
+            return exact_matches[0]
+
+        q_words = set(re.findall(r"[a-zA-ZçğıöşüÇĞİÖŞÜ0-9]+", q_clean))
+
+        # 1. Self references (Mücahit Hilmi) — strict word match
+        if q_words & {"kendim", "kendime", "kendi", "bana", "mücahit", "mucahit", "hilmi", "patron"}:
             for c in all_c:
                 c_name = c.get("name", "").lower()
                 if "mücahit" in c_name or "hilmi" in c_name:
                     return c
 
-        # 1. Family Relationship Match (Babam, Annem, Kardeşim vb.)
-        if any(term in q_clean for term in ["baba", "babam", "babama", "peder", "yaşar", "yasar"]):
+        # 2. Family Relationship Match (Babam, Annem, Abim vb.) — strict word match
+        if q_words & {"baba", "babam", "babama", "babamın", "babamin", "babamdan", "babayla", "peder", "yaşar", "yasar"}:
             for c in all_c:
-                if c.get("name", "").lower() == "babam" or c.get("relationship", "").lower() == "baba" or "yaşar" in c.get("full_name", "").lower():
+                if c.get("name", "").lower() == "babam" or c.get("relationship", "").lower() == "baba" or "yaşar ünal" in c.get("full_name", "").lower():
                     return c
 
-        if any(term in q_clean for term in ["anne", "annem", "anneme", "valide"]):
+        if q_words & {"anne", "annem", "anneme", "annemin", "annemden", "annemle", "anneyle", "valide", "gülhan", "gulhan"}:
             for c in all_c:
-                if c.get("name", "").lower() == "annem" or c.get("relationship", "").lower() == "anne":
+                if c.get("name", "").lower() == "annem" or c.get("relationship", "").lower() == "anne" or "gülhan ünal" in c.get("full_name", "").lower():
                     return c
 
-        # 2. Check for exact matches first (unambiguous)
-        exact_matches = []
-        for c in all_c:
-            c_name = c.get("name", "").lower().strip()
-            c_full = c.get("full_name", "").lower().strip()
-            if q_clean == c_name or q_clean == c_full:
-                exact_matches.append(c)
-        if len(exact_matches) == 1:
-            return exact_matches[0]
+        if q_words & {"abi", "abim", "abime", "abimin", "abimden", "abimle"}:
+            for c in all_c:
+                if c.get("name", "").lower() == "abim":
+                    return c
 
         # 3. Bidirectional substring match with ambiguity protection
         sub_matches = []
@@ -116,6 +144,24 @@ class ContactsManager:
 
         return None
 
+    def find_contacts_candidates(self, name_query: str) -> List[Dict]:
+        """Returns all matching candidate contacts for an ambiguous query so Jarvis can ask for clarification."""
+        if not name_query:
+            return []
+        q = name_query.lower().strip()
+        q_clean = re.sub(r"['’][a-zA-ZçğıöşüÇĞİÖŞÜ]+", "", q).strip()
+        q_clean = re.sub(r"\b(kişisine|adlı\s+kişiye|kişi|adlı|adındaki|adında|numarasına)\b", "", q_clean).strip()
+        
+        all_c = self.get_all()
+        candidates = []
+        for c in all_c:
+            c_name = c.get("name", "").lower().strip()
+            c_full = c.get("full_name", "").lower().strip()
+            if (c_name and q_clean in c_name) or (c_full and q_clean in c_full):
+                if c not in candidates:
+                    candidates.append(c)
+        return candidates
+
     def add_contact(self, name: str, phone: str, relationship: str = "", notes: str = "", full_name: str = "", lid: str = "") -> Dict:
         clean_phone = "".join([c for c in phone if c.isdigit() or c == "+"])
         clean_name = name.strip()
@@ -137,8 +183,15 @@ class ContactsManager:
                 self._save_all(contacts)
                 return c
 
+        existing_ids = {c.get("id") for c in contacts}
+        next_num = len(contacts) + 1
+        new_id = f"c_{next_num}"
+        while new_id in existing_ids:
+            next_num += 1
+            new_id = f"c_{next_num}"
+
         new_c = {
-            "id": f"c_{len(contacts) + 1}",
+            "id": new_id,
             "name": clean_name,
             "phone": clean_phone,
             "relationship": relationship,
@@ -217,9 +270,17 @@ class ContactsManager:
         added = 0
         updated = 0
 
+        def norm_key(p: str) -> str:
+            d = "".join([c for c in p if c.isdigit()])
+            if d.startswith("90") and len(d) == 12:
+                return d[2:]
+            if d.startswith("0") and len(d) == 11:
+                return d[1:]
+            return d
+
         # Build lookup indices for fast O(1) matching
-        name_map = {c.get("name", "").lower(): c for c in contacts if c.get("name")}
-        phone_map = {c.get("phone", ""): c for c in contacts if c.get("phone")}
+        name_map = {c.get("name", "").lower(): c for c in contacts if c.get("name") and c.get("name").lower() not in ["kişi", "kisi", "bilinmeyen numara", ""]}
+        phone_map = {norm_key(c.get("phone", "")): c for c in contacts if norm_key(c.get("phone", ""))}
 
         for item in contacts_list:
             name = item.get("name") or item.get("full_name") or ""
@@ -229,22 +290,47 @@ class ContactsManager:
             if not clean_name or not clean_phone:
                 continue
 
-            existing = name_map.get(clean_name.lower()) or phone_map.get(clean_phone)
+            n_key = norm_key(clean_phone)
+            existing_by_name = name_map.get(clean_name.lower()) if clean_name.lower() not in ["kişi", "kisi", "bilinmeyen numara", ""] else None
+            existing_by_phone = phone_map.get(n_key) if n_key else None
+
+            existing = None
+            if existing_by_name:
+                existing = existing_by_name
+            elif existing_by_phone and existing_by_phone.get("name", "").lower() in ["kişi", "kisi", "bilinmeyen numara", "", clean_name.lower()]:
+                existing = existing_by_phone
+
             if existing:
-                existing["name"] = clean_name
-                existing["phone"] = clean_phone
-                if item.get("relationship"):
-                    existing["relationship"] = item["relationship"]
-                if item.get("notes"):
+                if existing.get("id") != "c_owner":
+                    existing["phone"] = clean_phone
+                if existing.get("id") not in ["c_owner", "c_annem", "c_babam"]:
+                    existing["name"] = clean_name
+                    if item.get("relationship"):
+                        existing["relationship"] = item["relationship"]
+                    if item.get("full_name"):
+                        existing["full_name"] = item["full_name"]
+                if item.get("alt_phones"):
+                    cur_alts = list(existing.get("alt_phones", []) or [])
+                    for ap in item["alt_phones"]:
+                        if ap and ap not in cur_alts and ap != existing.get("phone"):
+                            cur_alts.append(ap)
+                    if cur_alts:
+                        existing["alt_phones"] = cur_alts
+                if item.get("notes") and not existing.get("notes"):
                     existing["notes"] = item["notes"]
-                if item.get("full_name"):
-                    existing["full_name"] = item["full_name"]
-                if item.get("lid"):
+                if item.get("lid") and not existing.get("lid"):
                     existing["lid"] = item["lid"]
                 updated += 1
             else:
+                existing_ids = {c.get("id") for c in contacts}
+                next_num = len(contacts) + 1
+                new_id = f"c_{next_num}"
+                while new_id in existing_ids:
+                    next_num += 1
+                    new_id = f"c_{next_num}"
+
                 new_c = {
-                    "id": f"c_{len(contacts) + 1}",
+                    "id": new_id,
                     "name": clean_name,
                     "phone": clean_phone,
                     "relationship": item.get("relationship", ""),
@@ -252,9 +338,13 @@ class ContactsManager:
                     "full_name": item.get("full_name", clean_name),
                     "lid": item.get("lid", "")
                 }
+                if item.get("alt_phones"):
+                    new_c["alt_phones"] = [ap for ap in item["alt_phones"] if ap and ap != clean_phone]
                 contacts.append(new_c)
-                name_map[clean_name.lower()] = new_c
-                phone_map[clean_phone] = new_c
+                if n_key:
+                    phone_map[n_key] = new_c
+                if clean_name.lower() not in ["kişi", "kisi", "bilinmeyen numara", ""]:
+                    name_map[clean_name.lower()] = new_c
                 added += 1
 
         self._save_all(contacts)
@@ -303,8 +393,13 @@ class ContactsManager:
 
         return self.bulk_import(items)
 
-    def import_google_csv(self, csv_content: str) -> Dict[str, Any]:
-        """Parses standard Google Contacts CSV format."""
+    def import_google_csv(self, csv_content: Any) -> Dict[str, Any]:
+        """Parses standard Google Contacts CSV format. Accepts string or Path."""
+        if hasattr(csv_content, "read_text"):
+            csv_content = csv_content.read_text(encoding="utf-8-sig")
+        elif not isinstance(csv_content, str):
+            csv_content = str(csv_content)
+
         if not csv_content.strip():
             return {"added": 0, "updated": 0, "total_contacts": len(self.get_all())}
 
@@ -317,34 +412,43 @@ class ContactsManager:
             row_norm = {str(k).strip().lower(): str(v).strip() for k, v in row.items() if k}
             name = row_norm.get("name") or ""
             if not name:
-                given = row_norm.get("given name", "")
-                family = row_norm.get("family name", "")
-                name = f"{given} {family}".strip()
+                first = row_norm.get("first name", "") or row_norm.get("given name", "")
+                middle = row_norm.get("middle name", "")
+                last = row_norm.get("last name", "") or row_norm.get("family name", "")
+                parts = [p for p in [first, middle, last] if p]
+                name = " ".join(parts).strip()
+            if not name:
+                name = row_norm.get("file as", "") or row_norm.get("organization name", "")
 
-            phone = ""
+            all_phones: List[str] = []
             for k, v in row_norm.items():
-                if "phone" in k and "value" in k and v:
-                    phone = v
-                    break
-            if not phone:
-                for k, v in row_norm.items():
-                    if any(term in k for term in ["phone", "tel", "mobil", "telefon"]) and v:
-                        phone = v
-                        break
+                if ("phone" in k and "value" in k and v) or any(term in k for term in ["phone", "tel", "mobil", "telefon"]) and v:
+                    for raw_piece in re.split(r":::|,|/", v):
+                        piece = raw_piece.strip()
+                        clean_p = "".join([c for c in piece if c.isdigit() or c == "+"])
+                        digits_only = "".join([c for c in clean_p if c.isdigit()])
+                        if len(digits_only) >= 7:
+                            # Deduplicate by normalized last 10 digits
+                            norm10 = digits_only[-10:] if len(digits_only) >= 10 else digits_only
+                            if not any(("".join(ch for ch in ep if ch.isdigit())[-10:] == norm10) for ep in all_phones):
+                                all_phones.append(clean_p)
 
-            clean_phone = "".join([c for c in phone if c.isdigit() or c == "+"])
-            if not clean_phone:
+            if not all_phones:
                 continue
 
+            clean_phone = all_phones[0]
+            alt_phones = all_phones[1:]
+
             notes = row_norm.get("notes", "") or row_norm.get("note", "")
-            relationship = row_norm.get("relationship", "") or row_norm.get("group membership", "")
-            if "my contacts" in relationship.lower() or "* my contacts" in relationship.lower():
+            relationship = row_norm.get("relationship", "") or row_norm.get("group membership", "") or row_norm.get("labels", "")
+            if "my contacts" in relationship.lower() or "* my contacts" in relationship.lower() or "mycontacts" in relationship.lower():
                 relationship = ""
 
             items.append({
                 "name": name or "Kişi",
                 "full_name": name or "Kişi",
                 "phone": clean_phone,
+                "alt_phones": alt_phones,
                 "relationship": relationship,
                 "notes": notes
             })

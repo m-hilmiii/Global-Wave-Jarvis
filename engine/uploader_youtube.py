@@ -1,3 +1,4 @@
+from __future__ import annotations
 import uuid
 import threading
 UPLOAD_LOCK = threading.RLock()
@@ -13,11 +14,22 @@ import json
 import time
 import requests
 from pathlib import Path
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
+
+try:
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+except ImportError:
+    class MockMediaFileUpload:
+        def __init__(self, *args, **kwargs):
+            pass
+    build = None
+    MediaFileUpload = MockMediaFileUpload
+    InstalledAppFlow = None
+    Request = None
+    Credentials = None
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 CLIENT_SECRET_FILE = CONFIG_DIR / "client_secret.json"

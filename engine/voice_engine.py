@@ -1,4 +1,4 @@
-﻿"""
+"""
 Global Wave - Audio Engine with Dual TTS (Kokoro Local & Edge-TTS Cloud) + Whisper Word Karaoke
 Features:
 1. Kokoro-82M ONNX local studio voice synthesis (offline, ~300MB RAM, English personas).
@@ -11,7 +11,10 @@ import asyncio
 import os
 import subprocess
 import requests
-import edge_tts
+try:
+    import edge_tts
+except ImportError:
+    edge_tts = None
 from config.settings import get_ffmpeg_bin, get_ffprobe_bin, load_settings
 from engine.personas import get_persona
 from engine.voice_kokoro import generate_scene_audios_kokoro, is_kokoro_supported

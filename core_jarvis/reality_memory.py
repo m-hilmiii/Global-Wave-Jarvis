@@ -18,7 +18,7 @@ from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger("Jarvis.RealityMemory")
 
-WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent
+WORKSPACE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_DIR = WORKSPACE_DIR / "config"
 STATE_FILE = CONFIG_DIR / "jarvis_reality_state.json"
 PREFS_FILE = CONFIG_DIR / "jarvis_preferences.json"

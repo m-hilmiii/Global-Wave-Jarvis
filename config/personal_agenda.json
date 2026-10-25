@@ -1030,6 +1030,462 @@
       ],
       "created_at": 1792917345.0408797,
       "updated_at": 1792917345.0408797
+    },
+    {
+      "id": "note_9c42cb6c",
+      "title": "Araştırma: FastAPI async streaming",
+      "content": "Konu: FastAPI async streaming\n\nBulunan Başlıca Kaynaklar ve Bilgiler:\n- 'FastAPI async streaming' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792919797.0240798,
+      "updated_at": 1792919797.0240798
+    },
+    {
+      "id": "note_c00f8f97",
+      "title": "Araştırma: Ollama deepseek-r1 performansı",
+      "content": "Konu: Ollama deepseek-r1 performansı\n\nBulunan Başlıca Kaynaklar ve Bilgiler:\n- 'Ollama deepseek-r1 performansı' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792919797.1905613,
+      "updated_at": 1792919797.1905613
+    },
+    {
+      "id": "note_a5f093da",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %11 dolu (6.92 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792930895.9448898,
+      "updated_at": 1792930895.94489
+    },
+    {
+      "id": "note_5180377a",
+      "title": "Araştırma: FastAPI async streaming",
+      "content": "Konu: FastAPI async streaming\n\nYönetici Sentezi:\n'FastAPI async streaming' hakkında 1 kaynak incelendi.\n\nİncelenen Kaynaklar:\n- 'FastAPI async streaming' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792931547.8759274,
+      "updated_at": 1792931547.8759274
+    },
+    {
+      "id": "note_2180b0cb",
+      "title": "Araştırma: Ollama deepseek-r1 performansı",
+      "content": "Konu: Ollama deepseek-r1 performansı\n\nYönetici Sentezi:\n'Ollama deepseek-r1 performansı' hakkında 1 kaynak incelendi.\n\nİncelenen Kaynaklar:\n- 'Ollama deepseek-r1 performansı' konusunda yerel bilgi tabanı ve teknik arşiv taraması aktif. Ayrıntılı analiz hazırlandı.",
+      "tags": [
+        "research",
+        "web"
+      ],
+      "created_at": 1792931548.0394013,
+      "updated_at": 1792931548.0394013
+    },
+    {
+      "id": "note_7d94ab39",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %11 dolu (6.91 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792931925.5768182,
+      "updated_at": 1792931925.5768185
+    },
+    {
+      "id": "note_ffaae1f8",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %11 dolu (6.92 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792931954.76273,
+      "updated_at": 1792931954.7627301
+    },
+    {
+      "id": "note_1d0181c3",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %11 dolu (6.88 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792932267.2702203,
+      "updated_at": 1792932267.2702203
+    },
+    {
+      "id": "note_599df49b",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %11 dolu (6.91 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792933155.7806356,
+      "updated_at": 1792933155.7806356
+    },
+    {
+      "id": "note_6f20c1f4",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.85 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792933170.6302612,
+      "updated_at": 1792933170.6302612
+    },
+    {
+      "id": "note_c6e12e24",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %11 dolu (6.88 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792933182.326404,
+      "updated_at": 1792933182.3264043
+    },
+    {
+      "id": "note_6c31333b",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %11 dolu (6.88 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792933193.7333255,
+      "updated_at": 1792933193.7333255
+    },
+    {
+      "id": "note_11501fcb",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.8 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792935616.3071835,
+      "updated_at": 1792935616.307184
+    },
+    {
+      "id": "note_ec096a24",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.82 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792935642.2237058,
+      "updated_at": 1792935642.223706
+    },
+    {
+      "id": "note_f0647249",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.85 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792936337.369484,
+      "updated_at": 1792936337.3694842
+    },
+    {
+      "id": "note_bdc0615e",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.85 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792936745.8915374,
+      "updated_at": 1792936745.8915374
+    },
+    {
+      "id": "note_af70b6bd",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.81 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792937292.3456504,
+      "updated_at": 1792937292.3456504
+    },
+    {
+      "id": "note_84b63dd1",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.84 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792937316.3056521,
+      "updated_at": 1792937316.3056521
+    },
+    {
+      "id": "note_01d20dc1",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.83 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792937327.0009968,
+      "updated_at": 1792937327.000997
+    },
+    {
+      "id": "note_2bf13f47",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %13 dolu (6.78 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792937861.7289364,
+      "updated_at": 1792937861.7289367
+    },
+    {
+      "id": "note_2b6cc0f9",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.79 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792938598.3261526,
+      "updated_at": 1792938598.3261526
+    },
+    {
+      "id": "note_89694654",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.8 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792938632.8865774,
+      "updated_at": 1792938632.8865774
+    },
+    {
+      "id": "note_f951ec6c",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %13 dolu (6.76 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792938690.1014407,
+      "updated_at": 1792938690.101441
+    },
+    {
+      "id": "note_f31a769c",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.79 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792938701.6432164,
+      "updated_at": 1792938701.6432166
+    },
+    {
+      "id": "note_2bfe1ff3",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %13 dolu (6.78 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792938764.3477547,
+      "updated_at": 1792938764.3477547
+    },
+    {
+      "id": "note_2399646c",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.8 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792939971.2556822,
+      "updated_at": 1792939971.2556825
+    },
+    {
+      "id": "note_68e42bab",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.81 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792939993.4749315,
+      "updated_at": 1792939993.4749315
+    },
+    {
+      "id": "note_e766cfb4",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %12 dolu (6.81 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792940103.390902,
+      "updated_at": 1792940103.3909023
+    },
+    {
+      "id": "note_7d43e117",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %13 dolu (6.76 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792941754.506838,
+      "updated_at": 1792941754.5068383
+    },
+    {
+      "id": "note_bfdf25f6",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %13 dolu (6.76 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792941837.3831131,
+      "updated_at": 1792941837.3831131
+    },
+    {
+      "id": "note_42acf3d7",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %13 dolu (6.74 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792943461.6074789,
+      "updated_at": 1792943461.6074789
+    },
+    {
+      "id": "note_f36a8839",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.7 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792943572.7505536,
+      "updated_at": 1792943572.7505538
+    },
+    {
+      "id": "note_b1d9d0df",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %13 dolu (6.73 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792944919.8189354,
+      "updated_at": 1792944919.8189356
+    },
+    {
+      "id": "note_f3a261cd",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %13 dolu (6.71 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792945038.3154545,
+      "updated_at": 1792945038.3154547
+    },
+    {
+      "id": "note_8fe62974",
+      "title": "JARVIS v7.0 Master Yetenek ve Komut Kataloğu",
+      "content": "1) 5 Uzman AI Model: qwen3:14b (Sohbet), qwen2.5-coder:14b (Kod), deepseek-r1:14b (Derin Muhakeme), qwen2.5-vl:7b (Görsel), qwen3:8b (Router).\n2) Masaüstü, Spotify & Steam Otomasyonu: Uygulama aç/kapat, Spotify şarkı arama ve otomatik başlatma, Steam yüklü oyun ve kütüphane lisans doğrulaması + indirme.\n3) WhatsApp & 497 Kişilik Rehber: CSV rehber senkronizasyonu, canlı QR eşleştirme modalı, .txt sohbet geçmişi aktarma.\n4) İsteğe Bağlı Onay (⚡ Oto: Açık/Kapalı): Sormadan direkt gönderim veya onaylı taslak modu.\n5) AI Vekil (🤖 Meşgul Modu): Siz meşgulken belirlenen kişilerle JARVIS kimliğiyle doğal sohbet yürütme ve özet sunma.\n6) Mobil WhatsApp Yoldaşı (Yazılı & Sesli PTT): Telefondan WhatsApp ile yazılı ve sesli mesajlaşma (Faster-Whisper STT + Edge-TTS/Opus PTT).",
+      "tags": [
+        "jarvis",
+        "yetenekler",
+        "v7.0"
+      ],
+      "created_at": 1792945316.3815625,
+      "updated_at": 1792945316.3815627
+    },
+    {
+      "id": "note_6dd052af",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.7 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792947806.7112799,
+      "updated_at": 1792947806.71128
+    },
+    {
+      "id": "note_6b54ca04",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.63 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792948938.5243897,
+      "updated_at": 1792948938.52439
+    },
+    {
+      "id": "note_57b7f9b8",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.66 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792948981.334026,
+      "updated_at": 1792948981.3340263
+    },
+    {
+      "id": "note_60b6bb90",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.68 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792949427.8080156,
+      "updated_at": 1792949427.8080158
+    },
+    {
+      "id": "note_194e0940",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.64 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792950145.3236325,
+      "updated_at": 1792950145.3236327
+    },
+    {
+      "id": "note_914b2979",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.69 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792950395.7106817,
+      "updated_at": 1792950395.710682
+    },
+    {
+      "id": "note_47e14937",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.7 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792950421.7820272,
+      "updated_at": 1792950421.7820272
+    },
+    {
+      "id": "note_ea131748",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.67 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792950455.0084813,
+      "updated_at": 1792950455.0084815
+    },
+    {
+      "id": "note_5a03b4ef",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.69 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792950485.2887092,
+      "updated_at": 1792950485.2887092
+    },
+    {
+      "id": "note_1fb93071",
+      "title": "Otonom Görev Raporu: Sistem durumunu kontrol et, git dif",
+      "content": "[Git Diff]: Kaydedilmemiş değişiklik yok.\n[Telemetri]: RAM %14 dolu (6.67 GB boş).",
+      "tags": [
+        "autonomous"
+      ],
+      "created_at": 1792951302.0649085,
+      "updated_at": 1792951302.0649085
     }
   ]
 }

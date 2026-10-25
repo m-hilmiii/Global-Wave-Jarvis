@@ -177,9 +177,40 @@ class PersonalAssistant:
 
         executive_speech = " ".join(speech_parts)
 
+        # Active background jobs count
+        active_jobs_count = 0
+        try:
+            from core_jarvis.task_coordinator import task_coordinator
+            active_jobs_count = len(task_coordinator.list_jobs(active_only=True))
+        except Exception:
+            pass
+
+        # Notes with string dates
+        raw_notes = self.get_notes()
+        formatted_notes = []
+        for n in raw_notes:
+            note_copy = dict(n)
+            ts = note_copy.get("created_at")
+            if isinstance(ts, (int, float)):
+                note_copy["created_at"] = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+            formatted_notes.append(note_copy)
+
+        # Priority tasks list
+        prio_tasks = [t for t in (overdue + due_today) if t.get("priority") in ("urgent", "high")]
+        if not prio_tasks:
+            prio_tasks = (overdue + due_today)[:5]
+
         return {
             "date": today_str,
             "day_name": current_day_name,
+            "tasks_count": len(due_today) + len(overdue),
+            "overdue_count": len(overdue),
+            "priority_tasks": prio_tasks,
+            "unread_messages": unread_whatsapp_count,
+            "active_jobs": active_jobs_count,
+            "system_ready": True,
+            "speak_text": executive_speech,
+            "executive_briefing_text": executive_speech,
             "tasks": {
                 "due_today": due_today,
                 "overdue": overdue,
@@ -187,6 +218,7 @@ class PersonalAssistant:
                 "total_active": len(due_today) + len(overdue)
             },
             "reminders": today_reminders,
+            "notes": formatted_notes,
             "project_state": {
                 "active_task": active_project_task,
                 "uncommitted_files": uncommitted_count,
@@ -195,8 +227,7 @@ class PersonalAssistant:
             "communications": {
                 "unread_whatsapp": unread_whatsapp_count,
                 "gmail_status": "ready"
-            },
-            "executive_briefing_text": executive_speech
+            }
         }
 
     # ==========================================================================

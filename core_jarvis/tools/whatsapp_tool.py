@@ -80,6 +80,43 @@ class WhatsAppTool:
         """Returns the most recent incoming message from a contact, regardless of read status."""
         return whatsapp_daemon.get_latest_incoming_message(contact_query)
 
+    def send_message(self, phone: str, text: str) -> Dict[str, Any]:
+        """Direct alias for send_message_to_phone."""
+        return self.send_message_to_phone(phone, text)
+
+    def send_voice_note(self, phone: str, audio_path: str) -> Dict[str, Any]:
+        """Sends native WhatsApp PTT voice note (audio/ogg; codecs=opus)."""
+        return whatsapp_daemon.send_voice_note(phone, audio_path)
+
+    def reconnect_and_sync(self) -> Dict[str, Any]:
+        """Clears auth tokens and restarts bridge to force full history sync via new QR code."""
+        return whatsapp_daemon.reconnect_and_sync()
+
+    def enable_ai_delegate(self, target: Optional[str] = None):
+        """Activates AI Delegate (Meşgul Modu)."""
+        whatsapp_daemon.enable_ai_delegate(target)
+
+    def disable_ai_delegate(self) -> List[Dict[str, Any]]:
+        """Deactivates AI Delegate and returns conversation logs."""
+        return whatsapp_daemon.disable_ai_delegate()
+
+    @property
+    def ai_delegate_active(self) -> bool:
+        return whatsapp_daemon.ai_delegate_active
+
+    @property
+    def ai_delegate_targets(self) -> List[str]:
+        return whatsapp_daemon.ai_delegate_targets
+
+    @property
+    def ai_delegate_logs(self) -> List[Dict[str, Any]]:
+        return whatsapp_daemon.ai_delegate_logs
+        return whatsapp_daemon.disable_ai_delegate()
+
+    def import_chat_export(self, contact_name: str, file_text: str) -> Dict[str, Any]:
+        """Imports exported _chat.txt file into inbox."""
+        return whatsapp_daemon.import_chat_export(contact_name, file_text)
+
     def mark_all_read(self):
         """Marks all incoming messages as read."""
         whatsapp_daemon.mark_all_read()

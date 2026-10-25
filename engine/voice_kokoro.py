@@ -1,4 +1,4 @@
-﻿"""
+"""
 Global Wave - Kokoro ONNX Local TTS Engine
 100 percent offline, studio-quality neural voice synthesis running on ONNX Runtime.
 No GPU or cloud connection required (uses ~300MB RAM, CPU-optimized).
@@ -8,8 +8,15 @@ It DOES NOT support Turkish, German, French, Spanish or Portuguese phonetics.
 Strict closed-whitelist verification is enforced to prevent phonetic corruption.
 """
 import os
-import soundfile as sf
-from kokoro_onnx import Kokoro
+try:
+    import soundfile as sf
+except ImportError:
+    sf = None
+
+try:
+    from kokoro_onnx import Kokoro
+except ImportError:
+    Kokoro = None
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(BASE_DIR, "models", "kokoro")

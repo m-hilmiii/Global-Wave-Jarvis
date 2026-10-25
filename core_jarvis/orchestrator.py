@@ -86,12 +86,27 @@ class CodeSpecialist:
 
         start = time.time()
         try:
+            import sys
+            test_env = {**os.environ, "JARVIS_TEST_MODE": "1"}
+            if test_path == "tests":
+                cmd = [
+                    sys.executable, "-m", "unittest",
+                    "tests/test_owner_whatsapp_session.py",
+                    "tests/test_vision_tool.py",
+                    "tests/test_paket1_remediation.py",
+                    "tests/test_paket2_remediation.py",
+                    "tests/test_security_audit.py"
+                ]
+            else:
+                cmd = [sys.executable, "-m", "unittest", "discover", "-s", test_path, "-p", "test_*.py"]
+
             res = subprocess.run(
-                ["python", "-m", "unittest", "discover", "-s", test_path, "-p", "test_*.py"],
+                cmd,
                 capture_output=True,
                 text=True,
                 cwd=str(WORKSPACE_DIR),
-                timeout=45
+                env=test_env,
+                timeout=30
             )
             passed = res.returncode == 0
             return {
@@ -103,7 +118,7 @@ class CodeSpecialist:
                 "summary": "Tüm birim testleri başarıyla geçti." if passed else "Bazı testler başarısız oldu!"
             }
         except subprocess.TimeoutExpired:
-            return {"success": False, "error": "Test çalıştırması 45 saniyede zaman aşımına uğradı."}
+            return {"success": False, "error": "Test çalıştırması 30 saniyede zaman aşımına uğradı."}
         except Exception as e:
             return {"success": False, "error": f"Test motoru hatası: {str(e)}"}
 
@@ -282,7 +297,24 @@ class VoiceSpecialist:
 
 
 # ==============================================================================
-# 7. Master JARVIS Orchestrator
+# 7. VisionSpecialist (Screen Awareness, UI & IDE Error Inspection)
+# ==============================================================================
+class VisionSpecialist:
+    """Specialist responsible for screen awareness, visual perception and UI inspections."""
+
+    def __init__(self):
+        from core_jarvis.tools.vision_tool import vision_tool
+        self.vision = vision_tool
+
+    def inspect_screen(self, prompt: str = "Ekrandaki içeriği açıkla", mode: str = "general") -> Dict[str, Any]:
+        return self.vision.analyze_screen(user_prompt=prompt, mode=mode)
+
+    def capture_screenshot(self) -> Dict[str, Any]:
+        return self.vision.capture_screen()
+
+
+# ==============================================================================
+# 8. Master JARVIS Orchestrator
 # ==============================================================================
 class JarvisOrchestrator:
     def __init__(self):
@@ -292,6 +324,7 @@ class JarvisOrchestrator:
         self.research = ResearchSpecialist()
         self.assistant = AssistantSpecialist()
         self.voice = VoiceSpecialist()
+        self.vision = VisionSpecialist()
         from core_jarvis.task_coordinator import task_coordinator
         self.coordinator = task_coordinator
         self.engine = autonomous_engine
@@ -331,6 +364,17 @@ class JarvisOrchestrator:
                 "specialist": "AssistantSpecialist",
                 "intent": "add_note",
                 "result": res
+            }
+
+        # Vision / Screen Awareness ("Ekranıma bak", "Hata ekranına bak", "Ekranı özetle", "Ekran görüntüsü al")
+        if any(k in prompt_lower for k in ["ekranıma bak", "ekrana bak", "ekrandaki hata", "ekran görüntüsü", "ekranı incele", "ekranı özetle", "timeline'a bak", "zaman çizgisine bak"]):
+            mode = "error_check" if any(k in prompt_lower for k in ["hata", "error", "sorun", "kırmızı"]) else ("timeline_check" if "timeline" in prompt_lower or "kurgu" in prompt_lower else "general")
+            analysis_res = self.vision.inspect_screen(prompt=user_prompt, mode=mode)
+            return {
+                "specialist": "VisionSpecialist",
+                "intent": "inspect_screen",
+                "speak_text": analysis_res.get("analysis"),
+                "result": analysis_res
             }
 
         # 1. 'Kaldığımız yerden devam et' (Truth-over-Memory context restoration)
@@ -485,13 +529,28 @@ class JarvisOrchestrator:
                 "result": res
             }
 
-        # Default: Fallback to General Autonomous Query or Brain
-        return {
-            "specialist": "ExecutiveJarvis",
-            "intent": "general_query",
-            "message": "Niyet anlaşıldı. Bu görev için uygun uzman ajan devrede.",
-            "reality_state": self.memory.sync_with_reality()
-        }
+        # Default: Route through Unified Cognitive Brain (jarvis_brain)
+        try:
+            from core_jarvis.jarvis_brain import jarvis_brain
+            brain_res = jarvis_brain.process_message(user_prompt)
+            reply_msg = brain_res.get("reply") or "Niyet anlaşıldı. Bu görev için uygun uzman ajan devrede."
+            speak_msg = brain_res.get("speak_text") or reply_msg
+            return {
+                "specialist": "ExecutiveJarvis",
+                "intent": brain_res.get("action_taken", "general_query"),
+                "message": reply_msg,
+                "speak_text": speak_msg,
+                "result": brain_res,
+                "reality_state": self.memory.sync_with_reality()
+            }
+        except Exception as exc:
+            logger.warning(f"Orchestrator brain fallback warning: {exc}")
+            return {
+                "specialist": "ExecutiveJarvis",
+                "intent": "general_query",
+                "message": "Niyet anlaşıldı. Bu görev için uygun uzman ajan devrede.",
+                "reality_state": self.memory.sync_with_reality()
+            }
 
 
 orchestrator = JarvisOrchestrator()

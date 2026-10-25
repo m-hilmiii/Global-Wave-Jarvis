@@ -70,10 +70,22 @@ class JarvisDaemonManager:
     def get_python_exe(self, silent: bool = False) -> str:
         """Return python.exe or pythonw.exe (windowless)."""
         current_exe = Path(sys.executable)
+
+        # Cross-platform / WSL safeguard: When generating Windows scripts from non-win32 environment
+        if sys.platform != "win32":
+            return "pythonw.exe" if silent else "python.exe"
+
         if silent:
             pythonw = current_exe.parent / "pythonw.exe"
             if pythonw.exists():
                 return str(pythonw)
+            # Check common Windows install locations
+            local_appdata = os.environ.get("LOCALAPPDATA", "")
+            if local_appdata:
+                cand = Path(local_appdata) / "Programs" / "Python" / "Python311" / "pythonw.exe"
+                if cand.exists():
+                    return str(cand)
+            return "pythonw.exe"
         return str(current_exe)
 
     def get_desktop_dir(self) -> Path:
@@ -88,7 +100,11 @@ class JarvisDaemonManager:
         for c in candidates:
             if c.exists():
                 return c
-        return user_profile / "Desktop"
+        fallback = user_profile / "Desktop"
+        if not fallback.exists():
+            fallback = self.cache_dir / "simulated_desktop"
+            fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
 
     def get_windows_startup_dir(self) -> Path:
         """Resolve Windows Startup folder (shell:startup)."""
@@ -97,7 +113,12 @@ class JarvisDaemonManager:
             startup_path = Path(app_data) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
             if startup_path.exists():
                 return startup_path
-        fallback = Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+            try:
+                startup_path.mkdir(parents=True, exist_ok=True)
+                return startup_path
+            except Exception:
+                pass
+        fallback = self.cache_dir / "simulated_startup"
         fallback.mkdir(parents=True, exist_ok=True)
         return fallback
 

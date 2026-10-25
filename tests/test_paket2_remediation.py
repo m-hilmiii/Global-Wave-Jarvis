@@ -81,22 +81,25 @@ class TestPaket2Remediation(unittest.TestCase):
             self.assertNotIn("qwen2.5:7b", stopped_models)
 
     def test_whatsapp_daemon_atomic_inbox_and_thread_safety(self):
-        # Test atomic write and locked read
-        test_data = [{"id": "TEST_MSG_1", "text": "Atomic test message", "unread": True}]
-        whatsapp_daemon._atomic_write_inbox(test_data)
+        # Backup existing inbox
+        original_inbox = whatsapp_daemon._read_inbox_locked()
+        try:
+            # Test atomic write and locked read
+            test_data = [{"id": "TEST_MSG_1", "text": "Atomic test message", "unread": True}]
+            whatsapp_daemon._atomic_write_inbox(test_data)
 
-        # Read under lock
-        read_data = whatsapp_daemon._read_inbox_locked()
-        self.assertEqual(len(read_data), 1)
-        self.assertEqual(read_data[0]["id"], "TEST_MSG_1")
-        self.assertEqual(read_data[0]["text"], "Atomic test message")
+            # Read under lock
+            read_data = whatsapp_daemon._read_inbox_locked()
+            self.assertEqual(len(read_data), 1)
+            self.assertEqual(read_data[0]["id"], "TEST_MSG_1")
+            self.assertEqual(read_data[0]["text"], "Atomic test message")
 
-        # Verify no left-over .tmp file exists
-        tmp_file = INBOX_FILE.with_suffix(".tmp")
-        self.assertFalse(tmp_file.exists())
-
-        # Clean up test entry
-        whatsapp_daemon._atomic_write_inbox([])
+            # Verify no left-over .tmp file exists
+            tmp_file = INBOX_FILE.with_suffix(".tmp")
+            self.assertFalse(tmp_file.exists())
+        finally:
+            # Restore original inbox
+            whatsapp_daemon._atomic_write_inbox(original_inbox)
 
     def test_requirements_contains_httpx_and_laya(self):
         req_path = BASE_DIR / "requirements.txt"

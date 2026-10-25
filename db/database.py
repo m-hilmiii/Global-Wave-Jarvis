@@ -55,6 +55,19 @@ def init_db():
                     updated_at TIMESTAMP
                 )
             ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS contacts (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    full_name TEXT,
+                    phone TEXT,
+                    relationship TEXT,
+                    notes TEXT,
+                    lid TEXT,
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP
+                )
+            ''')
             try:
                 c.execute("ALTER TABLE tasks ADD COLUMN youtube_url TEXT")
             except Exception:
@@ -189,5 +202,50 @@ def get_resumable_tasks() -> list:
                     t["task_data"] = {}
             tasks.append(t)
         return tasks
+    finally:
+        conn.close()
+
+def sync_contacts_to_db(contacts: list):
+    """Synchronizes contacts into SQLite contacts table."""
+    init_db()
+    conn = get_db_connection()
+    try:
+        c = conn.cursor()
+        now = datetime.now().isoformat()
+        for item in contacts:
+            c.execute('''
+                INSERT INTO contacts (id, name, full_name, phone, relationship, notes, lid, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    full_name=excluded.full_name,
+                    phone=excluded.phone,
+                    relationship=excluded.relationship,
+                    notes=excluded.notes,
+                    lid=COALESCE(excluded.lid, contacts.lid),
+                    updated_at=excluded.updated_at
+            ''', (
+                item.get("id"),
+                item.get("name", ""),
+                item.get("full_name", item.get("name", "")),
+                item.get("phone", ""),
+                item.get("relationship", ""),
+                item.get("notes", ""),
+                item.get("lid", ""),
+                now,
+                now
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_all_contacts_from_db() -> list:
+    """Retrieves all contacts from SQLite database."""
+    init_db()
+    conn = get_db_connection()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT * FROM contacts ORDER BY name ASC")
+        return [dict(row) for row in c.fetchall()]
     finally:
         conn.close()

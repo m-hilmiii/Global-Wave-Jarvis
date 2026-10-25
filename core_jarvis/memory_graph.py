@@ -1,4 +1,4 @@
-﻿"""
+"""
 Global-Wawe / Stark-Core - Jarvis Knowledge Graph & Episodic Memory
 Inspired by isair/jarvis local memory architecture.
 Zero cloud costs, 100% private SQLite storage. Never forgets facts, preferences, contacts, or project goals.
@@ -52,6 +52,88 @@ class MemoryGraph:
                 self._bootstrap_initial_memory(cursor)
                 conn.commit()
 
+        # Always synchronize rich user profile from config/user_profile.json if available
+        self.sync_user_profile()
+
+    def sync_user_profile(self):
+        """Loads and updates nodes from config/user_profile.json into memory graph."""
+        profile_path = Path(__file__).resolve().parent.parent / "config" / "user_profile.json"
+        if not profile_path.exists():
+            return
+        try:
+            with open(profile_path, "r", encoding="utf-8") as f:
+                prof = json.load(f)
+            
+            ident = prof.get("identity", {})
+            hw = prof.get("hardware_baseline", {})
+            comm = prof.get("communication_protocols", {})
+            work = prof.get("working_principles", {})
+            projects = prof.get("projects", {})
+            standards = prof.get("coding_standards", {})
+
+            # 1. Identity & Creator node
+            creator_text = (
+                f"{ident.get('full_name', 'Mücahit Hilmi Ünal')} ({', '.join(ident.get('nicknames', ['Mücon', 'Hilmi']))}) - "
+                f"Doğum: {ident.get('birth_date', '20.03.2005')}, Konum: {ident.get('location', 'Eskişehir')}. "
+                f"Eğitim: {ident.get('education', 'Trabzon Üniv. Çarşıbaşı MYO')}. "
+                f"Rol: {ident.get('role', 'Yazılım ve Backend Geliştirici')} ({', '.join(ident.get('skills', []))})."
+            )
+            self.save_node("user", "creator_profile", creator_text, importance=10)
+
+            # 2. Hardware baseline node
+            hw_text = (
+                f"CPU: {hw.get('cpu', '')} | GPU: {hw.get('gpu', '')} | "
+                f"RAM: {hw.get('ram', '')} | SSD: {hw.get('storage', '')} | "
+                f"Monitörler: 1. ASUS 2K 255Hz, 2. Samsung 2K 165Hz | OS: {hw.get('os', 'Windows 11')}"
+            )
+            self.save_node("hardware", "hardware_baseline", hw_text, importance=10)
+
+            # 3. Communication Style & Inspector Mode
+            def_tone = comm.get("default_tone", {})
+            insp = comm.get("inspector_mode", {})
+            comm_text = (
+                f"Samimiyet Dili: {def_tone.get('style', '')}. İzin verilen hitaplar: {', '.join(def_tone.get('allowed_terms_of_endearment', []))}. "
+                f"Müfettiş Modu: Karakter analizi, kod denetimi veya sistem incelemesi istendiğinde %100 dürüst, acımasız ve manipülasyonsuz profesyonel baş müfettiş moduna geç."
+            )
+            self.save_node("directives", "communication_protocols", comm_text, importance=10)
+
+            # 4. Working Rules
+            work_text = (
+                f"1. Asla Varsayım Yapma: {work.get('no_assumptions', '')}. "
+                f"2. Web Taraması: {work.get('web_research_first', '')}. "
+                f"3. Mimari İtiraz & Geliştirme: {work.get('architectural_critique', '')}."
+            )
+            self.save_node("directives", "working_principles", work_text, importance=10)
+
+            # 5. Projects
+            lus = projects.get("lussera", {})
+            lus_text = f"{lus.get('name', 'Lussera')}: {lus.get('type', '')}. KESİN KURAL: {lus.get('strict_rule', '')}"
+            self.save_node("projects", "lussera", lus_text, importance=10)
+
+            gw = projects.get("global_wave", {})
+            gw_text = f"{gw.get('name', 'Global Wave')}: {gw.get('type', '')} (Python, Kokoro, Whisper, Qwen 14B)."
+            self.save_node("projects", "global_wave", gw_text, importance=9)
+
+            stark = projects.get("stark_core", {})
+            stark_text = f"{stark.get('name', 'Stark Core')}: {stark.get('type', '')} (FastAPI, Docker, Ollama, WhatsApp daemon)."
+            self.save_node("projects", "stark_core", stark_text, importance=9)
+
+            val = projects.get("valthera", {})
+            val_text = f"{val.get('name', 'Valthera')}: {val.get('type', '')} (Unity 3D, C#)."
+            self.save_node("projects", "valthera", val_text, importance=8)
+
+            # 6. Coding Standards (God Mode)
+            standards_text = f"Stack: {', '.join(standards.get('stack', []))}. İlkeler: {' | '.join(standards.get('principles', []))}"
+            self.save_node("directives", "coding_standards_god_mode", standards_text, importance=10)
+
+            # 7. Cyber Security
+            sec = prof.get("cyber_security", {})
+            sec_text = f"Siber Güvenlik & Pentest: {sec.get('guidance', '')} Odak: {', '.join(sec.get('focus', []))}"
+            self.save_node("directives", "cyber_security_pentest", sec_text, importance=9)
+
+        except Exception as e:
+            logger.warning(f"[MemoryGraph] Failed to sync user profile: {e}")
+
     def _bootstrap_initial_memory(self, cursor):
         defaults = [
             ("user", "creator_name", "Mücahit Hilmi - Kurucu ve Baş Yönetici (Tony Stark rolünde)", 10),
@@ -73,7 +155,7 @@ class MemoryGraph:
         q = (query or "").lower()
         triggers = [
             "ben", "benim", "hatırla", "kimim", "plan", "proje", "kural", 
-            "şirket", "hedef", "vizyon", "jhon", "kim", "rehber", "neydi"
+            "şirket", "hedef", "vizyon", "tercih", "kişi", "kim", "rehber", "neydi"
         ]
         return any(t in q for t in triggers) or len(q.split()) > 4
 
@@ -124,20 +206,37 @@ class MemoryGraph:
             """, (*params, limit))
             return [dict(r) for r in cursor.fetchall()]
 
-    def get_top_directives(self, limit: int = 6) -> List[dict]:
+    def get_top_directives(self, limit: int = 12) -> List[dict]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT * FROM memory_nodes
-                WHERE branch IN ('user', 'directives')
-                ORDER BY importance DESC
+                WHERE branch IN ('user', 'directives', 'hardware', 'projects', 'learned_rules')
+                ORDER BY importance DESC, id DESC
                 LIMIT ?
             """, (limit,))
             return [dict(r) for r in cursor.fetchall()]
 
     def get_context_summary(self) -> str:
         """Returns concise briefing context to inject into Jarvis system prompt."""
-        directives = self.get_top_directives(limit=7)
+        directives = self.get_top_directives(limit=12)
+        # Ensure active learned rules are always included in context summary
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM memory_nodes
+                WHERE branch = 'learned_rules'
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 5
+            """)
+            learned = [dict(r) for r in cursor.fetchall()]
+
+        seen_keys = {d["key_term"] for d in directives}
+        for lr in learned:
+            if lr["key_term"] not in seen_keys:
+                directives.append(lr)
+                seen_keys.add(lr["key_term"])
+
         lines = ["--- JARVIS LONG-TERM MEMORY & CONTEXT ---"]
         for d in directives:
             lines.append(f"• [{d['branch'].upper()}] {d['key_term']}: {d['content']}")

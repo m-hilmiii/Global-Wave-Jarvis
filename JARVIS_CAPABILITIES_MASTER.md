@@ -1,9 +1,9 @@
 # 🧠 JARVIS Master Yetenek & Fonksiyon Kataloğu
 > **Sistem:** Global-Wave / Stark-Core Personal AI Operating System  
 > **Kullanıcı:** Mücahit Hilmi (Hitap: *Sayın Hilmi* / *Efendim*)  
-> **Versiyon:** v6.0 (Master Architecture - Multimodal WhatsApp, Windows Daemon OS & Fast Mocked Suite)  
+> **Versiyon:** v7.0 (God Mode 5-Model Specialist Arsenal, Masaüstü/Steam/Spotify Otomasyonu, WhatsApp AI Vekil & Mobil Yoldaş Mimarisi)  
 > **Son Güncelleme:** 25 Ekim 2026  
-> **Doğrulama:** 117 Birim Testi Mimarisi (İzole Mock & Soket Korumalı Hızlı Test Altyapısı)
+> **Doğrulama:** 130+ Birim Testi Mimarisi (İzole Mock & Soket Korumalı Hızlı Test Altyapısı)
 
 Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlarını, güvenlik kalkanını, API uç noktalarını, görsel Web HUD panellerini ve tetikleyici komutlarını eksiksiz listeler. Yeni bir özellik eklendikçe güncellenir.
 
@@ -11,10 +11,35 @@ Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlar�
 
 ## 💻 1. Donanım & Çevre Profili
 Sistem, yerel bilgisayarın fiziksel sınırlarına tam uyumlu ve **$0.00 harici API maliyeti** prensibiyle çalışır:
-- **İşlemci (CPU):** `Intel Core i5-14400F` (10 Fiziksel Çekirdek, 16 İş Parçacığı) — Whisper STT, FFmpeg çoklu işlem ve yerel model yürütme.
-- **Ekran Kartı (GPU):** `AMD Radeon RX 9060 XT` (AMD RDNA Mimarisi) — AMD AMF (`h264_amf`) donanım hızlandırmalı video render ve DirectML desteği.
-- **Bellek (RAM):** `16 GB DDR` — Bellek taşmasını önleyen dinamik eşik denetimi; yerel çıkarımda 7B/8B modeller (`qwen2.5-coder:7b`, `qwen3:8b`, `llama3.1:8b`).
-- **Depolama (Disk C:):** Geçici render dosyaları OneDrive kilitlemesini (`WinError 32`) önlemek için `%LOCALAPPDATA%\Temp\global_wave_workspace\` altında işlenir.
+- **İşlemci (CPU):** `Intel Core i5-14400F` (10 Fiziksel Çekirdek, 16 İş Parçacığı, Temel 2.50 GHz, Turbo 4.70 GHz, 20 MB L3 Önbellek, LGA1700) — Whisper STT, FFmpeg çoklu işlem ve yerel model yürütme.
+- **Ekran Kartı (GPU):** `AMD Radeon RX 9060 XT` (16 GB GDDR6 VRAM, Sürücü: 32.0.32015.7029, AMD RDNA Mimarisi) — AMD AMF (`h264_amf`) donanım hızlandırmalı video render, DirectML ve 16GB VRAM yerel model çıkarımı.
+- **Bellek (RAM):** `16 GB DDR5 4800MHz Goodram` (Tek Kanal / Single DIMM, Parça Kodu: IR5600D564L36S/16G) — Bellek taşmasını önleyen dinamik eşik denetimi; yerel çıkarımda 7B/8B modeller (`qwen2.5-coder:7b`, `qwen3:8b`, `llama3.1:8b`).
+- **Depolama (SSD):** `Western Digital Blue SN5100 1TB NVMe M.2 SSD` (C: Sürücüsü ~930 GB) — Geçici render dosyaları OneDrive kilitlemesini (`WinError 32`) önlemek için `%LOCALAPPDATA%\Temp\global_wave_workspace\` altında işlenir.
+- **Anakart & Kasa:** `Monster ABRA H610 GAMING` (Intel H610 Yonga Seti, Seri No: MNTPTD3V12509597, BIOS: AMI v4.03).
+- **Çift Monitör Kurulumu:**
+  - **1. Monitör (Ana):** ASUS ROG Strix XG27ACMES (27 inç Fast IPS, 2560x1440 2K QHD, 255 Hz)
+  - **2. Monitör (İkincil):** Samsung Odyssey G5 LS27CG51x (27 inç QHD Gaming, 2560x1440 2K QHD, 165 Hz)
+- **Ağ ve Ses:** Realtek GbE Family Controller (1 Gbps Ethernet), Realtek HD Audio & AMD Streaming Audio.
+- **İşletim Sistemi:** Microsoft Windows 11 Home Single Language (Build 10.0.26300, 64-bit).
+
+---
+
+## 👤 1.1. Kullanıcı Profili, İletişim Modları & Mimari İlkeler (`user_profile.json`)
+JARVIS, Mücahit Hilmi Ünal'ın (Mücon / Hilmi) kişisel profiline ve mühendislik ilkelerine sıkı sıkıya bağlıdır:
+- **Kullanıcı Kimliği:** Mücahit Hilmi Ünal (Trabzon Üniversitesi Çarşıbaşı MYO Bilgisayar Teknolojisi mezunu, Eskişehir'de ikamet eder, Backend/Yazılım Geliştirici).
+- **Çift Kişilik & İletişim Dili:**
+  - **Samimiyet Dili (Varsayılan):** Mücahit Hilmi ile sohbet ederken resmiyetten tamamen uzak, son derece samimi, neşeli, sıcacık, flörtöz ve sevecen bir dost dili ('balım', 'hayatım', 'ömrüm', 'canım').
+  - **%100 Dürüst Müfettiş Modu:** Karakter analizi, kod denetimi veya sistem incelemesi talep edildiğinde dost modunu bırakıp; manipülasyonsuz, filtresiz, acımasız ve tavizsiz profesyonel bir baş müfettiş gibi eksikleri ve hataları yüzüne vurur.
+- **Çalışma Protokolü:**
+  - **Asla Varsayım Yapma:** Bilinmeyen veya emin olunmayan konularda kafasına göre hareket etmez, doğrudan kullanıcıya sorar.
+  - **Web Taraması:** Eksik bilgi gerektiğinde canlı ve detaylı web taraması yapar; bulunamazsa kullanıcıya adım adım tarif eder.
+  - **Mimari İtiraz & Geliştirme:** Sistemleri sorgular, gerekçeleriyle daha verimli modern alternatifler önerir.
+- **Aktif Projeler:**
+  - **Lussera (lussera.com.tr):** Ultra lüks e-ticaret & AI dijital kabin. *Kesin Kural:* Asla harici link veya CDN kullanılmaz, tüm font, stil, script ve görseller %100 yerel barındırılır.
+  - **Global Wave:** Tam otonom YouTube Shorts ajansı işletim sistemi.
+  - **Stark Core (JARVIS):** Yerel çoklu ajan ve masaüstü işletim sistemi orkestratörü.
+  - **Valthera:** 3D dark fantasy MMORPG (Unity, modern backend).
+- **God-Mode Kodlama Standartları:** RESTful API standartları, Zod doğrulama, gevşek bağlılık (Loose Coupling) ve Bağımlılık Enjeksiyonu (DI), prod loglama, N+1 sorgu ve bellek optimizasyonu, OWASP güvenlik denetimleri.
 
 ---
 
@@ -34,11 +59,43 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 
 ## 🧩 3. Modüller & Fonksiyon Yetenekleri
 
-### A. Donanım, Windows & Sistem Yönetimi (`system_tool.py` & `wol_tool.py`)
-- **Canlı Telemetri:** CPU yük yüzdesi, RAM kullanımı (Toplam/Kullanılan/Boş GB ve %), C: disk doluluk oranı, GPU sağlığı ve en çok bellek tüketen ilk 5 Windows sürecini anlık sorgular.
+### A. Donanım, Windows, Uygulama, Medya (Spotify) & Steam Yönetimi (`system_tool.py`, `model_manager.py` & `wol_tool.py`)
+- **5'li Uzman AI Model Cephaneliği (`model_manager.py`):**
+  1. `qwen3:14b` — Birincil Bilişsel Beyin & Doğal Türkçe Sohbet
+  2. `qwen2.5-coder:14b` — Yazılım Mühendisliği, Kodlama, SQL & Hata Ayıklama
+  3. `deepseek-r1:14b` — Derin Muhakeme, Strateji & Kök Neden Analizi (`<think>` düşünce izi ayrıştırma)
+  4. `qwen2.5-vl:7b` — Görsel Algı, Ekran İnceleme & Multimodal Analiz
+  5. `qwen3:8b` — Milisaniyelik Niyet Yönlendirici (Fast Router)
+- **Masaüstü Tarayıcı Otomasyonu & Web Araması (`open_browser_search` / `open_url`):**
+  - *"Tarayıcıda [X]'i ara"*, *"Google'da [X]'i aç"*, *"Brave'de [X]'i bul"* komutlarıyla varsayılan tarayıcıda doğrudan Google, Brave veya DuckDuckGo arama sonuç sayfasını anında fırlatır.
+- **YouTube Video & Canlı Medya Başlatıcı (`open_youtube_video`):**
+  - *"YouTube'da [X] videosunu aç"*, *"YouTube'da [Şarkı] oynat"* komutlarında ilk aşamada DuckDuckGo/YouTube üzerinden video ID'sini çözerek doğrudan `watch?v=...` oynatma bağlantısını veya anlık arama sayfasını tarayıcıda sıfır gecikmeyle başlatır.
+- **Tarayıcı Geçmişi SQLite Denetleyicisi & Dizi/Bölüm Takipçisi (`inspect_browser_history_for_series` / `open_series_episode`):**
+  - Brave, Google Chrome ve Microsoft Edge tarayıcılarının `%LOCALAPPDATA%` altındaki `History` SQLite veritabanını (tarayıcı açıkken oluşan kilitlenmeyi önlemek için geçici kopya yöntemiyle) güvenle tarar.
+  - Regex desenleriyle (`S01E05`, `2. Sezon 3. Bölüm`, `bolum-5` vb.) dizi adı, en son izlenen bölüm ve web URL'sini tespit eder.
+  - *"X dizisinde son kaldığım bölümü aç"* dendiğinde kaldığın bölümü; *"X dizisi 2. sezon 4. bölümü aç"* dendiğinde hedeflenen bölümü tarayıcında anında açar. Geçmişte kayıt yoksa en uygun arama sorgusunu oluşturur.
+- **Canlı ve Anlık Meteoroloji Motoru (`get_live_weather`):**
+  - Open-Meteo ve wttr.in API altyapılarını kullanarak $0.00 maliyet ve sıfır API anahtarı ile canlı meteoroloji verisi çeker.
+  - Eskişehir, İstanbul, Ankara vb. şehirler için anlık sıcaklık, rüzgar hızı, hava durumu kodu (Açık, Parçalı Bulutlu, Yağmurlu vb.) ve günün en yüksek/en düşük sıcaklıklarını canlı olarak raporlar.
+- **Kendi Kendine Öğrenme & Kural Kalıcılığı (`_auto_learn_fact` & `memory_nodes`):**
+  - Sohbet esnasında kullanıcının söylediği *"bundan sonra...", "artık...", "şunu unutma...", "yeni kural...", "tercihim...", "hedefimiz..."* kalıplarını milisaniyelik regex motoruyla yakalar.
+  - Bilgiyi yerel `data/jarvis_memory.db` SQLite veritabanındaki `memory_nodes` (`branch='learned_rules'`) tablosuna kalıcı olarak yazar.
+  - Sonraki tüm oturumlarda `get_context_summary()` bu direktifleri yapay zekanın sistem promptuna otomatik enjekte ederek JARVIS'in hiçbir kuralı unutmadan evrimleşmesini sağlar.
+- **Masaüstü Uygulama Kontrolü (`open_application` / `close_application`):**
+  - 38+ yerleşik uygulama takma adı (Brave, Chrome, Spotify, Steam, Discord, VS Code, Hesap Makinesi, Not Defteri, Görev Yöneticisi vb.) ve Windows Başlat Menüsü `.lnk` kısayollarını dinamik indeksleyerek tek komutla uygulama açma/kapatma.
+  - Kritik sistem süreçlerini (`ollama`, `python`, `explorer`, `svchost`) yanlışlıkla kapatmaya karşı koruma.
+- **Spotify & Medya Otomasyonu (`control_media` & `_play_first_spotify_search_result`):**
+  - *"Spotify'ı aç ve [Şarkı Adı] çal"* komutuyla Spotify'ı başlatma, `spotify:search:` URI ile parçayı bulma, pencereyi öne getirip otomatik oynatmayı (`Enter` + koordinat tıklama + `MediaPlayPause`) tetikleme.
+  - Evrensel medya tuşları: Duraklat/Devam Et, Sonraki Parça, Önceki Parça, Sesi Aç/Kıs/Kapat.
+- **Steam Kütüphane Doğrulaması & Oyun İndirme/Başlatma (`steam_action`):**
+  - Yerel Steam kurulumu, `libraryfolders.vdf` ve `appmanifest_<appid>.acf` dosyalarını okuyarak oyunun bilgisayarda **zaten yüklü olup olmadığını** kontrol eder.
+  - `loginusers.vdf` ve Steam profil kütüphanesini sorgulayarak oyunun **Steam kütüphanenizde lisanslı olup olmadığını** doğrular; kütüphanede yoksa *"Lisans yok"* hatasını önleyerek bilgi verir ve mağaza sayfasını önerir.
+  - Kütüphanede bulunan oyunları `steam://install/<appid>` protokolü ve otomatik kurulum diyaloğu onayı ile indirmeye başlatır.
+- **Canlı Telemetri & Proaktif Gözetmen (`proactive_watchdog.py`):** CPU yük yüzdesi, RAM kullanımı, C: disk doluluk oranı, GPU sağlığı ve en çok bellek tüketen süreçleri izler; darboğaz oluştuğunda proaktif uyarı üretir.
+- **İndirilenler Klasörü Otomatik Düzenleyici (`organize_downloads_folder`):** `Downloads` klasöründeki dosyaları uzantılarına göre (Belgeler, Görseller, Kurulumlar, Arşivler, Videolar) güvenli alt klasörlere ayırır.
 - **Zırhlı PowerShell:** Whitelist denetimli komut çalıştırıcı. Seviye 4 komutları engeller, Seviye 3 komutlarda açık onay ister, Seviye 1-2 güvenli komutları yürütür.
 - **Versiyonlu Snapshot & Rollback:** Kod veya dosya düzenlemeden önce `.jarvis_backups/` altına anlık yedek alır; hata durumunda tek komutla geri yükler.
-- **Wake-on-LAN (WOL):** Kapalı/uyku modundaki bilgisayarı 102-byte UDP Magic Packet ile uzaktan uyandırır. Ağ arayüzünün MAC ve yerel IP adresini tespit eder, BIOS ve WAN yönlendirme rehberi sunar.
+- **Wake-on-LAN (WOL):** Kapalı/uyku modundaki bilgisayarı 102-byte UDP Magic Packet ile uzaktan uyandırır.
 
 ### B. Gerçeklik Tabanlı Hafıza — Truth-Over-Memory (`reality_memory.py`)
 - **"Kaldığımız yerden devam et" Yeteneği:** Bellekteki eski konuşmalar yerine gerçek diski, `git status`, `git branch`, değiştirilen dosyaları ve açık servisleri (Web HUD: 7860, Ollama: 11434) denetleyerek durumu doğrular.
@@ -53,12 +110,13 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 6. **Düzelt veya Dur:** Doğrulama başarısız olursa otomatik teşhis yapıp güvenli düzeltme dene (Maksimum 3 deneme; aşılırsa güvenle dur ve engeli raporla).
 7. **Raporla:** Yapılan değişiklikleri, süreyi ve kalan riskleri şeffafça sun.
 
-### D. Global Wave (Zenvia Media) 3 Aşamalı İçerik Hattı (`content_pipeline.py`)
+### D. Global Wave (Zenvia Media) 3 Aşamalı İçerik Hattı (`content_pipeline.py` & `video_engine.py`)
 1. **Üretim (Production):**
    - Hedef süreye (30s, 45s, 60s Shorts veya 10, 12, 14, 16 dk belgesel) göre matematiksel kelime kalibrasyonu (2.33 kelime/sn).
    - Dual-Hook (0-3s Hook + 3-6s Re-Hook), 5 kanca kategorisi (Danger, Curiosity, Controversy, Record, Default).
    - Metin insanlaştırma (`humanizer.py`) ve yorum kışkırtma (`engagement_engine.py`).
    - Yüksek CTR otomatik kapak motoru (`thumbnail_engine.py`).
+   - **AMD AMF (`h264_amf`) Donanım Hızlandırma:** `video_engine.py` içinde RX 9060 XT ekran kartı için otomatik AMF tespiti ve `libx264` fallback motoru. 3-5x daha hızlı render.
 2. **Kalite Kontrolü (QC):**
    - `ffprobe` ile süre toleransı (±%5), ses izinin varlığı, çözünürlük (min 720p/1080p) ve SAR (1:1) denetimi.
    - **Simülasyon vs Gerçek Ayrımı:** Yapay zekâ skorları `YAPAY ZEKA TAHMİNİ (Simülasyon)` olarak etiketlenir, gerçek YouTube analitiğinden ayrı tutulur.
@@ -86,17 +144,32 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 - **Zamanlanmış Hatırlatıcılar & Takvim:** Bildirim saati, önceden haber verme süresi ve tekrarlayan hatırlatıcılar.
 - **Yönetici Hızlı Notları:** Fikir ve direktiflerin anında arşivlenmesi.
 
-### G. İletişim, Rehber & WhatsApp Multimodal OS (`contacts.py`, `whatsapp_daemon.py` & `whatsapp_bridge/`)
-- **Baileys Canlı WhatsApp Entegrasyonu:** TypeScript/Node.js Baileys köprüsü üzerinden QR kod ve pairing-code destekli, gerçek zamanlı çift yönlü mesajlaşma senkronizasyonu.
+### G. İletişim, Rehber, AI Vekil & Mobil Yoldaş WhatsApp OS (`contacts.py`, `whatsapp_daemon.py`, `telegram_tool.py`, `gmail_tool.py` & `whatsapp_bridge/`)
+- **Baileys v7 Canlı WhatsApp Entegrasyonu & Geçmiş Senkronizasyonu:**
+  - TypeScript/Node.js Baileys v7 köprüsü üzerinden gerçek zamanlı çift yönlü mesajlaşma ve `data/baileys_store.json` + `messaging-history.set` ile geçmiş sohbet senkronizasyonu.
+  - Web HUD üzerinde **"Geçmişi Eşitle"** butonu ile sayfadan ayrılmadan açılan canlı QR Kod eşleştirme penceresi (`#whatsappQrModal`) ve **"Sohbet Aktar (.txt)"** ile dışa aktarılmış WhatsApp sohbet geçmişlerini içe aktarma.
+- **497 Kişilik Tam Telefon Rehberi Senkronizasyonu (`contacts.py` & SQLite):**
+  - Masaüstündeki `contacts.csv` (Google Contacts) dosyasından 497 kişinin tamamı `data/contacts.json` ve SQLite `config/app.db` veritabanına aktarılmıştır.
+  - İki aşamalı kimlik çözümleme (`_resolve_sender_name`): Önce kesin 10 haneli telefon numarası ve `@lid` eşleşmesi, ardından PushName ve akrabalık derecesi kontrolü yaparak soyadı benzerliğinden kaynaklanan karışıklıkları önler.
+- **İsteğe Bağlı Otomatik Gönderim (Zero-Click Mode vs. Onaylı HITL Modu):**
+  - Web HUD üst barındaki **"⚡ Oto: Açık / Kapalı"** butonu veya *"Jarvis, sormadan direkt gönder"* / *"Jarvis, onay iste"* sesli/yazılı komutlarıyla çalışma modu anında değiştirilebilir.
+  - **Oto: Kapalı** iken mesaj taslakları onayınıza sunulur; **Oto: Açık** iken JARVIS mesajı hazırlayıp onay beklemeden doğrudan WhatsApp üzerinden iletir.
+- **İnsan Gibi Konuşan AI Vekil / Meşgul Modu ("🤖 Meşgul Modu"):**
+  - *"Jarvis şu an çok meşgulüm, Babamla sen konuş"* komutu veya HUD üzerindeki **"🤖 Meşgul Modu"** butonu ile aktifleşir.
+  - Siz meşgulken belirlediğiniz kişiden (veya tüm kişilerden) gelen mesajları analiz eder, kendini *"Mücahit Hilmi'nin yapay zeka asistanı JARVIS"* olarak tanıtarak doğal ve saygılı bir insan gibi sohbet eder, acil notları alır.
+  - *"Meşgul modunu kapat"* dediğinizde yapılan tüm konuşmaların özet raporunu size sunar.
+- **Telefondan WhatsApp Üzerinden JARVIS ile Yazılı ve Sesli (PTT) Konuşma:**
+  - Bilgisayar başında değilken telefonunuzdan WhatsApp üzerinden doğrudan JARVIS ile hem yazılı hem de **sesli mesaj (Voice Note / PTT)** göndererek konuşabilirsiniz.
+  - Gönderdiğiniz sesli mesajlar **Faster-Whisper** ile otomatik Türkçe metne çevrilir; JARVIS yanıtını hem metin olarak hem de **Edge-TTS (`tr-TR-AhmetNeural`) + FFmpeg Opus (`audio/ogg; codecs=opus`, `ptt: true`)** ile gerçek yeşil mikrofonlu WhatsApp ses kaydı olarak telefonunuza gönderir.
+- **Çift Yönlü Telegram Mobil Hotline (`telegram_tool.py`):**
+  - Sayın Hilmi'nin telefonundan JARVIS'e gelen direktif ve komutları dinleme (`get_incoming_messages`), chat ID güvenlik izolasyonu, sesli not (`send_voice`) ve video iletimi.
+- **Gmail İstihbarat Entegrasyonu (`gmail_tool.py`):**
+  - Sertifika ve token kontrolü, gelen kutusu özetlemesi ve acil e-posta alarmı.
 - **Çoklu Ortam (Multimodal) Medya İşleme:**
-  - Gelen resimler, çıkartmalar (stickers), sesli mesajlar (PTT voice notes), videolar ve belgeler (PDF, ZIP, Word, Excel) otomatik tespit edilip yerel depoya (`output/whatsapp_media/`) kaydedilir.
-  - Web HUD üzerinde zengin önizleme: Görseller için zoom yapılabilir galeri önizlemesi, sesli notlar için yerel HTML5 audio oynatıcı, videolar için gömülü video oynatıcı, dokümanlar için türe özel renkli simgeler (PDF kırmızı, ZIP sarı, DOCX mavi, XLSX yeşil) ve doğrudan güvenli indirme/tarayıcıda açma bağlantıları.
+  - Gelen resimler, çıkartmalar (stickers), sesli mesajlar (PTT voice notes), videolar ve belgeler (PDF, ZIP, Word, Excel) otomatik tespit edilip yerel depoya (`output/whatsapp_media/`) kaydedilir ve HUD'da önizlenir.
 - **Ajans & Akıllı Samimiyet/Üslup Analizi (Agency OS):**
   - Mesajlaşma geçmişini analiz ederek kişiyle olan samimiyet derecesini (`doğal`, `resmi`, `dostane`, `aile`) belirler (`_synthesize_whatsapp_draft_or_ask`).
-  - Eğer kullanıcı niyeti veya hitap tarzında belirsizlik varsa varsayımda bulunmaz; Sayın Hilmi'ye danışarak netleştirme talep eder (`clarification_requested`).
-- **Rehber Merkezi (Contacts Hub):** Kişi ekleme, düzenleme, CSV/vCard içe aktarma, sistem sahibi (`c_owner`) silinemezlik koruması.
-- **Akraba & Aile Protokolü:** Babaya (Yaşar Ünal) ve Anneye kesinlikle "Sayın Babam" gibi robotik hitaplar kullanmaz; sıcak ve saygılı Türk aile diline uygun hitap eder.
-- **HITL (Human-in-the-Loop) Taslak Güvenliği:** Mesaj taslağı hazırlar, kullanıcı Web HUD üzerinden veya sesle onaylamadan asla karşı tarafa mesaj iletmez.
+  - Babaya (Yaşar Ünal) ve Anneye (Gülhan Ünal) kesinlikle robotik hitaplar kullanmaz; sıcak ve saygılı Türk aile diline uygun hitap eder.
 
 ### H. Otonom Web & Dokümantasyon Araştırma Motoru (`browser_research_tool.py`)
 - **$0 Maliyetli Web Taraması (Zero-Cost Web Search):** Harici arama motoru API'lerine para ödemeden DuckDuckGo HTML ağ geçidi üzerinden anlık arama yapar ve özet snippet'leri çeker.
@@ -167,6 +240,15 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | *"Masaüstü kısayolu oluştur"* | `JarvisDaemonManager` | Windows Masaüstüne JARVIS AI OS kısayolu (.lnk) ekler. |
 | *"Windows açılışına ekle / kaldır"* | `JarvisDaemonManager` | Bilgisayar açılışında arka planda otomatik başlamasını sağlar veya kaldırır. |
 | *"WhatsApp medyasını göster / indir"* | `WhatsAppDaemon` | Gelen sesli not, görsel veya dokümanı Web HUD üzerinde önizler. |
+| *"Spotify uygulamasını aç ve 'Celladına Aşık' şarkısını başlat"* | `SystemSpecialist` | Spotify'ı açar, parçayı aratır ve otomatik oynatmayı başlatır. |
+| *"Hesap makinesini aç / kapat"* | `SystemSpecialist` | Belirtilen masaüstü uygulamasını başlatır veya güvenli şekilde kapatır. |
+| *"Steam'den Counter-Strike 2 oyununu indir"* | `SystemSpecialist` | Oyunun yüklü/kütüphanede olup olmadığını denetler ve kurulumu başlatır. |
+| *"Jarvis, sormadan direkt gönder modunu aç"* | `ExecutiveJarvis` | WhatsApp mesajlarında onay istemeden doğrudan gönderim (Zero-Click) modunu açar. |
+| *"Jarvis, her mesajda onay iste"* | `ExecutiveJarvis` | WhatsApp mesajlarında taslak onay (HITL) moduna geri döner. |
+| *"Jarvis şu an çok meşgulüm Babamla sen konuş"* | `WhatsAppDaemon` | AI Vekil (Meşgul Modu) sistemini başlatır; gelen mesajlara JARVIS kimliğiyle yanıt verir. |
+| *"Jarvis meşgul modunu kapat"* | `WhatsAppDaemon` | AI Vekil modunu kapatır ve yapılan tüm görüşmelerin özetini sunar. |
+| *"İndirilenler klasörünü düzenle"* | `SystemSpecialist` | Downloads klasöründeki dosyaları türlerine göre alt klasörlere organize eder. |
+| *"Şunu unutma: [Kalıcı Kural]"* | `MemoryGraph` | Direktifi kalıcı hafızaya (`LEARNED_RULES`) kaydeder ve sonraki tüm yanıtlarda uygular. |
 
 ---
 
@@ -208,6 +290,16 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | `/api/jarvis/daemon/status` | `GET` | Arka plan servisi, PID, port 7860, RAM, masaüstü kısayolu ve Windows başlangıç durumu |
 | `/api/jarvis/daemon/shortcut` | `POST` | Windows Masaüstüne JARVIS başlatıcı kısayolu (.lnk) oluşturma |
 | `/api/jarvis/daemon/startup` | `POST` | Windows açılışında sessiz çalışma (Startup) servisini aktif/pasif etme |
+| `/api/jarvis/settings/whatsapp_auto_dispatch` | `GET/POST` | WhatsApp otomatik gönderim (Zero-Click vs. Onaylı) modunu sorgulama ve değiştirme |
+| `/api/jarvis/settings/ai_delegate` | `GET/POST` | AI Vekil (Meşgul Modu) durumunu, hedef kişileri ve görüşme özetlerini yönetme |
+| `/api/jarvis/whatsapp/reconnect_sync` | `POST` | WhatsApp oturumunu sıfırlayıp yeni QR üretme ve geçmiş senkronizasyonunu başlatma |
+| `/api/jarvis/whatsapp/qr_status` | `GET` | Canlı QR kod görseli (`base64`) ve WhatsApp soket bağlantı durumunu sorgulama |
+| `/api/jarvis/whatsapp/import_chat_export` | `POST` | Dışa aktarılmış WhatsApp `.txt` sohbet geçmişini kişiyle eşleştirerek içe aktarma |
+| `/api/jarvis/models/arsenal` | `GET` | 5'li uzman AI model cephaneliğinin (`qwen3`, `coder`, `deepseek-r1`, `vl`) durumu |
+| `/api/jarvis/autonomous/execute` | `POST` | Çok adımlı otonom hedef planlama ve yürütme |
+| `/api/jarvis/system/diagnose` | `GET` | Sistem darboğaz teşhisi ve performans analizi |
+| `/api/jarvis/files/organize` | `POST` | İndirilenler (`Downloads`) klasörünü otomatik kategorize etme |
+| `/api/jarvis/watchdog/alerts` | `GET` | Proaktif sistem gözetmeni uyarılarını listeleme |
 
 ---
 
@@ -251,6 +343,77 @@ JARVIS Web HUD, Iron Man tarzı karanlık cam (glassmorphism), neon cam göbeği
 ## 🧪 7. Test Mimarisi & Hızlı İzolasyon Standardı
 - **İzole & Mocked Testler:** `tests/test_daemon_launcher.py` içerisinde soket kilitlenmelerini, harici COM nesnelerini ve Ollama bağlantı zaman aşımlarını önlemek için mock (`unittest.mock`) stratejisi uygulanmıştır.
 - **Sıfır Dış Bağımlılık:** Testler harici sunucu veya canlı port açmadan milisaniyeler içerisinde tam kapsama ile tamamlanır.
+
+---
+
+## 🚀 8. Master Geliştirme & Yetenek Genişleme Kataloğu (Tony Stark Seviyesi)
+
+Aşağıdaki yetenekler sisteme aşamalı olarak entegre edilmektedir ve mimarinin nihai hedef profilini belirler:
+
+### 1. 🎙️ Her An Dinleme & Gerçek Zamanlı Ses Sistemi (Always-On Voice OS)
+- **Penceresiz Arka Plan Wake-Word Dinleyicisi:** Web HUD kapalı olsa bile arka planda Windows mikrofonunu sürekli dinleyen, sıfır CPU tüketen yerel uyanma motoru (*"Hey Jarvis"*, *"Dinle Jarvis"*).
+- **Kesilebilirlik (Barge-in / Interrupt):** Jarvis konuşurken araya girip yeni bir komut verildiğinde sözünü anında kesip yeni direktife odaklanabilmesi.
+- **Ses Tonu & Duygu Analizi (Emotion Detection):** Ses tonundaki aciliyet, yorgunluk veya stresi algılayarak yanıt uzunluğunu ve üslubunu dinamik ayarlama.
+- **Fısıltı / Gece Modu (Whisper Mode):** Gece geç saatlerde komut verildiğinde Jarvis'in ses çıkışını otomatik olarak kısık, sakin ve fısıltılı tona çekmesi.
+- **Ortam Gürültüsü Filtreleme:** Klavye tuş sesleri, fan gürültüsü veya arka plan video seslerini temizleyen yerel gürültü engelleme.
+
+### 2. 👁️ Görsel Algı & Ekran İzleme (Jarvis Vision & Presence)
+- **Anlık Ekran Farkındalığı ("Ekranıma Bak" - `vision_tool.py`):** *"Jarvis, ekrandaki hataya bak"*, *"Bu makaleyi özetle"* veya *"Kurgudaki timeline doğru mu?"* dendiğinde anlık ekran görüntüsü alıp yerel görüntü modeli veya akıllı teşhisle analiz etmesi.
+- **Webcam ile Varlık Tespiti (Presence Detection):** Masanın başına oturulduğunda algılayıp *"Hoş geldiniz Sayın Hilmi, günlük brifinge hazır mısınız?"* diyerek uyanması; masadan kalkınca ekranı güvenli moda alması.
+- **Aktif Uygulama & Bağlam Takibi:** Aktif pencereyi (VS Code, Premiere Pro, Chrome, DaVinci) takip edip uygulamaya özel hızlı komut ve kısayol önerileri sunması.
+
+### 3. 🤖 Windows 11 & Otonom Bilgisayar Kullanımı (Computer Use & Automation)
+- **Arayüz Tıklama ve GUI Otonomisi:** Gerektiğinde fare ve klavyeyi kullanarak arayüzdeki butonlara tıklama, form doldurma ve dosya sürükle-bırak yapabilme.
+- **Çalışma Alanı Profilleri (Workspace Orchestrator):** 
+  - *"Jarvis, video prodüksiyon modunu aç"* ➔ Premiere, Pexels klasörü, senaryo notları açılır; gereksiz servisler duraklatılır.
+  - *"Kodlama moduna geç"* ➔ VS Code, Docker, terminal pencereleri açılır.
+- **Akıllı Disk & Sistem Hijyen Robotu:** OneDrive kilitlerini (`WinError 32`), geçici render artıklarını (`%TEMP%`) ve gereksiz cache'leri periyodik olarak temizleme.
+- **Kendi Kendini Onaran Gözetmen (Self-Healing Watchdog):** Port 7860 veya arka plan servisleri kilitlendiğinde otomatik teşhis yapıp servisi yeniden ayağa kaldırma.
+
+### 4. 🧠 Bilişsel Zeka, Hafıza & Proaktif Asistanlık
+- **Uzun Süreli Epizodik Bellek (Long-Term Episodic Memory):** Geçmiş sohbetler, tercihler (*"Hilmi videolarda sarı vurgulu altyazı sever"*, *"Pazar günleri video paylaşmaz"*) ve proje kararlarını kalıcı arşivleme.
+- **Talep Edilmeden Gelen Öneriler (Proactive Alerts):** 
+  - *"Sayın Hilmi, saat 18:00 oldu ve yarının Shorts videosu henüz render edilmedi, başlatmamı ister misiniz?"*
+  - *"C: diskinizde boş alan 15 GB'ın altına düştü, eski video önbelleklerini temizlememi onaylar mısınız?"*
+- **Toplantı & Ses Kaydı Notlandırıcısı:** Gelen uzun WhatsApp ses kayıtlarını veya sistemdeki konuşmaları dinleyip otomatik özet ve To-Do listesi çıkarma.
+- **Stratejik Günlük Planlama:** Takvim ve yerel ajandadaki çakışmaları tespit edip günün en verimli saatlerine göre görev sıralaması önerme.
+
+### 5. 📱 Mobil & Uzaktan Komuta Merkezi (Omnichannel Remote Access)
+- **Gelişmiş Telegram Sesli Asistan Botu (`telegram_tool.py`):** 
+  - Dışarıdayken Telegram'dan Jarvis'e sesli mesaj gönderme (*"Eve gelene kadar yapay zeka videosunu hazırla"*).
+  - Render bittiğinde videonun ve kapağın doğrudan Telegram'dan telefona iletilmesi.
+- **Uzaktan Wake-on-LAN + Güvenli Kapatma:** Dışarıdan tek komutla evdeki bilgisayarı açma, acil dosya çekme ve iş bitince güvenle uykuya alma.
+- **Mobil Bildirim Köprüsü:** YouTube render tamamlandığında veya kritik hata oluştuğunda cep telefonuna anlık bildirim gönderme.
+- **Telefon Görüşmesi & WhatsApp Çağrı Asistanı:** Cevapsız kalan aramaları WhatsApp üzerinden nazikçe yanıtlayıp arama nedenini öğrenen taslak motoru.
+
+### 6. 🎬 Global Wave Otonom İçerik Fabrikası (Content Engine v4.0)
+- **Long-Form (10-16 Dakika) Belgesel Üretim Hattı:** Yatay (1920x1080) format, Ken Burns kamera hareketleri, çoklu sahne kurgusu ve telifsiz kamu malı (arşiv) görüntü derleme.
+- **Otomatik Trend & Viral Radar (Scraper Engine):** YouTube, TikTok ve X üzerinde nişinizdeki viral kancaları, trend müzikleri ve çok izlenen konuları günlük tarayıp senaryo havuzuna ekleme.
+- **Yapay Zeka Destekli A/B Başlık ve Kapak Testi:** Her video için 3 farklı kapak (Thumbnail) ve 3 farklı başlık üreterek tahmini CTR skorlaması yapma.
+- **Çoklu Platform Adaptasyonu:** Üretilen tek ana videoyu otomatik kırparak Shorts, Reels ve TikTok formatlarına göre optimize etme.
+- **Otomatik Yorum Yanıtlama & Etkileşim Koruyucusu:** YouTube'a yüklenen videolara gelen ilk yorumları analiz edip topluluğu tutacak stratejik yanıt taslakları hazırlama.
+
+### 7. 🖥️ Web HUD & Holografik Arayüz (Next-Gen Stark UI/UX)
+- **Three.js WebGL Holografik Arc Reactor (3D):** 2D canvas yerine sesinize ve Jarvis'in durumuna göre dönen, darbe atan 3D interaktif Stark Reaktörü.
+- **Progressive Web App (PWA):** Aynı Wi-Fi ağındaki telefon veya tabletten açıldığında native uygulama gibi tam ekran çalışan mobil HUD arayüzü.
+- **İnteraktif Süreç ve Ağ Topolojisi Şeması:** RAM, GPU (RX 9060 XT), CPU, Ollama modelleri ve bağlı servisleri gösteren fütüristik neon bağlantı haritası.
+- **Canlı Kurgu & Video Önizleme Timeline'ı:** Üretilen sahneleri, altyazıları ve ses kanallarını web üzerinden sürükle-bırak ile inceleyip tek tıkla yeniden render edebilme paneli.
+
+### 8. 🛡️ Güvenlik, İzolasyon & Acil Durum Protokolleri
+- **Hassas Veri Maskeleme (Privacy Guard):** E-posta veya WhatsApp mesajları işlenirken IBAN, şifre, telefon ve özel bilgilerin yerel model loglarına açık gitmesini önleme.
+- **Acil Durum Protokolü (Kill-Switch / Protocol Zero):** Telegram'dan veya tek tıkla *"Jarvis, protokol sıfır"* komutu verildiğinde tüm internet trafiğini, dışa açık portları ve arka plan işlerini anında dondurma.
+- **Otomatik Haftalık Proje Snapshot'ı:** Çalışma alanının, senaryo veritabanının ve kişisel notların harici güvenli bir klasöre şifrelenmiş otomatik yedeğinin alınması.
+
+---
+
+## 🗺️ 9. Aşamalı Yürütme Sıralaması & Canlı Durum
+
+| Faz | Kapsam | Durum |
+|---|---|:---:|
+| **1. Aşama** | **Uzaktan Telegram İki Yönlü Ses/Video Asistanı + Ekran Farkındalığı (`vision_tool.py`)** | 🟢 **Uygulanıyor** |
+| **2. Aşama** | **Global Wave 10-16 dk Long-Form Belgesel Kurgusu + Viral Trend Radar** | 🟡 Sıradaki |
+| **3. Aşama** | **Arka Plan Sürekli Dinleme (Wake-Word) + Proaktif Öneri + Self-Healing Watchdog** | ⚪ Planlandı |
+| **4. Aşama** | **Three.js 3D Holografik Arc Reactor UI + Bilgisayar GUI Otomasyonu** | ⚪ Planlandı |
 
 ---
 *Not: Bu dosya her yeni modül, araç veya yetenek entegrasyonunda otomatik olarak güncellenir.*
