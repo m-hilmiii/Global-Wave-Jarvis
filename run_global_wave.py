@@ -66,8 +66,8 @@ def main():
     
     host = "127.0.0.1"
     port = 7860
-    url = f"http://{host}:{port}"
-    print(f"[4/4] Starting Web HUD on {url}")
+    url = f"http://{host}:{port}/"
+    print(f"[4/4] Starting JARVIS Executive AI OS on {url}")
     print("=" * 60)
     
     try:

@@ -90,7 +90,7 @@ def _normalize_turkish_for_kokoro(text: str) -> str:
 class JarvisVoiceTool:
     def __init__(self):
         self.output_dir = VOICES_DIR
-        self.default_voice = "am_adam"
+        self.default_voice = "tr-TR-AhmetNeural"
         self.speed = 1.05
 
     def parse_wake_word(self, raw_input: str) -> Tuple[bool, str]:
@@ -132,22 +132,25 @@ class JarvisVoiceTool:
         # Generate unique audio output file
         file_id = uuid.uuid4().hex[:8]
 
-        # 1. Native Turkish Neural TTS (tr-TR-AhmetNeural) when requested by Web HUD
-        if chosen_voice.lower().startswith("tr-"):
+        # 1. Native Turkish Neural TTS (Edge-TTS or gTTS for authentic Turkish)
+        is_turkish_request = chosen_voice.lower().startswith("tr-") or (chosen_voice == self.default_voice and language == "tr")
+        if is_turkish_request and not chosen_voice.startswith("am_") and not chosen_voice.startswith("af_"):
             out_mp3 = self.output_dir / f"jarvis_{file_id}.mp3"
+            # 1A. Try Microsoft Edge-TTS Neural
             try:
                 import asyncio
                 import edge_tts
+                voice_target = chosen_voice if chosen_voice.lower().startswith("tr-") else "tr-TR-AhmetNeural"
                 pct = int(round((out_speed - 1.0) * 100))
                 rate_str = f"{pct:+d}%"
-                comm = edge_tts.Communicate(spoken_text, chosen_voice, rate=rate_str)
+                comm = edge_tts.Communicate(spoken_text, voice_target, rate=rate_str)
                 asyncio.run(comm.save(str(out_mp3)))
-                if out_mp3.exists() and out_mp3.stat().st_size > 100:
+                if out_mp3.exists() and out_mp3.stat().st_size > 500:
                     est_dur = max(0.8, round(len(spoken_text.split()) / 2.5, 2))
                     return {
                         "success": True,
                         "engine": "edge-tts-neural-tr",
-                        "voice": chosen_voice,
+                        "voice": voice_target,
                         "speed": out_speed,
                         "language": "tr-TR",
                         "duration_seconds": est_dur,
@@ -156,8 +159,30 @@ class JarvisVoiceTool:
                         "spoken_text": spoken_text
                     }
             except Exception as tr_exc:
-                logger.info(f"[VoiceTool] Turkish Edge-TTS unavailable ({tr_exc}); falling back to offline Kokoro-82M.")
-                chosen_voice = "am_adam"
+                logger.debug(f"[VoiceTool] Edge-TTS failed ({tr_exc}), trying gTTS Turkish...")
+
+            # 1B. Fallback to gTTS (100% fluent, reliable native Turkish)
+            try:
+                from gtts import gTTS
+                tts = gTTS(text=spoken_text, lang="tr", slow=False)
+                tts.save(str(out_mp3))
+                if out_mp3.exists() and out_mp3.stat().st_size > 500:
+                    est_dur = max(0.8, round(len(spoken_text.split()) / 2.5, 2))
+                    return {
+                        "success": True,
+                        "engine": "gtts-turkish-neural",
+                        "voice": "tr-TR-Ahmet",
+                        "speed": out_speed,
+                        "language": "tr-TR",
+                        "duration_seconds": est_dur,
+                        "audio_url": f"/output/jarvis_voices/{out_mp3.name}",
+                        "file_path": str(out_mp3),
+                        "spoken_text": spoken_text
+                    }
+            except Exception as gtts_exc:
+                logger.warning(f"[VoiceTool] gTTS Turkish synthesis failed: {gtts_exc}")
+
+            chosen_voice = "am_adam"
 
         out_wav = self.output_dir / f"jarvis_{file_id}.wav"
 

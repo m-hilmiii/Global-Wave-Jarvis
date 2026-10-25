@@ -325,7 +325,27 @@ def run_video_generation_pipeline(
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_hud():
-    template_path = WEB_DIR / "templates" / "index.html"
+    template_path = WEB_DIR / "templates" / "jarvis_luxury.html"
+    if not template_path.exists():
+        template_path = WEB_DIR / "templates" / "index.html"
+    with open(template_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/jarvis", response_class=HTMLResponse)
+async def serve_jarvis():
+    template_path = WEB_DIR / "templates" / "jarvis_luxury.html"
+    if not template_path.exists():
+        template_path = WEB_DIR / "templates" / "index.html"
+    with open(template_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/studio", response_class=HTMLResponse)
+async def serve_studio():
+    template_path = WEB_DIR / "templates" / "studio.html"
+    if not template_path.exists():
+        template_path = WEB_DIR / "templates" / "index.html"
     with open(template_path, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -1673,3 +1693,31 @@ async def api_jarvis_files_organize(request: Request):
 async def api_jarvis_watchdog_alerts():
     res = await run_in_threadpool(proactive_watchdog.get_recent_alerts, 10)
     return {"status": "success", "alerts": res}
+
+
+@app.get("/api/jarvis/studio/status")
+async def api_jarvis_studio_status():
+    from core_jarvis.tools.studio_bridge import studio_bridge
+    summary = await run_in_threadpool(studio_bridge.get_ltx_status_summary)
+    paths = await run_in_threadpool(studio_bridge.get_studio_paths)
+    is_rendering = studio_bridge.is_ltx_rendering()
+    return {"status": "success", "summary": summary, "paths": paths, "is_rendering": is_rendering}
+
+
+@app.post("/api/jarvis/studio/generate_video")
+async def api_jarvis_studio_generate(request: Request):
+    payload = await request.json() if request.headers.get("content-length") else {}
+    prompt = payload.get("prompt", "A cinematic drone shot of a futuristic cyberpunk city at night with neon lights, photorealistic, 4k")
+    from core_jarvis.tools.studio_bridge import studio_bridge
+    res = await run_in_threadpool(studio_bridge.trigger_ltx_video, prompt=prompt)
+    return res
+
+
+@app.post("/api/jarvis/studio/story")
+async def api_jarvis_studio_story(request: Request):
+    payload = await request.json() if request.headers.get("content-length") else {}
+    scene = payload.get("scene")
+    all_scenes = bool(payload.get("all_scenes", True))
+    from core_jarvis.tools.studio_bridge import studio_bridge
+    res = await run_in_threadpool(studio_bridge.trigger_story_generator, scene=scene, all_scenes=all_scenes)
+    return res
