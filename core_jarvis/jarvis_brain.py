@@ -222,8 +222,8 @@ class JarvisBrain:
             resp = self.http_session.get(f"{self.ollama_url}/api/tags", timeout=1.5)
             if resp.status_code == 200:
                 installed = [m.get("name", "") for m in resp.json().get("models", [])]
-                # Prioritize 14B first (fits comfortably in 16GB VRAM), then 8B
-                preferences = ["qwen3:14b", "qwen2.5:14b", "qwen3:8b", "llama3.1:8b", "mistral-nemo:12b"]
+                # Jarvis v3.0: Prioritize 8B (fits permanently in VRAM with zero latency), then 14B on demand
+                preferences = ["qwen3:8b", "qwen2.5:7b", "qwen3:14b", "qwen2.5:14b", "llama3.1:8b", "mistral-nemo:12b"]
                 for pref in preferences:
                     for model in installed:
                         if pref in model:
@@ -374,15 +374,17 @@ class JarvisBrain:
         json_mode: bool = False,
         temperature: float = 0.65,
         timeout: int = 45,
-        model_override: Optional[str] = None
+        model_override: Optional[str] = None,
+        keep_alive_override: Optional[str] = None
     ) -> Optional[str]:
         """Executes a pooled HTTP call to Ollama with VRAM keep_alive optimization for RX 9060 XT."""
         target_model = model_override or self.model_name
+        keep_alive = keep_alive_override if keep_alive_override is not None else ("-1" if "8b" in target_model.lower() else "15m")
         payload: Dict[str, Any] = {
             "model": target_model,
             "messages": messages,
             "stream": False,
-            "keep_alive": "5m",  # Auto-release after 5m idle to protect 16GB System RAM & RX 9060 XT VRAM
+            "keep_alive": keep_alive,  # Jarvis v3.0: -1 for King 8B, 15m for Heavy 14B, 2m for Vision
             "options": {
                 "temperature": temperature,
                 "num_ctx": 4096
@@ -400,13 +402,29 @@ class JarvisBrain:
             return None
 
     def _route_intent(self, user_text: str, session_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
-        """Stage 1: Fast, low-temperature intent classification with dialogue context."""
+        """Stage 1: Fast, low-temperature intent classification with dialogue context (v3.0 zero-hop optimization)."""
         draft_context = ""
         if self.pending_draft:
             draft_context = (
                 f"\n[AKTİF ONAY BEKLEYEN TASLAK VAR -> Alıcı: {self.pending_draft['recipient']}, "
                 f"Mesaj: \"{self.pending_draft['message']}\"]"
             )
+
+        # Jarvis v3.0 Zero-Hop: If no draft is pending and no explicit tool verbs exist, immediately return chat
+        tool_keywords = (
+            "whatsapp", "mesaj", "yaz", "gönder", "gonder", "yolla", "ilet", "yanıt", "yanit", "cevap",
+            "rehber", "kişi ekle", "kisi ekle", "kişiyi ekle", "kişi sil", "kisi sil", "numara",
+            "hatırlat", "hatirlat", "alarm", "not al", "not ekle", "notlara",
+            "görev ekle", "gorev ekle", "todo",
+            "ekranı oku", "ekrana bak", "görsel", "resim", "fotoğraf", "ekran görüntüsü",
+            "araştır", "arastir", "doküman", "pdf", "özetle", "özet çıkar",
+            "testleri çalıştır", "unit test", "git diff", "commit",
+            "sistem durumu", "telemetri", "ram kullanımı",
+            "wake on lan", "bilgisayarı aç", "youtube raporu", "yorum analizi", "taslak"
+        )
+        t_low = (user_text or "").lower()
+        if not self.pending_draft and not any(kw in t_low for kw in tool_keywords):
+            return {"action": "chat", "target_person": "", "user_instruction": ""}
 
         history_context = ""
         history_source = session_history if session_history is not None else self.conversation_history
@@ -523,10 +541,9 @@ class JarvisBrain:
             except Exception as rag_exc:
                 logger.debug(f"Auto-RAG lookup skipped: {rag_exc}")
 
-        # Specialist Model Routing (Coding -> qwen2.5-coder:14b, Reasoning -> deepseek-r1:14b, General -> qwen3:14b)
+        # Jarvis v3.0 Adaptive Model Selection with 15-minute Sticky Session
+        chosen_model, keep_alive_val = model_manager.get_active_model_for_request(user_text)
         domain = model_manager.classify_task_domain(user_text)
-        chosen_model = model_manager.resolve_model_for_role(domain, default_fallback=self.model_name)
-        model_manager.prepare_vram_for_model(chosen_model)
 
         system_content = f"{JARVIS_PERSONA_PROMPT}\n\n[AKTİF HAFIZA ÖZETİ]:\n{mem_block}{rag_block}"
         messages = [{"role": "system", "content": system_content}]
@@ -539,9 +556,10 @@ class JarvisBrain:
         raw_reply = self._call_ollama(
             messages,
             json_mode=False,
-            temperature=0.6 if domain in ("coding", "reasoning") else 0.7,
-            timeout=120 if domain == "reasoning" else 75,
-            model_override=chosen_model
+            temperature=0.6 if domain in ("heavy_coder", "coding", "heavy_reasoner", "reasoning") else 0.7,
+            timeout=120 if domain in ("heavy_reasoner", "reasoning") else 75,
+            model_override=chosen_model,
+            keep_alive_override=keep_alive_val
         )
         if not raw_reply:
             raw_reply = "Efendim, yerel dil modeli servisine (Ollama) şu an ulaşılamıyor. Servis durumunu kontrol etmemi ister misiniz?"

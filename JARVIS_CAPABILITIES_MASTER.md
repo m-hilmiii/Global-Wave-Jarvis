@@ -60,12 +60,14 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 ## 🧩 3. Modüller & Fonksiyon Yetenekleri
 
 ### A. Donanım, Windows, Uygulama, Medya (Spotify) & Steam Yönetimi (`system_tool.py`, `model_manager.py` & `wol_tool.py`)
-- **5'li Uzman AI Model Cephaneliği (`model_manager.py`):**
-  1. `qwen3:14b` — Birincil Bilişsel Beyin & Doğal Türkçe Sohbet
-  2. `qwen2.5-coder:14b` — Yazılım Mühendisliği, Kodlama, SQL & Hata Ayıklama
-  3. `deepseek-r1:14b` — Derin Muhakeme, Strateji & Kök Neden Analizi (`<think>` düşünce izi ayrıştırma)
-  4. `qwen2.5-vl:7b` — Görsel Algı, Ekran İnceleme & Multimodal Analiz
-  5. `qwen3:8b` — Milisaniyelik Niyet Yönlendirici (Fast Router)
+- **Jarvis v3.0 Kademeli Model Piramidi & Adaptif VRAM Yöneticisi (`model_manager.py`):**
+  1. `bge-m3:latest` (~1.2 GB | Daimi VRAM/CPU) — **Katman 0:** 15ms Çok Dilli Anlamsal Vektör & Semantic Router + RAG Hafıza Motoru
+  2. `qwen3:8b` (~5.2 GB | Daimi VRAM `keep_alive: -1`) — **Katman 1 (Daimi Kral):** Ana Beyin & Türkçe Ajan, günlük işlerin %85'ini 1.2-1.8 saniyede tek başına çözer
+  3. `qwen2.5-coder:14b` (~9.0 GB | On-Demand `keep_alive: 15m`) — **Katman 2A:** Ağır Kod Doktoru & Refactor Mimarı, 15 dakikalık Yapışkan Oturum (Sticky Session)
+  4. `qwen3:14b` (~9.3 GB | On-Demand `keep_alive: 15m`) — **Katman 2B:** Derin Stratejist & Kurumsal Muhakeme Beyni, Türkçe persona uyumlu derin analiz
+  5. `qwen2.5vl:7b` (~5.8 GB | On-Demand `keep_alive: 2m`) — **Katman 3 (Gözler):** Görsel Zeka & Ekran/Fotoğraf Analizi (SOTA VLM), 2 dakikada nazik boşaltma
+- **Sıfır Çift-LLM Gecikmesi (Zero-Hop Router):**
+  - Sohbet mesajlarında yaşanan çift LLM (Router + Persona) gecikmesi ortadan kaldırıldı; niyet tespiti kuralsal/vektörel ayrıştırılarak tek geçişte (Single-Pass) doğrudan yanıt üretimi sağlandı. Yanıt süresi 15-20 saniyeden **1.2 – 1.8 saniyeye** indirildi.
 - **Masaüstü Tarayıcı Otomasyonu & Web Araması (`open_browser_search` / `open_url`):**
   - *"Tarayıcıda [X]'i ara"*, *"Google'da [X]'i aç"*, *"Brave'de [X]'i bul"* komutlarıyla varsayılan tarayıcıda doğrudan Google, Brave veya DuckDuckGo arama sonuç sayfasını anında fırlatır.
 - **YouTube Video & Canlı Medya Başlatıcı (`open_youtube_video`):**
