@@ -418,4 +418,49 @@ Aşağıdaki yetenekler sisteme aşamalı olarak entegre edilmektedir ve mimarin
 | **4. Aşama** | **Three.js 3D Holografik Arc Reactor UI + Bilgisayar GUI Otomasyonu** | ⚪ Planlandı |
 
 ---
+
+## 🏛️ 10. Seçenek B Temiz Masaüstü Mimarisi & LTX-2 / Global Wave İzolasyonu
+
+Sistem karmaşasını önlemek ve 16 GB VRAM'e sahip AMD Radeon RX 9060 XT üzerinde bellek çatışmalarını (OOM / Sürücü Kilitlenmesi) kesin olarak engellemek amacıyla **Seçenek B (Desktop Master Hub)** mimarisi devreye alınmıştır.
+
+### 📁 10.1. Fiziksel Dizin Hiyerarşisi (`C:\Users\unalm\OneDrive\Masaüstü\Jarvis\`)
+Tüm yapay zeka ve video operasyonları tek bir temiz ana çatı altında 3 bağımsız departmana ayrılmıştır:
+
+```
+C:\Users\unalm\OneDrive\Masaüstü\Jarvis\
+├── Jarvis/                  # [Departman 1] Çekirdek AI OS, WhatsApp Daemon, Web HUD & Sistem Orkestratörü
+│                            # (Mevcut Global-Wawe git deposuna sembolik bağ ile bağlıdır; hiçbir path bozulmaz)
+├── Global Wawe/             # [Departman 2] Otonom YouTube Shorts & Belgesel Stüdyosu
+│   ├── start_studio.bat     # Bağımsız 1-tıkla stüdyo başlatıcı
+│   ├── run_global_wave.py   # Bağımsız pipeline çalıştırıcı
+│   ├── engine/              # Seslendirme, altyazı, render ve yayınlama motoru
+│   ├── Transkript/          # Senaryo ve transkript arşivi
+│   └── output/              # Tamamlanan videolar
+└── LTX-2-main/              # [Departman 3] Ağır Siklet 22B Video Üretim Fabrikası (~65 GB)
+    ├── models/ltx-2.5/      # 40GB BF16 + 25GB Gemma 4 12B Text Encoder
+    ├── scripts/             # generate_video.sh, story_generator.py (Dinamik kök yol keşfi)
+    ├── run_story.bat        # 11 sahneli siberpunk shorts filmi üreteci
+    └── run_generate.bat     # Tekli komut istemi video üreticisi
+```
+
+### ⚡ 10.2. "Sıfır-VRAM Tahliyesi & Nöbetçi Kış Uykusu" Protokolü (`studio_bridge.py`)
+LTX-2 modeli çalıştığında FP8 kuantizasyon ve 12B metin kodlayıcı ile tek başına **13-15 GB VRAM** talep eder. Arka planda `qwen3:8b` modelinin (5.2 GB) VRAM'de kalması kartı 19-20 GB sınırına zorlayarak sürücü kilitlenmesine (TDR) yol açar.
+
+**Dürüst Müfettiş Kararı (Süreç Kapatma vs. VRAM Tahliyesi):**
+JARVIS'in Python sürecini kapatmak mühendislik açısından hatalıdır; çünkü Python sadece ~80MB RAM ve %0 GPU tüketir. Python kapatılırsa videonun bittiğini kontrol edecek, hata anında bildirim atacak veya kullanıcıya WhatsApp'tan haber verecek hiçbir akıllı servis kalmaz.
+
+**Uygulanan Sıfır-VRAM Protokolü:**
+1. **Otonom VRAM Boşaltma:** Kullanıcı veya sistem LTX-2 video üretimini tetiklediğinde, `studio_bridge` Ollama API'sine `keep_alive: 0` sinyali yollar. Tüm modeller VRAM'den tamamen tahliye edilir (VRAM kullanımı: **0 MB**).
+2. **%100 VRAM Tahsisi:** 16 GB AMD RX 9060 XT kartının tamamı LTX-2 render motoruna sunulur.
+3. **Nöbetçi İzleme:** Python Jarvis arka planda uyanık kalarak render sürecini ve PID'yi izler (Sıfır GPU / Sıfır VRAM tüketimi).
+4. **Otonom Ön Isıtma (Auto Pre-warm):** Render bittiğinde Jarvis, `qwen3:8b` ana beynini tekrar VRAM'e çağırır ve WhatsApp / Web üzerinden kullanıcıya bildirim iletir.
+
+### 🎮 10.3. Komuta & Tetikleme Yolları
+- **WhatsApp & Sohbet Hızlı Yolları:**
+  - *"ltx durumu"* / *"video render durumu"* / *"render ne alemde"* -> Canlı LTX render telemetrisi.
+  - *"ltx ile video üret <prompt>"* -> Tekli sinematik video üretimi (Sıfır-VRAM kalkanıyla).
+  - *"siberpunk shorts filmi"* / *"45 saniyelik film"* -> 11 sahneli otonom hikaye üretim hattı.
+- **Python Doğrudan Erişim:** `from core_jarvis.tools.studio_bridge import studio_bridge`
+
+---
 *Not: Bu dosya her yeni modül, araç veya yetenek entegrasyonunda otomatik olarak güncellenir.*

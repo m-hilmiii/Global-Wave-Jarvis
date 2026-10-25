@@ -546,6 +546,19 @@ class WhatsAppDaemon:
                 w_live = system_tool.get_live_weather("Eskişehir")
                 return f"🌤️ **Canlı Hava Durumu:**\n\n{w_live.get('summary_text')}"
 
+            elif cmd_type == "ltx_status":
+                from core_jarvis.tools.studio_bridge import studio_bridge
+                return studio_bridge.get_ltx_status_summary()
+
+            elif cmd_type == "ltx_video":
+                from core_jarvis.tools.studio_bridge import studio_bridge
+                if any(w in raw_text.lower() for w in ["hikaye", "senaryo", "film", "45", "siberpunk", "tüm sahneler"]):
+                    res = studio_bridge.trigger_story_generator(all_scenes=True)
+                else:
+                    clean_p = re.sub(r"\b(ltx-2|ltx|ile|video|üret|yap|başlat|lütfen)\b", "", raw_text, flags=re.IGNORECASE).strip(" '\".,:-")
+                    res = studio_bridge.trigger_ltx_video(prompt=clean_p or "A cinematic drone shot of a futuristic cyberpunk city at night with neon lights, photorealistic, 4k")
+                return res.get("message", "LTX-2 video üretimi başlatıldı balım.")
+
         except Exception as exc:
             logger.error(f"[FastCommand Error] {exc}", exc_info=True)
             return f"Efendim, komut yürütülürken bir hata oluştu: {exc}"

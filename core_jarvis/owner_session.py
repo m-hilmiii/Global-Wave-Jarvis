@@ -162,6 +162,10 @@ class OwnerSessionManager:
             return True, "browser_search"
         if any(w in t for w in ["hava durumu", "hava nasıl", "hava nasil", "kaç derece", "yağmur var mı"]):
             return True, "live_weather"
+        if any(k in t for k in ["ltx durumu", "video render durumu", "render bitti mi", "video bitti mi"]):
+            return True, "ltx_status"
+        if any(k in t for k in ["ltx ile video", "ltx-2 ile video", "ltx videosu", "sinematik video üret", "siberpunk shorts filmi", "45 saniyelik film"]):
+            return True, "ltx_video"
         return False, ""
 
 

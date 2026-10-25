@@ -1054,6 +1054,10 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             decision = {"action": "browser_search", "user_instruction": cleaned_input}
         elif any(w in q_lower for w in ["hava durumu", "hava nasıl", "hava nasil", "kaç derece", "kac derece", "yağmur var mı", "yagmur var mi", "hava raporu"]):
             decision = {"action": "live_weather", "user_instruction": cleaned_input}
+        elif any(k in q_lower for k in ["ltx durumu", "video render durumu", "render ne alemde", "render bitti mi", "video bitti mi"]):
+            decision = {"action": "ltx_status"}
+        elif any(k in q_lower for k in ["ltx ile video", "ltx-2 ile video", "ltx videosu", "sinematik video üret", "siberpunk shorts filmi", "45 saniyelik film"]):
+            decision = {"action": "ltx_video", "user_instruction": cleaned_input}
         elif any(k in q_lower for k in ["kaldığımız yerden devam et", "kaldigimiz yerden devam et", "kaldığım yerden", "kaldigim yerden", "projede son durum", "nerede kalmıştık"]):
             decision = {"action": "resume_project"}
         elif any(k in q_lower for k in ["neden yavaşladı", "neden yavasladi", "bilgisayarım neden yavaş", "bilgisayar neden kasıyor", "sistem doktoru", "ram neden dolu", "darboğaz analizi"]):
@@ -1735,6 +1739,23 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             speak = res.get("summary_text", "")
             self._record_turn(user_text, reply)
             return {"reply": reply, "speak_text": speak, "action_taken": "live_weather", "weather": res}
+
+        if action == "ltx_status":
+            from core_jarvis.tools.studio_bridge import studio_bridge
+            rep = studio_bridge.get_ltx_status_summary()
+            self._record_turn(user_text, rep)
+            return {"reply": rep, "speak_text": "LTX video durumu raporlandı efendim.", "action_taken": "ltx_status"}
+
+        if action == "ltx_video":
+            from core_jarvis.tools.studio_bridge import studio_bridge
+            if any(w in q_lower for w in ["hikaye", "senaryo", "film", "45", "siberpunk", "tüm sahneler"]):
+                res = studio_bridge.trigger_story_generator(all_scenes=True)
+            else:
+                clean_p = re.sub(r"\b(ltx-2|ltx|ile|video|üret|yap|başlat|lütfen)\b", "", cleaned_input, flags=re.IGNORECASE).strip(" '\".,:-")
+                res = studio_bridge.trigger_ltx_video(prompt=clean_p or "A cinematic drone shot of a futuristic cyberpunk city at night with neon lights, photorealistic, 4k")
+            reply = res.get("message") or "LTX-2 video üretimi başlatıldı balım."
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": "LTX-2 video üretimi başlatıldı efendim. VRAM tahliyesi yapıldı.", "action_taken": "ltx_video_dispatched", "result": res}
 
         if action == "steam_action":
             from core_jarvis.tools.system_tool import system_tool
