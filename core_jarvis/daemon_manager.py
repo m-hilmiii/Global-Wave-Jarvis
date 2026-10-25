@@ -104,11 +104,14 @@ class JarvisDaemonManager:
     # -------------------------------------------------------------------------
     # Process & Port Inspection
     # -------------------------------------------------------------------------
-    def is_port_in_use(self, port: int = PORT, host: str = HOST) -> bool:
-        """Check if TCP port 7860 is bound and accepting connections."""
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.6)
-            return s.connect_ex((host, port)) == 0
+    def is_port_in_use(self, port: int = PORT, host: str = HOST, timeout: float = 0.5) -> bool:
+        """Check if TCP port is bound and accepting connections."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                return s.connect_ex((host, port)) == 0
+        except Exception:
+            return False
 
     def is_http_ready(self, port: int = PORT, host: str = HOST, timeout: float = 1.0) -> bool:
         """Check if FastAPI responds with HTTP 200 on /api/config or root."""

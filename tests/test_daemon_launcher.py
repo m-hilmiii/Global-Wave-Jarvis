@@ -54,7 +54,8 @@ class TestJarvisDaemonLauncher(unittest.TestCase):
         dm.clear_saved_pid()
         self.assertFalse(dm.pid_file.exists())
 
-    def test_port_inspection(self):
+    @patch.object(daemon_manager, 'is_port_in_use', return_value=False)
+    def test_port_inspection(self, mock_port):
         unused_port = 59876
         self.assertFalse(daemon_manager.is_port_in_use(port=unused_port))
 
