@@ -31,7 +31,7 @@ SPECIALIST_ARSENAL: List[Dict[str, Any]] = [
         "name": "qwen3:8b",
         "fallbacks": ["qwen2.5:7b", "llama3.1:8b", "qwen3:14b", "qwen2.5:14b"],
         "vram_gb": 5.2,
-        "keep_alive": "-1",
+        "keep_alive": -1,
         "heavy_14b": False,
         "title": "Ana Beyin & Türkçe Ajan (Daimi VRAM Kralı)",
         "description": "Günlük samimi sohbet, WhatsApp üslup sentezi, hızlı kodlama ve anlık refleksler."
@@ -41,7 +41,7 @@ SPECIALIST_ARSENAL: List[Dict[str, Any]] = [
         "name": "bge-m3:latest",
         "fallbacks": ["bge-m3", "nomic-embed-text:latest", "nomic-embed-text"],
         "vram_gb": 1.2,
-        "keep_alive": "-1",
+        "keep_alive": -1,
         "heavy_14b": False,
         "title": "Çok Dilli Anlamsal Vektör & Hafıza Motoru (Semantic Router & RAG)",
         "description": "1024 boyutlu vektörlerle RAG hafıza taraması ve 15ms'de niyet yönlendirme."
@@ -309,7 +309,7 @@ class ModelManager:
                 json={
                     "model": primary,
                     "messages": [{"role": "user", "content": "ping"}],
-                    "keep_alive": "-1"
+                    "keep_alive": -1
                 },
                 timeout=5
             )

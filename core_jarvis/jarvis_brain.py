@@ -379,7 +379,10 @@ class JarvisBrain:
     ) -> Optional[str]:
         """Executes a pooled HTTP call to Ollama with VRAM keep_alive optimization for RX 9060 XT."""
         target_model = model_override or self.model_name
-        keep_alive = keep_alive_override if keep_alive_override is not None else ("-1" if "8b" in target_model.lower() else "15m")
+        if keep_alive_override is not None:
+            keep_alive = -1 if str(keep_alive_override).strip() in ("-1", "-1m") else keep_alive_override
+        else:
+            keep_alive = -1 if "8b" in target_model.lower() else "15m"
         payload: Dict[str, Any] = {
             "model": target_model,
             "messages": messages,

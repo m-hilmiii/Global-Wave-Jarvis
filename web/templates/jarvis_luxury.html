@@ -527,6 +527,40 @@
 
     <!-- Global Client Logic (JavaScript) -->
     <script>
+        // Authentication token handling for secure local API communication
+        let localSessionToken = "";
+        let sessionAuthPromise = null;
+
+        async function initSessionAuth() {
+            if (!sessionAuthPromise) {
+                sessionAuthPromise = (async () => {
+                    try {
+                        const res = await fetch("/api/session/token");
+                        const data = await res.json();
+                        if (data.status === "success" && data.token) {
+                            localSessionToken = data.token;
+                            return data.token;
+                        }
+                    } catch (e) {
+                        console.warn("[JARVIS] Session token handshake failed:", e);
+                    }
+                    return "";
+                })();
+            }
+            return sessionAuthPromise;
+        }
+
+        async function authFetch(url, options = {}) {
+            if (!localSessionToken) {
+                await initSessionAuth();
+            }
+            options.headers = options.headers || {};
+            if (localSessionToken && !options.headers["X-Local-Token"]) {
+                options.headers["X-Local-Token"] = localSessionToken;
+            }
+            return fetch(url, options);
+        }
+
         // State variables
         let currentMode = 'spotlight'; // 'spotlight' or 'cockpit'
         let isVoiceEnabled = true;
@@ -620,10 +654,12 @@
                 isListening = false;
                 updateMicUI(false);
                 document.getElementById('voiceWaveBar').classList.add('hidden');
-                const val = document.getElementById('spotlightInput').value.trim();
-                if (val && currentMode === 'spotlight') {
-                    handlePromptSubmission(val);
-                } else if (val && currentMode === 'cockpit') {
+                const spotInput = document.getElementById('spotlightInput');
+                const cockInput = document.getElementById('cockpitInput');
+                const val = (spotInput.value || cockInput.value || '').trim();
+                if (val) {
+                    spotInput.value = '';
+                    cockInput.value = '';
                     handlePromptSubmission(val);
                 }
             };
@@ -709,19 +745,20 @@
             try {
                 // If chatting with a specific WhatsApp contact in Cockpit
                 if (activeTarget.id !== 'jarvis' && activeTarget.phone) {
-                    const sendRes = await fetch(`/api/jarvis/chats/${encodeURIComponent(activeTarget.phone)}/send`, {
+                    const sendRes = await authFetch(`/api/jarvis/chats/${encodeURIComponent(activeTarget.phone)}/send`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ message: userText })
                     });
                     const sData = await sendRes.json();
-                    respBody.innerText = sData.status === 'success' ? 'Mesaj WhatsApp üzerinden başarıyla iletildi efendim.' : ('Hata: ' + sData.error);
-                    appendChatMessage('JARVIS', respBody.innerText, 'jarvis');
+                    const statusText = sData.status === 'success' ? 'Mesaj WhatsApp üzerinden başarıyla iletildi efendim.' : ('Hata: ' + (sData.error || sData.message));
+                    respBody.innerText = statusText;
+                    appendChatMessage('JARVIS', statusText, 'jarvis');
                     return;
                 }
 
                 // General JARVIS Query
-                const res = await fetch('/api/jarvis/chat', {
+                const res = await authFetch('/api/jarvis/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -732,35 +769,48 @@
                 });
 
                 const data = await res.json();
-                const replyText = data.reply || data.response || "Komutunuz yürütüldü efendim.";
+                if (data.status === 'error') {
+                    const errMsg = data.message || 'Jarvis işlem hatası oluştu.';
+                    respBody.innerHTML = `<span class="text-rose-400 text-xs font-mono">Hata: ${errMsg}</span>`;
+                    appendChatMessage('JARVIS', `Hata: ${errMsg}`, 'jarvis');
+                    return;
+                }
+
+                const resObj = (data.result && typeof data.result === 'object') ? data.result : data;
+                const replyText = resObj.reply || data.reply || resObj.response || data.response || (typeof resObj === 'string' ? resObj : "Komutunuz yürütüldü efendim.");
+                const speakText = resObj.speak_text || data.speak_text || replyText;
+                const audioUrl = resObj.audio_url || data.audio_url || null;
 
                 // Format markdown response safely
                 respBody.innerHTML = formatResponseMarkdown(replyText);
                 appendChatMessage('JARVIS', replyText, 'jarvis');
 
                 // Play Turkish Audio Voice if enabled
-                if (isVoiceEnabled && data.audio_url) {
-                    playAudio(data.audio_url);
-                } else if (isVoiceEnabled) {
+                if (isVoiceEnabled && audioUrl) {
+                    playAudio(audioUrl);
+                } else if (isVoiceEnabled && speakText) {
                     // Synthesize voice via backend Turkish neural
-                    synthesizeAndPlayVoice(data.speak_text || replyText);
+                    synthesizeAndPlayVoice(speakText);
                 }
 
             } catch (err) {
                 respBody.innerHTML = `<span class="text-rose-400 text-xs font-mono">Bağlantı hatası: ${err.message}</span>`;
+                appendChatMessage('JARVIS', `Bağlantı hatası: ${err.message}`, 'jarvis');
             }
         }
 
         async function synthesizeAndPlayVoice(textToSpeak) {
+            if (!textToSpeak) return;
             try {
-                const res = await fetch('/api/jarvis/voice/speak', {
+                const res = await authFetch('/api/jarvis/voice/speak', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: textToSpeak, voice: 'tr-TR-AhmetNeural' })
                 });
                 const data = await res.json();
-                if (data.success && data.audio_url) {
-                    playAudio(data.audio_url);
+                const audioUrl = data.audio_url || data.speech?.audio_url;
+                if (audioUrl) {
+                    playAudio(audioUrl);
                 }
             } catch (e) {
                 console.warn("[JARVIS] Auto-voice synthesis skipped:", e);
@@ -784,7 +834,7 @@
 
         // Format code blocks and bold text cleanly
         function formatResponseMarkdown(raw) {
-            let escaped = raw
+            let escaped = String(raw || '')
                 .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
             
             // Format code blocks ```code```
@@ -825,20 +875,33 @@
         // Load WhatsApp Contacts
         async function loadContacts() {
             try {
-                const res = await fetch('/api/jarvis/contacts');
-                const data = await res.json();
-                if (data.status === 'success' && Array.isArray(data.contacts)) {
-                    allContacts = data.contacts;
-                    renderContacts(allContacts);
-                    document.getElementById('contactCountPill').innerText = `${allContacts.length} Kişi`;
+                const res = await authFetch('/api/jarvis/contacts');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === 'success' && Array.isArray(data.contacts)) {
+                        allContacts = data.contacts;
+                        renderContacts(allContacts);
+                        const countEl = document.getElementById('contactCountPill');
+                        if (countEl) countEl.innerText = `${allContacts.length} Kişi`;
+                        return;
+                    }
+                }
+                const container = document.getElementById('contactListFeed');
+                if (container) {
+                    container.innerHTML = '<div class="p-6 text-center text-xs text-slate-500 font-mono">WhatsApp rehberi henüz senkronize edilmedi veya boş.</div>';
                 }
             } catch (e) {
                 console.error("Error loading contacts:", e);
+                const container = document.getElementById('contactListFeed');
+                if (container) {
+                    container.innerHTML = '<div class="p-6 text-center text-xs text-rose-400 font-mono">Rehber yükleme hatası.</div>';
+                }
             }
         }
 
         function renderContacts(contacts) {
             const container = document.getElementById('contactListFeed');
+            if (!container) return;
             if (!contacts.length) {
                 container.innerHTML = '<div class="p-6 text-center text-xs text-slate-500 font-mono">Rehberde kişi bulunamadı.</div>';
                 return;
@@ -860,7 +923,7 @@
                 const initial = (c.name || 'K').charAt(0).toUpperCase();
                 const isSelected = activeTarget.id === c.id;
                 html += `
-                    <div onclick="selectTarget('${c.id}', '${c.name.replace(/'/g, "\\'")}', '${c.phone || ''}')" class="p-2.5 rounded-xl hover:bg-white/[0.05] transition-all cursor-pointer flex items-center space-x-3 ${isSelected ? 'bg-white/[0.06] border border-amber-500/30' : ''}">
+                    <div onclick="selectTarget('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}', '${c.phone || ''}')" class="p-2.5 rounded-xl hover:bg-white/[0.05] transition-all cursor-pointer flex items-center space-x-3 ${isSelected ? 'bg-white/[0.06] border border-amber-500/30' : ''}">
                         <div class="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.06] text-slate-300 font-semibold font-mono text-xs flex items-center justify-center shrink-0">
                             ${initial}
                         </div>
@@ -899,71 +962,93 @@
         async function pollTelemetryAndStatus() {
             try {
                 // Telemetry
-                const tRes = await fetch('/api/jarvis/system/telemetry');
-                const tData = await tRes.json();
-                if (tData.status === 'success') {
-                    const ram = tData.ram_percent || 0;
-                    const cpu = tData.cpu_percent || 0;
-                    document.getElementById('telemetryRam').innerHTML = `<i class="fa-solid fa-memory text-slate-500 mr-1"></i>RAM: %${ram}`;
-                    document.getElementById('telemetryCpu').innerHTML = `<i class="fa-solid fa-gauge-high text-slate-500 mr-1"></i>CPU: %${cpu}`;
-                    document.getElementById('cockpitRamPercent').innerText = `%${ram}`;
-                    document.getElementById('cockpitCpuPercent').innerText = `%${cpu}`;
-                    document.getElementById('cockpitRamBar').style.width = `${ram}%`;
-                    document.getElementById('cockpitCpuBar').style.width = `${cpu}%`;
+                const tRes = await authFetch('/api/jarvis/system/telemetry');
+                if (tRes.ok) {
+                    const tData = await tRes.json();
+                    if (tData.status === 'success') {
+                        const telem = tData.telemetry || {};
+                        const ram = Math.round(telem.ram?.usage_percent ?? tData.ram_percent ?? 0);
+                        const cpu = Math.round(telem.cpu?.usage_percent ?? tData.cpu_percent ?? 0);
+                        const tRamEl = document.getElementById('telemetryRam');
+                        const tCpuEl = document.getElementById('telemetryCpu');
+                        if (tRamEl) tRamEl.innerHTML = `<i class="fa-solid fa-memory text-slate-500 mr-1"></i>RAM: %${ram}`;
+                        if (tCpuEl) tCpuEl.innerHTML = `<i class="fa-solid fa-gauge-high text-slate-500 mr-1"></i>CPU: %${cpu}`;
+                        const cRamEl = document.getElementById('cockpitRamPercent');
+                        const cCpuEl = document.getElementById('cockpitCpuPercent');
+                        if (cRamEl) cRamEl.innerText = `%${ram}`;
+                        if (cCpuEl) cCpuEl.innerText = `%${cpu}`;
+                        const cRamBar = document.getElementById('cockpitRamBar');
+                        const cCpuBar = document.getElementById('cockpitCpuBar');
+                        if (cRamBar) cRamBar.style.width = `${Math.min(100, Math.max(0, ram))}%`;
+                        if (cCpuBar) cCpuBar.style.width = `${Math.min(100, Math.max(0, cpu))}%`;
+                    }
                 }
 
                 // WhatsApp Status
-                const wRes = await fetch('/api/jarvis/whatsapp/qr_status');
-                const wData = await wRes.json();
-                const waLabel = document.getElementById('waStatusText');
-                if (wData.is_connected) {
-                    waLabel.innerText = 'Socket Aktif';
-                    waLabel.className = 'text-emerald-400 font-semibold';
-                } else {
-                    waLabel.innerText = wData.status || 'Bağlı Değil';
-                    waLabel.className = 'text-amber-400';
+                const wRes = await authFetch('/api/jarvis/whatsapp/qr_status');
+                if (wRes.ok) {
+                    const wData = await wRes.json();
+                    const waLabel = document.getElementById('waStatusText');
+                    if (waLabel) {
+                        if (wData.is_connected || wData.status === 'connected') {
+                            waLabel.innerText = 'Socket Aktif';
+                            waLabel.className = 'text-emerald-400 font-semibold';
+                        } else if (wData.has_qr) {
+                            waLabel.innerText = 'QR Bekleniyor';
+                            waLabel.className = 'text-amber-400';
+                        } else {
+                            waLabel.innerText = wData.status || 'Bağlı Değil';
+                            waLabel.className = 'text-slate-400';
+                        }
+                    }
                 }
 
                 // LTX-2 Status
-                const lRes = await fetch('/api/jarvis/studio/status');
-                const lData = await lRes.json();
-                const ltxBadge = document.getElementById('ltxStatusBadge');
-                if (lData.is_rendering) {
-                    ltxBadge.innerText = 'Render Alıyor';
-                    ltxBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 animate-pulse';
-                } else {
-                    ltxBadge.innerText = 'Boşta';
-                    ltxBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.05] text-slate-400';
+                const lRes = await authFetch('/api/jarvis/studio/status');
+                if (lRes.ok) {
+                    const lData = await lRes.json();
+                    const ltxBadge = document.getElementById('ltxStatusBadge');
+                    if (ltxBadge) {
+                        if (lData.is_rendering) {
+                            ltxBadge.innerText = 'Render Alıyor';
+                            ltxBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 animate-pulse';
+                        } else {
+                            ltxBadge.innerText = 'Boşta';
+                            ltxBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.05] text-slate-400';
+                        }
+                    }
                 }
 
             } catch (e) {
-                console.debug("Telemetry poll issue:", e);
+                console.debug("[JARVIS] Telemetry poll issue:", e);
             }
         }
 
         function refreshWhatsAppSync() {
-            fetch('/api/jarvis/whatsapp/reconnect_sync', { method: 'POST' });
+            authFetch('/api/jarvis/whatsapp/reconnect_sync', { method: 'POST' });
             loadContacts();
         }
 
         async function changeActiveModel(modelName) {
             try {
-                await fetch('/api/jarvis/infra/route', {
+                await authFetch('/api/jarvis/infra/route', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ model: modelName })
                 });
             } catch (e) {
-                console.warn("Model change failed:", e);
+                console.warn("[JARVIS] Model change failed:", e);
             }
         }
 
         // Initialize on page load
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSessionAuth();
             loadContacts();
             pollTelemetryAndStatus();
             setInterval(pollTelemetryAndStatus, 4000);
-            document.getElementById('spotlightInput').focus();
+            const input = document.getElementById('spotlightInput');
+            if (input) input.focus();
         });
     </script>
 </body>

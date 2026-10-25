@@ -922,6 +922,7 @@ async def api_presets_info():
 from core_jarvis.jarvis_brain import jarvis_brain
 from core_jarvis.vram_guard import vram_guard
 from core_jarvis.tools.contacts import contacts_mgr
+from core_jarvis.tools.voice_tool import voice_tool
 
 @app.post("/api/jarvis/chat")
 async def api_jarvis_chat(request: Request):
@@ -930,7 +931,26 @@ async def api_jarvis_chat(request: Request):
     if not msg:
         return JSONResponse({"status": "error", "message": "Message required"}, status_code=400)
     res = await run_in_threadpool(jarvis_brain.process_message, msg)
-    return {"status": "success", "result": res}
+    reply = res.get("reply", "") if isinstance(res, dict) else str(res)
+    speak_text = res.get("speak_text", "") if isinstance(res, dict) else reply
+    audio_url = res.get("audio_url") if isinstance(res, dict) else None
+
+    # Auto-synthesize voice if voice_response is requested and no audio_url was provided
+    if data.get("voice_response") and speak_text and not audio_url:
+        try:
+            v_res = await run_in_threadpool(voice_tool.synthesize_speech, text=speak_text, voice_name="tr-TR-AhmetNeural")
+            if v_res.get("success") and v_res.get("audio_url"):
+                audio_url = v_res.get("audio_url")
+        except Exception as v_err:
+            logger.warning(f"Voice synthesis in chat endpoint failed: {v_err}")
+
+    return {
+        "status": "success",
+        "reply": reply,
+        "speak_text": speak_text,
+        "audio_url": audio_url,
+        "result": res
+    }
 
 @app.post("/api/jarvis/draft/confirm")
 async def api_jarvis_draft_confirm(request: Request):
@@ -1357,12 +1377,16 @@ async def api_jarvis_voice_command(request: Request):
 async def api_jarvis_voice_speak(request: Request):
     payload = await request.json()
     text = payload.get("text", "").strip()
-    voice = payload.get("voice", "am_adam")
+    voice = payload.get("voice", "tr-TR-AhmetNeural")
     speed = payload.get("speed", 1.05)
     if not text:
         return JSONResponse({"status": "error", "message": "text is required"}, status_code=400)
     res = await run_in_threadpool(voice_tool.synthesize_speech, text=text, voice_name=voice, speed=speed)
-    return {"status": "success" if res.get("success") else "error", "speech": res}
+    return {
+        "status": "success" if res.get("success") else "error",
+        "audio_url": res.get("audio_url"),
+        "speech": res
+    }
 
 @app.get("/api/jarvis/voice/status")
 async def api_jarvis_voice_status():
