@@ -1,9 +1,9 @@
 # 🧠 JARVIS Master Yetenek & Fonksiyon Kataloğu
 > **Sistem:** Global-Wave / Stark-Core Personal AI Operating System  
 > **Kullanıcı:** Mücahit Hilmi (Hitap: *Sayın Hilmi* / *Efendim*)  
-> **Versiyon:** v5.9 (Master Architecture - Executive Web HUD Control Center)  
-> **Son Güncelleme:** 24 Ekim 2026  
-> **Doğrulama:** 109/109 Birim Testi Başarılı (`Ran 109 tests in 51.679s OK`)
+> **Versiyon:** v6.0 (Master Architecture - Multimodal WhatsApp, Windows Daemon OS & Fast Mocked Suite)  
+> **Son Güncelleme:** 25 Ekim 2026  
+> **Doğrulama:** 117 Birim Testi Mimarisi (İzole Mock & Soket Korumalı Hızlı Test Altyapısı)
 
 Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlarını, güvenlik kalkanını, API uç noktalarını, görsel Web HUD panellerini ve tetikleyici komutlarını eksiksiz listeler. Yeni bir özellik eklendikçe güncellenir.
 
@@ -22,11 +22,11 @@ Sistem, yerel bilgisayarın fiziksel sınırlarına tam uyumlu ve **$0.00 harici
 Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlanan 4 seviyeli izin matrisi kurulmuştur:
 
 1. **Seviye 1 — Otomatik (Düşük Risk, Salt Okunur):**
-   - Telemetri okuma, dosya arama, log inceleme, test çalıştırma, gelen mesajları kontrol etme, rehber sorgulama, git diff, güvenli PowerShell okuma komutları.
+   - Telemetri okuma, dosya arama, log inceleme, test çalıştırma, gelen mesajları kontrol etme, rehber sorgulama, git diff, güvenli PowerShell okuma komutları, daemon durum sorgulama.
 2. **Seviye 2 — Sınırlı Çalışma Alanı (Geri Alınabilir Eylemler):**
-   - Proje dosyalarını düzenleme, test düzeltme, senaryo üretimi, video kurgusu, yerel yedek (snapshot) alma, git commit.
+   - Proje dosyalarını düzenleme, test düzeltme, senaryo üretimi, video kurgusu, yerel yedek (snapshot) alma, git commit, masaüstü kısayolu oluşturma.
 3. **Seviye 3 — Açık Kullanıcı Onayı (Human-in-the-Loop):**
-   - Git push, YouTube'a video yükleme, WhatsApp/Telegram/Gmail üzerinden doğrudan mesaj gönderme, süreç zorla sonlandırma (`kill`), kalıcı dosya silme, yedekten geri yükleme (`rollback`), ücretli API çağrısı, Wake-on-LAN sinyali gönderme.
+   - Git push, YouTube'a video yükleme, WhatsApp/Telegram/Gmail üzerinden doğrudan mesaj gönderme, süreç zorla sonlandırma (`kill`), kalıcı dosya silme, yedekten geri yükleme (`rollback`), ücretli API çağrısı, Wake-on-LAN sinyali gönderme, Windows başlangıç (Startup) kaydı ekleme/kaldırma.
 4. **Seviye 4 — Kesinlikle Yasak (Kullanıcı Onaylasa Dahi Yürütülmez):**
    - Güvenlik duvarını kapatma, kimlik bilgilerini/tokenları sızdırma, sistem sahibini (`c_owner`) silme, sistem çekirdeğini bozma, `format-volume` gibi yıkıcı komutlar.
 
@@ -86,11 +86,17 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 - **Zamanlanmış Hatırlatıcılar & Takvim:** Bildirim saati, önceden haber verme süresi ve tekrarlayan hatırlatıcılar.
 - **Yönetici Hızlı Notları:** Fikir ve direktiflerin anında arşivlenmesi.
 
-### G. İletişim & Rehber Yönetimi (`contacts.py` & `whatsapp_daemon.py`)
-- **Baileys Canlı WhatsApp Entegrasyonu:** Gerçek zamanlı gelen ve giden mesaj senkronizasyonu.
+### G. İletişim, Rehber & WhatsApp Multimodal OS (`contacts.py`, `whatsapp_daemon.py` & `whatsapp_bridge/`)
+- **Baileys Canlı WhatsApp Entegrasyonu:** TypeScript/Node.js Baileys köprüsü üzerinden QR kod ve pairing-code destekli, gerçek zamanlı çift yönlü mesajlaşma senkronizasyonu.
+- **Çoklu Ortam (Multimodal) Medya İşleme:**
+  - Gelen resimler, çıkartmalar (stickers), sesli mesajlar (PTT voice notes), videolar ve belgeler (PDF, ZIP, Word, Excel) otomatik tespit edilip yerel depoya (`output/whatsapp_media/`) kaydedilir.
+  - Web HUD üzerinde zengin önizleme: Görseller için zoom yapılabilir galeri önizlemesi, sesli notlar için yerel HTML5 audio oynatıcı, videolar için gömülü video oynatıcı, dokümanlar için türe özel renkli simgeler (PDF kırmızı, ZIP sarı, DOCX mavi, XLSX yeşil) ve doğrudan güvenli indirme/tarayıcıda açma bağlantıları.
+- **Ajans & Akıllı Samimiyet/Üslup Analizi (Agency OS):**
+  - Mesajlaşma geçmişini analiz ederek kişiyle olan samimiyet derecesini (`doğal`, `resmi`, `dostane`, `aile`) belirler (`_synthesize_whatsapp_draft_or_ask`).
+  - Eğer kullanıcı niyeti veya hitap tarzında belirsizlik varsa varsayımda bulunmaz; Sayın Hilmi'ye danışarak netleştirme talep eder (`clarification_requested`).
 - **Rehber Merkezi (Contacts Hub):** Kişi ekleme, düzenleme, CSV/vCard içe aktarma, sistem sahibi (`c_owner`) silinemezlik koruması.
 - **Akraba & Aile Protokolü:** Babaya (Yaşar Ünal) ve Anneye kesinlikle "Sayın Babam" gibi robotik hitaplar kullanmaz; sıcak ve saygılı Türk aile diline uygun hitap eder.
-- **HITL Taslak Ayrımı:** Mesaj taslağı hazırlar, kullanıcı onaylamadan asla karşı tarafa göndermez.
+- **HITL (Human-in-the-Loop) Taslak Güvenliği:** Mesaj taslağı hazırlar, kullanıcı Web HUD üzerinden veya sesle onaylamadan asla karşı tarafa mesaj iletmez.
 
 ### H. Otonom Web & Dokümantasyon Araştırma Motoru (`browser_research_tool.py`)
 - **$0 Maliyetli Web Taraması (Zero-Cost Web Search):** Harici arama motoru API'lerine para ödemeden DuckDuckGo HTML ağ geçidi üzerinden anlık arama yapar ve özet snippet'leri çeker.
@@ -110,6 +116,25 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 - **Metin Temizleme ve Fonetik Sadeleştirme:** Markdown işaretlerini (`**`, `#`, backtick, emoji, teknik etiketler) konuşmadan önce temizleyerek kulağa akıcı gelen insan dili üretir.
 - **100% Çevrimdışı Kokoro-82M ONNX Stüdyo Sesi ($0 Maliyet):** CPU üzerinde ~300MB RAM tüketerek stüdyo kalitesinde ses dosyaları üretir (`/output/jarvis_voices/`).
 - **Web Speech & Çift Katmanlı Seslendirme:** Web arayüzünde üretilen ses dosyasını oynatır; istenirse tarayıcı yerel seslendiricisi (`window.speechSynthesis`) ile sıfır gecikmeli yanıt verir.
+
+### K. Windows Yaşam Döngüsü & Sessiz Arka Plan Servis Yöneticisi (`daemon_manager.py` & `scripts/jarvis_daemon.py`)
+- **%100 Yerel & Penceresiz Arka Plan Yürütme (Zero-Window Daemon):**
+  - Windows 11 üzerinde `pythonw.exe` ve `DETACHED_PROCESS` | `CREATE_NO_WINDOW` bayrakları ile terminal penceresi açılmadan arka planda çalışır.
+  - Özel VBScript motoru (`create_silent_vbs` -> `start_silent.vbs`), dinamik dizin çözümleme kullanarak OneDrive veya Türkçe karakterli yollarda (`Masaüstü`) dahi sıfır hata ile sessiz başlatma sağlar.
+- **Süreç & Port İzleme (Port 7860 & PID Denetimi):**
+  - TCP port 7860 soket yoklaması ve FastAPI `/api/config` HTTP sağlık kontrolü ile servisin canlılığını teyit eder (`is_port_in_use`, `is_http_ready`).
+  - `.jarvis_cache/jarvis_daemon.pid` ile süreç ID takibi ve PowerShell tabanlı CPU & RAM bellek telemetrisi (`get_process_info`).
+- **Windows Masaüstü Kısayolu:**
+  - Tek tıkla veya CLI ile kullanıcının masaüstüne (`OneDrive/Masaüstü` veya `Desktop`) `JARVIS AI Operating System.lnk` oluşturur (`create_desktop_shortcut`).
+- **Windows Açılışında Otomatik Başlatma (Startup Service):**
+  - Windows Başlangıç klasörüne (`shell:startup`) `JARVIS_Background_Service.lnk` ekleyerek bilgisayar açıldığında JARVIS'in otomatik ve sessizce başlamasını sağlar (`install_windows_startup` / `uninstall_windows_startup`).
+- **Süreç Ağacı Temiz Sonlandırma:**
+  - `taskkill /F /T /PID` mekanizması ile port 7860 ve alt iş parçacıklarını kilitlenmeden, güvenle kapatır (`stop`).
+- **Çoklu Yönetim Arayüzleri:**
+  - CLI: `python scripts/jarvis_daemon.py {start,stop,restart,status,shortcut,startup-install,startup-uninstall}`
+  - Batch: `start_jarvis.bat` (Tek tıkla masaüstü başlatıcı ve menü)
+  - PowerShell: `scripts/start_jarvis.ps1`
+  - Web REST API: Web HUD üzerinden tek tıkla durum sorgulama ve kısayol/startup yönetimi.
 
 ---
 
@@ -136,6 +161,12 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | *"Bilgi tabanını güncelle"* | `ResearchSpecialist` | Çalışma alanı dosyalarını tarar ve `.jarvis_cache/knowledge_index.json` indeksini tazeler. |
 | *"Seslendir: Sistemler aktif efendim"* | `VoiceSpecialist` | Kokoro-82M ONNX ile metni seslendirir ve ses dosyasını üretir. |
 | *"Ses sistemi durumu"* | `VoiceSpecialist` | ONNX ağırlıkları, önbellekteki ses sayısı ve hazır ses motorlarını raporlar. |
+| *"Arka plan servisini başlat"* | `JarvisDaemonManager` | JARVIS'i penceresiz arka plan servisi olarak çalıştırır ve Web HUD'ı açar. |
+| *"Servisi durdur"* | `JarvisDaemonManager` | PID ve port 7860 süreç ağacını güvenle sonlandırır. |
+| *"Servis durumunu göster / Telemetri"* | `JarvisDaemonManager` | PID, CPU, RAM, HTTP ve Ollama durumunu raporlar. |
+| *"Masaüstü kısayolu oluştur"* | `JarvisDaemonManager` | Windows Masaüstüne JARVIS AI OS kısayolu (.lnk) ekler. |
+| *"Windows açılışına ekle / kaldır"* | `JarvisDaemonManager` | Bilgisayar açılışında arka planda otomatik başlamasını sağlar veya kaldırır. |
+| *"WhatsApp medyasını göster / indir"* | `WhatsAppDaemon` | Gelen sesli not, görsel veya dokümanı Web HUD üzerinde önizler. |
 
 ---
 
@@ -174,6 +205,9 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | `/api/jarvis/voice/command` | `POST` | Wake-word denetimiyle sesli komutu işler ve sesli yanıt üretir |
 | `/api/jarvis/voice/speak` | `POST` | Kokoro-82M ONNX ile metni seslendirir ve `.wav` URL'i döner |
 | `/api/jarvis/voice/status` | `GET` | Ses motoru, ONNX ağırlıkları ve önbellek durumu |
+| `/api/jarvis/daemon/status` | `GET` | Arka plan servisi, PID, port 7860, RAM, masaüstü kısayolu ve Windows başlangıç durumu |
+| `/api/jarvis/daemon/shortcut` | `POST` | Windows Masaüstüne JARVIS başlatıcı kısayolu (.lnk) oluşturma |
+| `/api/jarvis/daemon/startup` | `POST` | Windows açılışında sessiz çalışma (Startup) servisini aktif/pasif etme |
 
 ---
 
@@ -183,6 +217,9 @@ JARVIS Web HUD, Iron Man tarzı karanlık cam (glassmorphism), neon cam göbeği
 
 ### A. İletişim & Chat Paneli (`#jarvisHudView_chat`)
 - Doğrudan JARVIS yapay zeka çekirdeğiyle konuşma veya rehberdeki kişilere (WhatsApp Baileys) mesaj hazırlama/gönderme.
+- **Multimodal Medya Önizleme:** Gelen WhatsApp fotoğrafları, ses kayıtları, videolar ve PDF/ZIP/Office dokümanları mesaj akışında doğrudan oynatılır, önizlenir ve güvenle indirilebilir.
+- **Akıllı Üslup Bildirimi:** Mesaj taslağı hazırlanırken geçmiş sohbetten çıkarılan samimiyet düzeyi (*Doğal, Resmi, Samimi, Aile*) rozetiyle Sayın Hilmi'ye onaylatılır.
+- **Windows Yaşam Döngüsü Denetimi:** Masaüstü kısayolu oluşturma ve Windows başlangıcına ekleme fonksiyonları.
 - Hızlı yönlendirme şeridi: Günlük Brifing, Ajanda, Hafıza RAG, Ses Stüdyosu ve Sistem Durumu butonları.
 - Anlık mikrofon ile sesli komut alma ve Kokoro TTS sesli yanıtları.
 
@@ -200,7 +237,7 @@ JARVIS Web HUD, Iron Man tarzı karanlık cam (glassmorphism), neon cam göbeği
 
 ### D. Yerel Kod & Dokümantasyon RAG Arama Paneli (`#jarvisHudView_rag`)
 - **BM25 Hızlı Arama:** Yerel kod tabanını (<10ms) tarayan anlık arama motoru.
-- **Önerilen Arama Rozetleri:** `#ffmpeg amf`, `#telemetry`, `#prompt injection`, `#kokoro tts`, `#whatsapp daemon`.
+- **Önerilen Arama Rozetleri:** `#ffmpeg amf`, `#telemetry`, `#prompt injection`, `#kokoro tts`, `#whatsapp daemon`, `#daemon manager`.
 - **Kod Önizleme & Anlık Özet:** Satır aralıkları, alaka skoru, JetBrains Mono kod bloğu ve *"Özetle"* butonuyla anında inline doküman özeti.
 - **İndeks Tazeleme:** Tek tıkla çalışma alanını yeniden tarama (`reindexKnowledge`).
 
@@ -208,6 +245,12 @@ JARVIS Web HUD, Iron Man tarzı karanlık cam (glassmorphism), neon cam göbeği
 - **60 FPS Holografik Dalga Canvas:** HTML5 Canvas üzerinde çalışan çoklu reaktör halkaları ve renkli neon sinüs dalgaları. JARVIS konuşurken yüksek genlikli canlı dalgalar, beklemedeyken yumuşak nefes alma animasyonu.
 - **Wake-Word Simülatörü:** *"Hey Jarvis"*, *"Dinle Jarvis"* tetikleme analizi ve temizlenen komutun anında çalıştırılması.
 - **Kokoro-82M Stüdyosu:** 4 farklı stüdyo ses karakteri (`am_adam`, `af_sarah`, `af_nicole`, `am_george`), 0.8x-1.4x hız ayarı, hazır brifing şablonları ve özel metin sentezleme.
+
+---
+
+## 🧪 7. Test Mimarisi & Hızlı İzolasyon Standardı
+- **İzole & Mocked Testler:** `tests/test_daemon_launcher.py` içerisinde soket kilitlenmelerini, harici COM nesnelerini ve Ollama bağlantı zaman aşımlarını önlemek için mock (`unittest.mock`) stratejisi uygulanmıştır.
+- **Sıfır Dış Bağımlılık:** Testler harici sunucu veya canlı port açmadan milisaniyeler içerisinde tam kapsama ile tamamlanır.
 
 ---
 *Not: Bu dosya her yeni modül, araç veya yetenek entegrasyonunda otomatik olarak güncellenir.*
