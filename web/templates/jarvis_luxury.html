@@ -1403,7 +1403,7 @@
                 // Optimistic UI append to cockpit feed
                 appendChatMessage('Siz (Hilmi)', userText, 'user');
 
-                const sendTarget = activeTarget.phone || activeTarget.id;
+                const sendTarget = (activeTarget.id && activeTarget.id.includes('@')) ? activeTarget.id : (activeTarget.phone || activeTarget.id);
                 try {
                     const sendRes = await authFetch(`/api/jarvis/chats/${encodeURIComponent(sendTarget)}/send`, {
                         method: 'POST',
@@ -1855,14 +1855,17 @@
                 `;
 
                 allChats.slice(0, 25).forEach(c => {
-                    const initial = (c.short_name || c.name || 'K').charAt(0).toUpperCase();
+                    const isNewsletter = (c.id && c.id.includes('@newsletter')) || (c.relationship && c.relationship.includes('Bülten'));
+                    const isGroup = (c.id && c.id.includes('@g.us')) || (c.relationship && c.relationship.includes('Grup'));
+                    const initial = isNewsletter ? '<i class="fa-solid fa-bullhorn text-[11px]"></i>' : (isGroup ? '<i class="fa-solid fa-users text-[11px]"></i>' : (c.short_name || c.name || 'K').charAt(0).toUpperCase());
                     const isSelected = activeTarget.id === c.id || (c.phone && activeTarget.phone === c.phone);
                     const cleanName = (c.short_name || c.name || '').replace(/'/g, "\\'");
+                    const badgeColor = isNewsletter ? 'bg-sky-500/10 border-sky-500/20 text-sky-400' : (isGroup ? 'bg-purple-500/10 border-purple-500/20 text-purple-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400');
                     
                     html += `
                         <div onclick="selectTarget('${c.id}', '${cleanName}', '${c.phone || ''}')" 
                              class="p-2.5 rounded-xl hover:bg-white/[0.05] transition-all cursor-pointer flex items-center space-x-3 ${isSelected ? 'bg-white/[0.08] border border-emerald-500/30 shadow-sm' : ''}">
-                            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold font-mono text-xs flex items-center justify-center shrink-0">
+                            <div class="w-8 h-8 rounded-lg ${badgeColor} border font-semibold font-mono text-xs flex items-center justify-center shrink-0">
                                 ${initial}
                             </div>
                             <div class="flex-1 min-w-0">
@@ -1915,7 +1918,7 @@
 
         function selectTarget(id, name, phone) {
             activeTarget = { id, name, phone };
-            activeContactIdentifier = phone || id;
+            activeContactIdentifier = (id && (id.includes('@') || id === 'jarvis')) ? id : (phone || id);
             lastKnownMsgCount = -1;
 
             const nameEl = document.getElementById('cockpitTargetName');
@@ -1924,9 +1927,9 @@
             const iconEl = document.getElementById('cockpitTargetIcon');
 
             if (nameEl) nameEl.innerText = name;
-            if (subtitleEl) subtitleEl.innerText = phone ? `WhatsApp: ${phone}` : 'Doğrudan Yönetici Hattı';
 
             if (id === 'jarvis') {
+                if (subtitleEl) subtitleEl.innerText = 'Doğrudan Yönetici Hattı';
                 if (badgeEl) {
                     badgeEl.innerText = 'AI Core';
                     badgeEl.className = 'text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20';
@@ -1941,14 +1944,38 @@
                 }
                 resetJarvisGreeting();
             } else {
-                const initial = (name || 'K').charAt(0).toUpperCase();
+                const isNewsletter = id.includes('@newsletter');
+                const isGroup = id.includes('@g.us');
+                const initial = isNewsletter ? '<i class="fa-solid fa-bullhorn text-xs"></i>' : (isGroup ? '<i class="fa-solid fa-users text-xs"></i>' : (name || 'K').charAt(0).toUpperCase());
+
+                if (subtitleEl) {
+                    if (isNewsletter) subtitleEl.innerText = 'WhatsApp Bülten / Kanal';
+                    else if (isGroup) subtitleEl.innerText = 'WhatsApp Grubu';
+                    else if (phone) subtitleEl.innerText = `WhatsApp: ${phone}`;
+                    else subtitleEl.innerText = 'Doğrudan Yönetici Hattı';
+                }
+
                 if (badgeEl) {
-                    badgeEl.innerText = 'WhatsApp';
-                    badgeEl.className = 'text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                    if (isNewsletter) {
+                        badgeEl.innerText = 'Kanal';
+                        badgeEl.className = 'text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20';
+                    } else if (isGroup) {
+                        badgeEl.innerText = 'Grup';
+                        badgeEl.className = 'text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20';
+                    } else {
+                        badgeEl.innerText = 'WhatsApp';
+                        badgeEl.className = 'text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                    }
                 }
                 if (iconEl) {
                     iconEl.innerHTML = initial;
-                    iconEl.className = 'w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold font-mono';
+                    if (isNewsletter) {
+                        iconEl.className = 'w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 text-xs font-bold font-mono';
+                    } else if (isGroup) {
+                        iconEl.className = 'w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 text-xs font-bold font-mono';
+                    } else {
+                        iconEl.className = 'w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold font-mono';
+                    }
                 }
 
                 // Immediately load chat history
@@ -1983,8 +2010,14 @@
                 `;
             }
 
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+
             try {
-                const res = await authFetch(`/api/jarvis/chats/${encodeURIComponent(identifier)}/messages`);
+                const res = await authFetch(`/api/jarvis/chats/${encodeURIComponent(identifier)}/messages`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
 
@@ -1999,16 +2032,22 @@
                 } else if (!isSilent) {
                     feed.innerHTML = `
                         <div class="p-8 text-center text-xs text-slate-500 font-mono">
-                            Bu kişiyle henüz kayıtlı mesaj bulunmuyor. Aşağıdan yeni mesaj gönderebilirsiniz.
+                            Bu sohbette henüz kayıtlı mesaj bulunmuyor. Aşağıdan yeni mesaj gönderebilirsiniz.
                         </div>
                     `;
                 }
             } catch (e) {
+                clearTimeout(timeoutId);
                 console.error("[JARVIS] Load chat error:", e);
                 if (!isSilent) {
+                    const isTimeout = e.name === 'AbortError';
                     feed.innerHTML = `
-                        <div class="p-8 text-center text-xs text-rose-400 font-mono">
-                            Mesaj geçmişi yüklenemedi: ${e.message}
+                        <div class="p-8 text-center text-xs text-rose-400 font-mono space-y-2">
+                            <div><i class="fa-solid fa-circle-exclamation text-base mb-1"></i></div>
+                            <div>${isTimeout ? 'Mesaj geçmişi bağlantı zaman aşımına uğradı.' : 'Mesaj geçmişi yüklenemedi: ' + e.message}</div>
+                            <button onclick="loadContactChatHistory('${identifier}', false)" class="mt-2 px-3 py-1 bg-white/10 hover:bg-white/20 text-slate-200 rounded text-[11px] transition">
+                                Yeniden Dene
+                            </button>
                         </div>
                     `;
                 }

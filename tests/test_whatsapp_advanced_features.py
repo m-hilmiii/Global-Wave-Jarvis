@@ -175,6 +175,53 @@ class TestWhatsAppAdvancedFeatures(unittest.TestCase):
         self.assertEqual(st.get("qr_image"), "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==")
         whatsapp_daemon.latest_qr_image = None
 
+    def test_ai_delegate_newsletter_and_broadcast_exclusion(self):
+        """Tests that newsletters, broadcast channels, and unconfigured groups are never delegated."""
+        whatsapp_daemon.enable_ai_delegate()  # Delegate ALL mode
+        self.assertTrue(whatsapp_daemon.ai_delegate_active)
+
+        # 1. Newsletters must NEVER be delegated
+        self.assertFalse(whatsapp_daemon.is_target_delegated("KPSS Duyuru", "120363403021905949", "120363403021905949@newsletter"))
+        self.assertFalse(whatsapp_daemon.is_target_delegated("Kanal", "120363403021905949@newsletter"))
+
+        # 2. Status broadcasts must NEVER be delegated
+        self.assertFalse(whatsapp_daemon.is_target_delegated("Status", "status@broadcast", "status@broadcast"))
+
+        # 3. Unconfigured groups must NOT be auto-spammed in general Meşgul Modu
+        self.assertFalse(whatsapp_daemon.is_target_delegated("Aile Grubu (Grup)", "1203630283@g.us", "1203630283@g.us"))
+
+        # 4. Standard 1-to-1 contact IS delegated
+        self.assertTrue(whatsapp_daemon.is_target_delegated("Ahmet", "05551234567", "905551234567@s.whatsapp.net"))
+
+        # 5. _process_delegate_message early-exits for newsletters
+        with patch.object(whatsapp_daemon, "send_message") as mock_send:
+            whatsapp_daemon._process_delegate_message("120363403021905949@newsletter", "120363403021905949", "Kanal", "Yeni haber!")
+            mock_send.assert_not_called()
+
+        whatsapp_daemon.disable_ai_delegate()
+
+    def test_get_chat_history_performance_and_caching(self):
+        """Tests that get_chat_history resolves unsaved JIDs in milliseconds with TTL caching."""
+        t0 = time.time()
+        res1 = whatsapp_daemon.get_chat_history("120363403021905949")
+        dur1 = time.time() - t0
+        self.assertIsInstance(res1, list)
+        self.assertLess(dur1, 1.0)  # Must be sub-second
+
+        t1 = time.time()
+        res2 = whatsapp_daemon.get_chat_history("120363403021905949@newsletter")
+        dur2 = time.time() - t1
+        self.assertIsInstance(res2, list)
+        self.assertLess(dur2, 0.2)  # Cached must be sub-200ms
+
+        # Cache test
+        maps1 = whatsapp_daemon._load_lid_and_pushname_maps()
+        cache_ts1 = getattr(whatsapp_daemon, "_lid_maps_cache_ts", 0)
+        self.assertGreater(cache_ts1, 0)
+        maps2 = whatsapp_daemon._load_lid_and_pushname_maps()
+        cache_ts2 = getattr(whatsapp_daemon, "_lid_maps_cache_ts", 0)
+        self.assertEqual(cache_ts1, cache_ts2)
+
 
 if __name__ == "__main__":
     unittest.main()

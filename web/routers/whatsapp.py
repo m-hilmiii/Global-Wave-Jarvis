@@ -129,21 +129,21 @@ async def api_jarvis_contacts_google_sync():
 @router.get("/chats")
 async def api_jarvis_chats():
     """Returns the overview summary of active WhatsApp chat threads."""
-    overview = whatsapp_daemon.get_chats_overview()
+    overview = await run_in_threadpool(whatsapp_daemon.get_chats_overview)
     return {"status": "success", "chats": overview}
 
 
 @router.get("/chats/{identifier}/messages")
 async def api_jarvis_chat_messages(identifier: str):
     """Returns chat message history for a specific phone/JID."""
-    history = whatsapp_daemon.get_chat_history(identifier)
+    history = await run_in_threadpool(whatsapp_daemon.get_chat_history, identifier)
     return {"status": "success", "messages": history}
 
 
 @router.post("/chats/{identifier}/read")
 async def api_jarvis_chat_read(identifier: str):
     """Marks a conversation as read."""
-    whatsapp_daemon.mark_chat_read(identifier)
+    await run_in_threadpool(whatsapp_daemon.mark_chat_read, identifier)
     return {"status": "success"}
 
 

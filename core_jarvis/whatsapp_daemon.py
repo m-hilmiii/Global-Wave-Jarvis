@@ -279,8 +279,12 @@ class WhatsAppDaemon:
             except Exception:
                 pass
 
-    def _load_lid_and_pushname_maps(self) -> tuple:
-        """Loads Baileys v7 LID<->PN mappings from data/whatsapp_auth/ and PushNames/GroupNames from whatsapp_pushnames.json."""
+    def _load_lid_and_pushname_maps(self, force: bool = False) -> tuple:
+        """Loads Baileys v7 LID<->PN mappings from data/whatsapp_auth/ and PushNames/GroupNames from whatsapp_pushnames.json with TTL caching."""
+        now = time.time()
+        if not force and getattr(self, "_lid_maps_cache_ts", 0) > 0 and (now - self._lid_maps_cache_ts) < 10.0:
+            return self._lid_to_pn, self._pn_to_lid, self._pushnames, self._group_names
+
         lid_to_pn: Dict[str, str] = {}
         pn_to_lid: Dict[str, str] = {}
         pushnames: Dict[str, str] = {}
@@ -320,6 +324,7 @@ class WhatsAppDaemon:
         self._pn_to_lid = pn_to_lid
         self._pushnames = pushnames
         self._group_names = group_names
+        self._lid_maps_cache_ts = now
         return lid_to_pn, pn_to_lid, pushnames, group_names
 
     @staticmethod
@@ -349,13 +354,27 @@ class WhatsAppDaemon:
         jid = s if "@" in s else f"{digits}@s.whatsapp.net"
         return jid, digits
 
-    def _resolve_sender_name(self, sender_jid: str, push_name: str = "") -> (str, str):
-        lid_to_pn, pn_to_lid, pushnames, group_names = self._load_lid_and_pushname_maps()
+    def _resolve_sender_name(
+        self,
+        sender_jid: str,
+        push_name: str = "",
+        maps: Optional[tuple] = None,
+        contacts_cache: Optional[List[Dict[str, Any]]] = None
+    ) -> (str, str):
+        if maps:
+            lid_to_pn, pn_to_lid, pushnames, group_names = maps
+        else:
+            lid_to_pn, pn_to_lid, pushnames, group_names = self._load_lid_and_pushname_maps()
+
         if "@g.us" in sender_jid:
             g_name = group_names.get(sender_jid) or push_name or sender_jid.split("@")[0]
             if g_name and "(Grup)" not in g_name:
                 g_name = f"{g_name} (Grup)"
             return g_name, sender_jid
+
+        if "@newsletter" in sender_jid:
+            n_name = group_names.get(sender_jid) or pushnames.get(sender_jid) or push_name or sender_jid.split("@")[0]
+            return n_name, sender_jid
 
         user_part = sender_jid.split("@")[0].split(":")[0]
         raw_num = "".join([c for c in user_part if c.isdigit()])
@@ -376,32 +395,80 @@ class WhatsAppDaemon:
 
         effective_phone = self._format_local_phone(mapped_pn) if mapped_pn else raw_num
 
-        if CONTACTS_FILE.exists():
+        contacts = contacts_cache
+        data = None
+        if contacts is None:
+            now = time.time()
+            if getattr(self, "_cached_contacts", None) is not None and (now - getattr(self, "_cached_contacts_ts", 0)) < 5.0:
+                contacts = self._cached_contacts
+            elif CONTACTS_FILE.exists():
+                try:
+                    with open(CONTACTS_FILE, "r", encoding="utf-8-sig") as f:
+                        data = json.load(f)
+                        contacts = data.get("contacts", [])
+                    self._cached_contacts = contacts
+                    self._cached_contacts_ts = now
+                except Exception:
+                    contacts = []
+            else:
+                contacts = []
+
+        if contacts:
             try:
-                with open(CONTACTS_FILE, "r", encoding="utf-8-sig") as f:
-                    data = json.load(f)
-                    contacts = data.get("contacts", [])
-                    updated = False
+                updated = False
+                # Pass 1: Strict Phone (last 10 digits on primary or alt_phones) or Exact LID match
+                for c in contacts:
+                    c_phones = [c.get("phone", "")] + list(c.get("alt_phones", []) or [])
+                    phone_matches = False
+                    if mapped_pn and len(mapped_pn) >= 10:
+                        target_last10 = mapped_pn[-10:]
+                        for cp in c_phones:
+                            cp_digits = "".join([x for x in str(cp) if x.isdigit()])
+                            if len(cp_digits) >= 10 and not cp_digits.startswith("9696") and cp_digits[-10:] == target_last10:
+                                phone_matches = True
+                                break
 
-                    # Pass 1: Strict Phone (last 10 digits on primary or alt_phones) or Exact LID match
-                    for c in contacts:
-                        c_phones = [c.get("phone", "")] + list(c.get("alt_phones", []) or [])
-                        phone_matches = False
-                        if mapped_pn and len(mapped_pn) >= 10:
-                            target_last10 = mapped_pn[-10:]
-                            for cp in c_phones:
-                                cp_digits = "".join([x for x in str(cp) if x.isdigit()])
-                                if len(cp_digits) >= 10 and not cp_digits.startswith("9696") and cp_digits[-10:] == target_last10:
-                                    phone_matches = True
-                                    break
-
-                        c_lid_str = str(c.get("lid", "")).strip()
-                        lid_matches = bool(
-                            c_lid_str and len(c_lid_str) >= 8 and (
-                                c_lid_str == raw_num or (mapped_lid and c_lid_str == mapped_lid)
-                            )
+                    c_lid_str = str(c.get("lid", "")).strip()
+                    lid_matches = bool(
+                        c_lid_str and len(c_lid_str) >= 8 and (
+                            c_lid_str == raw_num or (mapped_lid and c_lid_str == mapped_lid)
                         )
-                        if phone_matches or lid_matches:
+                    )
+                    if phone_matches or lid_matches:
+                        learn_lid = mapped_lid or (raw_num if is_lid else "")
+                        if learn_lid and (not c.get("lid") or c.get("lid") != learn_lid):
+                            c["lid"] = learn_lid
+                            updated = True
+                        disp = f"{c['name']} ({c['full_name']})" if c.get("full_name") and c['name'] != c['full_name'] else c["name"]
+                        if updated:
+                            try:
+                                with open(CONTACTS_FILE, "w", encoding="utf-8") as fw:
+                                    json.dump({"contacts": contacts}, fw, indent=2, ensure_ascii=False)
+                                self._cached_contacts = contacts
+                                self._cached_contacts_ts = time.time()
+                            except Exception as err:
+                                logger.warning(f"[Daemon] Failed to persist learned LID: {err}")
+                        return disp, c.get("phone") or effective_phone
+
+                # Pass 2: PushName / Relationship fallback (primarily for unmapped @lid JIDs)
+                push_lower = (push_name or "").lower().strip()
+                if push_lower and len(push_lower) >= 2:
+                    for c in contacts:
+                        c_full_lower = c.get("full_name", "").lower().strip()
+                        c_name_lower = c.get("name", "").lower().strip()
+                        c_rel_lower = c.get("relationship", "").lower().strip()
+
+                        name_or_rel_matches = False
+                        if c_full_lower and c_full_lower == push_lower:
+                            name_or_rel_matches = True
+                        elif c_name_lower and c_name_lower == push_lower:
+                            name_or_rel_matches = True
+                        elif c_rel_lower in ["anne", "annem"] and any(w in push_lower for w in ["gülhan", "gulhan", "anne", "annem"]):
+                            name_or_rel_matches = True
+                        elif c_rel_lower in ["baba", "babam"] and any(w in push_lower for w in ["yaşar ünal", "yasar unal", "babam"]):
+                            name_or_rel_matches = True
+
+                        if name_or_rel_matches:
                             learn_lid = mapped_lid or (raw_num if is_lid else "")
                             if learn_lid and (not c.get("lid") or c.get("lid") != learn_lid):
                                 c["lid"] = learn_lid
@@ -410,42 +477,12 @@ class WhatsAppDaemon:
                             if updated:
                                 try:
                                     with open(CONTACTS_FILE, "w", encoding="utf-8") as fw:
-                                        json.dump(data, fw, indent=2, ensure_ascii=False)
+                                        json.dump({"contacts": contacts}, fw, indent=2, ensure_ascii=False)
+                                    self._cached_contacts = contacts
+                                    self._cached_contacts_ts = time.time()
                                 except Exception as err:
                                     logger.warning(f"[Daemon] Failed to persist learned LID: {err}")
                             return disp, c.get("phone") or effective_phone
-
-                    # Pass 2: PushName / Relationship fallback (primarily for unmapped @lid JIDs)
-                    push_lower = (push_name or "").lower().strip()
-                    if push_lower and len(push_lower) >= 2:
-                        for c in contacts:
-                            c_full_lower = c.get("full_name", "").lower().strip()
-                            c_name_lower = c.get("name", "").lower().strip()
-                            c_rel_lower = c.get("relationship", "").lower().strip()
-
-                            name_or_rel_matches = False
-                            if c_full_lower and c_full_lower == push_lower:
-                                name_or_rel_matches = True
-                            elif c_name_lower and c_name_lower == push_lower:
-                                name_or_rel_matches = True
-                            elif c_rel_lower in ["anne", "annem"] and any(w in push_lower for w in ["gülhan", "gulhan", "anne", "annem"]):
-                                name_or_rel_matches = True
-                            elif c_rel_lower in ["baba", "babam"] and any(w in push_lower for w in ["yaşar ünal", "yasar unal", "babam"]):
-                                name_or_rel_matches = True
-
-                            if name_or_rel_matches:
-                                learn_lid = mapped_lid or (raw_num if is_lid else "")
-                                if learn_lid and (not c.get("lid") or c.get("lid") != learn_lid):
-                                    c["lid"] = learn_lid
-                                    updated = True
-                                disp = f"{c['name']} ({c['full_name']})" if c.get("full_name") and c['name'] != c['full_name'] else c["name"]
-                                if updated:
-                                    try:
-                                        with open(CONTACTS_FILE, "w", encoding="utf-8") as fw:
-                                            json.dump(data, fw, indent=2, ensure_ascii=False)
-                                    except Exception as err:
-                                        logger.warning(f"[Daemon] Failed to persist learned LID: {err}")
-                                return disp, c.get("phone") or effective_phone
             except Exception as e:
                 logger.error(f"[Daemon Contact Resolve Error] {e}")
         return push_name or effective_phone or raw_num or "Bilinmeyen Numara", effective_phone or raw_num
@@ -776,16 +813,20 @@ class WhatsAppDaemon:
 
         from core_jarvis.owner_session import owner_session
         is_self_chat = owner_session.is_owner_self_chat(chat_jid, sender_jid)
+        is_broadcast_or_channel = any(
+            x in (str(chat_jid) + str(sender_jid) + str(primary_jid)).lower()
+            for x in ["@newsletter", "@broadcast", "newsletter"]
+        )
 
         # 1. Self-Chat ("Kendime Mesaj Atarak") or Direct Owner Message -> Route to JARVIS Owner Session
-        if is_self_chat or (not from_me and (owner_session.is_owner(primary_jid) or owner_session.is_owner(phone))):
+        if is_self_chat or (not from_me and not is_broadcast_or_channel and (owner_session.is_owner(primary_jid) or owner_session.is_owner(phone))):
             threading.Thread(
                 target=self._process_owner_message,
                 args=(chat_jid or primary_jid, owner_session.owner_phone, text, is_audio, raw_voice_text, media_info, is_self_chat),
                 daemon=True
             ).start()
         # 2. External Incoming Message while AI Delegate (Meşgul Modu) is active
-        elif not from_me and self.ai_delegate_active and self.is_target_delegated(sender_name, phone):
+        elif not from_me and not is_broadcast_or_channel and self.ai_delegate_active and self.is_target_delegated(sender_name, phone, primary_jid):
             threading.Thread(
                 target=self._process_delegate_message,
                 args=(primary_jid, phone, sender_name, text),
@@ -1217,12 +1258,26 @@ class WhatsAppDaemon:
         logger.info(f"[WhatsApp] AI Delegate deactivated. Logged conversations: {len(logs)}")
         return logs
 
-    def is_target_delegated(self, sender_name: str, phone: str) -> bool:
+    def is_target_delegated(self, sender_name: str, phone: str, jid: str = "") -> bool:
         """Checks if incoming sender is covered by AI Delegate."""
         if not self.ai_delegate_active:
             return False
+
+        # STRICT SAFETY: Never auto-reply to WhatsApp Newsletters / Broadcast Channels / Statuses
+        combined_meta = f"{sender_name} {phone} {jid}".lower()
+        if any(x in combined_meta for x in ["@newsletter", "newsletter", "@broadcast", "status@broadcast"]):
+            return False
+
+        # STRICT SAFETY: Never auto-reply to Groups unless explicitly configured in targets
+        if "@g.us" in jid or (sender_name and "(grup)" in sender_name.lower()):
+            if not self.ai_delegate_targets:
+                return False
+            s_low = sender_name.lower().strip()
+            return any(t.lower().strip() in s_low or s_low in t.lower().strip() or t in jid for t in self.ai_delegate_targets)
+
         if not self.ai_delegate_targets:
-            return True  # If no specific targets set, all incoming contacts are delegated
+            return True  # If no specific targets set, all 1-to-1 incoming contacts are delegated
+
         s_low = sender_name.lower().strip()
         p_clean = "".join([c for c in phone if c.isdigit()])
         for t in self.ai_delegate_targets:
@@ -1236,6 +1291,8 @@ class WhatsAppDaemon:
 
     def _process_delegate_message(self, jid: str, phone: str, sender_name: str, text: str):
         """Processes incoming message in AI Delegate mode, replying authentically as JARVIS."""
+        if not jid or "@newsletter" in jid or "@broadcast" in jid or "newsletter" in jid.lower():
+            return
         self.send_presence(jid, "composing")
         try:
             # Auto-record notes / reminders into Personal Assistant
@@ -1675,7 +1732,7 @@ class WhatsAppDaemon:
                 "name": s_name,
                 "short_name": s_name,
                 "phone": disp_phone,
-                "relationship": "WhatsApp Grubu" if c_jid.endswith("@g.us") else "WhatsApp Sohbeti",
+                "relationship": "WhatsApp Bülteni" if c_jid.endswith("@newsletter") else ("WhatsApp Grubu" if c_jid.endswith("@g.us") else "WhatsApp Sohbeti"),
                 "last_text": last_m.get("text", "Henüz mesaj yok"),
                 "last_time": last_time_formatted,
                 "timestamp": last_ts,
@@ -1690,7 +1747,7 @@ class WhatsAppDaemon:
         """Returns all chronological messages for a specific contact with strict multi-pass resolution."""
         if not contact_query or not contact_query.strip():
             return []
-        self._load_lid_and_pushname_maps()
+        maps = self._load_lid_and_pushname_maps()
         q = contact_query.lower().strip()
         q_digits = "".join(ch for ch in q if ch.isdigit())
         q_p10 = q_digits[-10:] if len(q_digits) >= 10 else ""
@@ -1807,21 +1864,35 @@ class WhatsAppDaemon:
         # Fallback for unsaved WhatsApp chats (by JID, resolved LID/PushName, sender_name, or phone)
         matched = []
         q_jid_base = q.split("@")[0].split(":")[0]
+        memo_resolved = {}
+
         for m in inbox:
             ident = self._extract_msg_identity(m)
             m_c_jid = ident["chat_jid"].lower()
-            m_sender = ident["counterparty_name"]
-            resolved_tuple = self._resolve_sender_name(ident["chat_jid"], ident["p10"])
-            resolved_label = (resolved_tuple[0] if isinstance(resolved_tuple, tuple) else str(resolved_tuple)).lower()
-            if (
+            m_sender = (ident["counterparty_name"] or "").lower()
+
+            # Fast match checks directly from message identity without disk I/O
+            fast_match = bool(
                 q == m_c_jid
                 or (q_jid_base and len(q_jid_base) >= 5 and q_jid_base == m_c_jid.split("@")[0])
                 or (q_p10 and ident["p10"] == q_p10)
                 or (q_digits and len(q_digits) >= 8 and ident["lid"] == q_digits)
                 or (m_sender and q in m_sender)
-                or (resolved_label and q in resolved_label)
-            ):
+            )
+
+            if fast_match:
                 matched.append(m)
+                continue
+
+            # Only do sender name resolution if query contains non-digit letters
+            if not q_digits or len(q) > len(q_digits):
+                c_jid_key = ident["chat_jid"]
+                if c_jid_key not in memo_resolved:
+                    res_tuple = self._resolve_sender_name(ident["chat_jid"], ident["p10"], maps=maps, contacts_cache=contacts)
+                    memo_resolved[c_jid_key] = (res_tuple[0] if isinstance(res_tuple, tuple) else str(res_tuple)).lower()
+                resolved_label = memo_resolved[c_jid_key]
+                if resolved_label and q in resolved_label:
+                    matched.append(m)
 
         matched.sort(key=lambda x: self._normalize_timestamp(x.get("timestamp", 0)))
         for m in matched:
