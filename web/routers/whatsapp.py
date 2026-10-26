@@ -30,9 +30,15 @@ async def api_jarvis_whatsapp_qr_status():
 
 
 @router.post("/whatsapp/reconnect_sync")
-async def api_jarvis_whatsapp_reconnect_sync():
-    """Triggers an active reconnection and inbox sync with WhatsApp Baileys socket."""
-    res = await run_in_threadpool(whatsapp_daemon.reconnect_and_sync)
+async def api_jarvis_whatsapp_reconnect_sync(request: Request):
+    """Triggers an active reconnection and inbox sync without resetting session unless force_reset=True."""
+    force_reset = False
+    try:
+        data = await request.json()
+        force_reset = bool(data.get("force_reset", False))
+    except Exception:
+        pass
+    res = await run_in_threadpool(whatsapp_daemon.reconnect_and_sync, force_reset=force_reset)
     return {"status": "success" if res.get("success") else "error", "result": res}
 
 

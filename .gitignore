@@ -87,3 +87,5 @@ data/baileys_store.json
 # Runtime History, Agenda & State
 config/personal_agenda.json
 config/jarvis_reality_state.json
+data/logs/
+

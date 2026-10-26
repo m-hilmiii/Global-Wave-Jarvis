@@ -179,7 +179,7 @@
             </div>
 
             <!-- WhatsApp Live Socket Status -->
-            <div id="waStatusBadge" class="flex items-center space-x-2 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06] font-mono text-[11px]">
+            <div id="waStatusBadge" onclick="openWhatsAppQRModal()" title="WhatsApp Bağlantı & QR Durumu" class="flex items-center space-x-2 px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.06] font-mono text-[11px] cursor-pointer transition-all">
                 <i class="fa-brands fa-whatsapp text-emerald-400"></i>
                 <span id="waStatusText" class="text-slate-300">Bağlanıyor...</span>
             </div>
@@ -352,11 +352,11 @@
 
                 <!-- Bottom Quick Bar: QR Code / Sync -->
                 <div class="pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs text-slate-400 font-mono">
-                    <button onclick="refreshWhatsAppSync()" class="hover:text-amber-400 transition-all flex items-center space-x-1">
+                    <button onclick="refreshWhatsAppSync()" class="hover:text-amber-400 transition-all flex items-center space-x-1" title="Rehberi ve Bağlantıyı Yenile">
                         <i class="fa-solid fa-rotate text-[10px]"></i>
                         <span>Eşitle</span>
                     </button>
-                    <span id="waSyncIndicator" class="text-[10px] text-emerald-400">Canlı Soket</span>
+                    <span id="waSyncIndicator" onclick="openWhatsAppQRModal()" class="text-[10px] text-slate-400 cursor-pointer hover:underline font-mono">Soket Aranıyor...</span>
                 </div>
             </div>
 
@@ -366,13 +366,13 @@
                 <!-- Chat Stage Header -->
                 <div class="flex items-center justify-between pb-3 mb-4 border-b border-white/[0.06]">
                     <div class="flex items-center space-x-3">
-                        <div class="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-amber-400 text-xs font-bold font-mono">
+                        <div id="cockpitTargetIcon" class="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-amber-400 text-xs font-bold font-mono">
                             J
                         </div>
                         <div>
                             <div class="flex items-center space-x-2">
                                 <span id="cockpitTargetName" class="text-xs font-bold text-white tracking-wide">JARVIS Komuta Merkezi</span>
-                                <span class="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Aktif</span>
+                                <span id="cockpitTargetBadge" class="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">AI Core</span>
                             </div>
                             <span id="cockpitTargetSubtitle" class="text-[11px] text-slate-400">Mücahit Hilmi • Doğrudan Yönetici Hattı</span>
                         </div>
@@ -524,6 +524,83 @@
         </div>
 
     </main>
+
+    <!-- WhatsApp QR Code Pairing Modal -->
+    <div id="whatsappQrModal" class="fixed inset-0 z-50 bg-obsidian-950/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="relative w-full max-w-md glass-card rounded-2xl p-6 border border-white/10 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <i class="fa-brands fa-whatsapp text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white tracking-wide">WhatsApp Canlı Soket Bağlantısı</h3>
+                        <p class="text-[11px] text-slate-400 font-mono">Baileys Doğrudan Cihaz Eşleştirme</p>
+                    </div>
+                </div>
+                <button onclick="closeWhatsAppQRModal()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/[0.05] transition-all">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <!-- QR Display & Status Area -->
+            <div id="modalQrBody" class="flex flex-col items-center justify-center p-5 rounded-xl bg-white/[0.02] border border-white/[0.05] space-y-4">
+                <!-- QR Image Box -->
+                <div id="modalQrImageContainer" class="p-3 bg-white rounded-2xl shadow-xl border border-white/20 flex items-center justify-center w-64 h-64">
+                    <img id="modalQrImage" src="" alt="WhatsApp QR Code" class="w-full h-full object-contain hidden rounded-lg">
+                    <div id="modalQrSpinner" class="flex flex-col items-center justify-center text-slate-700 space-y-2">
+                        <i class="fa-solid fa-circle-notch fa-spin text-3xl text-amber-500"></i>
+                        <span class="text-xs font-mono text-slate-500">Karekod alınıyor...</span>
+                    </div>
+                </div>
+
+                <!-- Connected Banner (Shown when connected) -->
+                <div id="modalConnectedBanner" class="hidden text-center py-6 space-y-3">
+                    <div class="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto text-3xl">
+                        <i class="fa-solid fa-check"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-base font-bold text-white">WhatsApp Başarıyla Bağlandı!</h4>
+                        <p class="text-xs text-emerald-400/80 font-mono mt-1">Canlı soket ve mesajlaşma senkronizasyonu devrede.</p>
+                    </div>
+                </div>
+
+                <!-- Step by step instructions -->
+                <div id="modalInstructions" class="w-full space-y-2.5 text-xs text-slate-300 font-sans pt-1">
+                    <div class="flex items-start space-x-2.5">
+                        <span class="w-5 h-5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono text-[10px] flex items-center justify-center shrink-0 mt-0.5 font-bold">1</span>
+                        <p class="text-[11px] text-slate-300">Telefonunuzda <strong class="text-white">WhatsApp</strong> uygulamasını açın.</p>
+                    </div>
+                    <div class="flex items-start space-x-2.5">
+                        <span class="w-5 h-5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono text-[10px] flex items-center justify-center shrink-0 mt-0.5 font-bold">2</span>
+                        <p class="text-[11px] text-slate-300">Ayarlar &gt; <strong class="text-white">Bağlı Cihazlar</strong> &gt; <strong class="text-white">Cihaz Bağla</strong> seçeneğine dokunun.</p>
+                    </div>
+                    <div class="flex items-start space-x-2.5">
+                        <span class="w-5 h-5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono text-[10px] flex items-center justify-center shrink-0 mt-0.5 font-bold">3</span>
+                        <p class="text-[11px] text-slate-300">Kameranızı yukarıdaki karekoda doğrultun. Bağlantı kurulduğunda pencere otomatik kapanacaktır.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer Actions -->
+            <div class="flex items-center justify-between pt-2 border-t border-white/[0.06] text-xs">
+                <button onclick="forceResetWhatsAppSession()" title="Tüm eski tokenları temizleyip sıfırdan yeni QR üretir" class="text-rose-400 hover:text-rose-300 flex items-center space-x-1.5 px-3 py-1.5 rounded-lg hover:bg-rose-500/10 transition-all font-mono text-[11px]">
+                    <i class="fa-solid fa-power-off text-[10px]"></i>
+                    <span>Oturumu Sıfırla</span>
+                </button>
+                <div class="flex items-center space-x-2">
+                    <button onclick="refreshWhatsAppSync()" class="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 font-mono text-[11px] transition-all flex items-center space-x-1">
+                        <i class="fa-solid fa-rotate text-[10px]"></i>
+                        <span>Yenile</span>
+                    </button>
+                    <button onclick="closeWhatsAppQRModal()" class="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-obsidian-950 font-bold font-mono text-[11px] transition-all">
+                        Kapat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Global Client Logic (JavaScript) -->
     <script>
@@ -733,7 +810,35 @@
         }
 
         async function handlePromptSubmission(userText) {
-            // Append to Cockpit Feed
+            // If chatting with a specific WhatsApp contact in Cockpit
+            if (activeTarget.id !== 'jarvis' && (activeTarget.phone || activeTarget.id)) {
+                // Optimistic UI append to cockpit feed
+                appendChatMessage('Siz (Hilmi)', userText, 'user');
+
+                const sendTarget = activeTarget.phone || activeTarget.id;
+                try {
+                    const sendRes = await authFetch(`/api/jarvis/chats/${encodeURIComponent(sendTarget)}/send`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: userText })
+                    });
+                    const sData = await sendRes.json();
+                    if (sData.status === 'success') {
+                        // Refresh active chat to sync confirmed message & timestamp
+                        setTimeout(() => loadContactChatHistory(sendTarget, true), 500);
+                        // Also update chats list
+                        setTimeout(loadContacts, 1200);
+                    } else {
+                        const errMsg = 'Mesaj WhatsApp ile iletilemedi: ' + (sData.message || sData.error || 'Bilinmeyen hata');
+                        appendChatMessage('Sistem Uyarısı', errMsg, 'jarvis');
+                    }
+                } catch (wErr) {
+                    appendChatMessage('Sistem Uyarısı', 'WhatsApp iletim hatası: ' + wErr.message, 'jarvis');
+                }
+                return;
+            }
+
+            // Append to Cockpit Feed for JARVIS AI Core
             appendChatMessage('Mücahit Hilmi', userText, 'user');
 
             // Show loading in response card if in spotlight
@@ -741,26 +846,6 @@
             const respBody = document.getElementById('spotlightResponseBody');
             respCard.classList.remove('hidden');
             respBody.innerHTML = '<span class="text-xs text-amber-400 font-mono"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Jarvis düşünüyor ve akış hazırlanıyor...</span>';
-
-            // If chatting with a specific WhatsApp contact in Cockpit
-            if (activeTarget.id !== 'jarvis' && activeTarget.phone) {
-                try {
-                    const sendRes = await authFetch(`/api/jarvis/chats/${encodeURIComponent(activeTarget.phone)}/send`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message: userText })
-                    });
-                    const sData = await sendRes.json();
-                    const statusText = sData.status === 'success' ? 'Mesaj WhatsApp üzerinden başarıyla iletildi efendim.' : ('Hata: ' + (sData.error || sData.message));
-                    respBody.innerText = statusText;
-                    appendChatMessage('JARVIS', statusText, 'jarvis');
-                } catch (wErr) {
-                    const wErrMsg = 'WhatsApp iletim hatası: ' + wErr.message;
-                    respBody.innerText = wErrMsg;
-                    appendChatMessage('JARVIS', wErrMsg, 'jarvis');
-                }
-                return;
-            }
 
             // Real-time Streaming for JARVIS Query
             const bubbleId = appendStreamingChatMessage('JARVIS', 'jarvis');
@@ -945,29 +1030,155 @@
 
         function clearChatFeed() {
             document.getElementById('cockpitChatFeed').innerHTML = '';
-            appendChatMessage('JARVIS', 'Sohbet temizlendi efendim. Emrinizdeyim.', 'jarvis');
+            if (activeTarget.id === 'jarvis') {
+                resetJarvisGreeting();
+            } else {
+                appendChatMessage('JARVIS', 'Görünüm temizlendi. Mesajlar saklıdır.', 'jarvis');
+            }
         }
 
-        // Load WhatsApp Contacts
-        async function loadContacts() {
+        function resetJarvisGreeting() {
+            const feed = document.getElementById('cockpitChatFeed');
+            if (!feed) return;
+            feed.innerHTML = `
+                <div class="flex space-x-3">
+                    <div class="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-[11px] shrink-0 font-bold font-mono">
+                        J
+                    </div>
+                    <div class="flex-1 max-w-[85%]">
+                        <div class="text-[10px] font-mono text-slate-500 mb-1">JARVIS • Şimdi</div>
+                        <div class="p-3.5 rounded-xl bg-white/[0.04] border border-white/[0.06] text-xs text-slate-200 leading-relaxed font-sans">
+                            Emrinizdeyim Efendim. Sistemler tamamen hazır. Sol taraftaki rehberden dilediğiniz kişiyle sohbet sekmesine geçebilir, mesajları inceleyebilir veya bana doğrudan komut verebilirsiniz. Nasıl yardımcı olabilirim?
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ========================================================
+        // WhatsApp QR Modal Logic
+        // ========================================================
+        let modalQrPollInterval = null;
+
+        function openWhatsAppQRModal() {
+            const modal = document.getElementById('whatsappQrModal');
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            checkWhatsAppQRModalState();
+
+            if (modalQrPollInterval) clearInterval(modalQrPollInterval);
+            modalQrPollInterval = setInterval(checkWhatsAppQRModalState, 2000);
+        }
+
+        function closeWhatsAppQRModal() {
+            const modal = document.getElementById('whatsappQrModal');
+            if (modal) modal.classList.add('hidden');
+            if (modalQrPollInterval) {
+                clearInterval(modalQrPollInterval);
+                modalQrPollInterval = null;
+            }
+        }
+
+        async function checkWhatsAppQRModalState() {
             try {
-                const res = await authFetch('/api/jarvis/contacts');
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.status === 'success' && Array.isArray(data.contacts)) {
-                        allContacts = data.contacts;
-                        renderContacts(allContacts);
-                        const countEl = document.getElementById('contactCountPill');
-                        if (countEl) countEl.innerText = `${allContacts.length} Kişi`;
-                        return;
+                const res = await authFetch('/api/jarvis/whatsapp/qr_status');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const isConnected = data.is_connected || data.status === 'connected';
+                const hasQr = Boolean(data.has_qr && data.qr_image);
+
+                const imgContainer = document.getElementById('modalQrImageContainer');
+                const qrImg = document.getElementById('modalQrImage');
+                const spinner = document.getElementById('modalQrSpinner');
+                const banner = document.getElementById('modalConnectedBanner');
+                const instructions = document.getElementById('modalInstructions');
+
+                if (isConnected) {
+                    if (imgContainer) imgContainer.classList.add('hidden');
+                    if (instructions) instructions.classList.add('hidden');
+                    if (banner) banner.classList.remove('hidden');
+
+                    // If user was viewing modal, auto-close after 2s
+                    setTimeout(() => {
+                        closeWhatsAppQRModal();
+                    }, 2200);
+                } else {
+                    if (banner) banner.classList.add('hidden');
+                    if (instructions) instructions.classList.remove('hidden');
+                    if (imgContainer) imgContainer.classList.remove('hidden');
+
+                    if (hasQr && qrImg && spinner) {
+                        qrImg.src = data.qr_image;
+                        qrImg.classList.remove('hidden');
+                        spinner.classList.add('hidden');
+                    } else if (spinner) {
+                        spinner.classList.remove('hidden');
+                        if (qrImg) qrImg.classList.add('hidden');
                     }
                 }
-                const container = document.getElementById('contactListFeed');
-                if (container) {
-                    container.innerHTML = '<div class="p-6 text-center text-xs text-slate-500 font-mono">WhatsApp rehberi henüz senkronize edilmedi veya boş.</div>';
-                }
             } catch (e) {
-                console.error("Error loading contacts:", e);
+                console.warn("[JARVIS] QR modal check failed:", e);
+            }
+        }
+
+        async function forceResetWhatsAppSession() {
+            if (!confirm("WhatsApp oturumunuzu sıfırlayıp yeni karekod üretmek istediğinize emin misiniz?")) return;
+            
+            const qrImg = document.getElementById('modalQrImage');
+            const spinner = document.getElementById('modalQrSpinner');
+            if (qrImg) qrImg.classList.add('hidden');
+            if (spinner) {
+                spinner.classList.remove('hidden');
+                spinner.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-2xl text-amber-400"></i><span class="text-xs font-mono text-slate-500">Oturum temizleniyor ve yeni karekod üretiliyor...</span>';
+            }
+
+            try {
+                await authFetch('/api/jarvis/whatsapp/reconnect_sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force_reset: true })
+                });
+                setTimeout(checkWhatsAppQRModalState, 1500);
+            } catch (e) {
+                alert("Oturum sıfırlama hatası: " + e.message);
+            }
+        }
+
+        // ========================================================
+        // Contacts & Conversation History Engine
+        // ========================================================
+        let allChats = [];
+        let activeChatPollInterval = null;
+        let activeContactIdentifier = null;
+        let lastKnownMsgCount = -1;
+
+        async function loadContacts() {
+            try {
+                const [cRes, chatsRes] = await Promise.all([
+                    authFetch('/api/jarvis/contacts'),
+                    authFetch('/api/jarvis/chats')
+                ]);
+
+                if (cRes.ok) {
+                    const cData = await cRes.json();
+                    if (cData.status === 'success' && Array.isArray(cData.contacts)) {
+                        allContacts = cData.contacts;
+                        const countEl = document.getElementById('contactCountPill');
+                        if (countEl) countEl.innerText = `${allContacts.length} Kişi`;
+                    }
+                }
+
+                if (chatsRes.ok) {
+                    const chData = await chatsRes.json();
+                    if (chData.status === 'success' && Array.isArray(chData.chats)) {
+                        allChats = chData.chats.filter(c => c.last_text || c.last_time || c.unread_count > 0);
+                    }
+                }
+
+                renderContactSidebar();
+            } catch (e) {
+                console.error("Error loading contacts/chats:", e);
                 const container = document.getElementById('contactListFeed');
                 if (container) {
                     container.innerHTML = '<div class="p-6 text-center text-xs text-rose-400 font-mono">Rehber yükleme hatası.</div>';
@@ -975,69 +1186,301 @@
             }
         }
 
-        function renderContacts(contacts) {
+        function renderContactSidebar(query = '') {
             const container = document.getElementById('contactListFeed');
             if (!container) return;
-            if (!contacts.length) {
-                container.innerHTML = '<div class="p-6 text-center text-xs text-slate-500 font-mono">Rehberde kişi bulunamadı.</div>';
-                return;
-            }
 
             let html = `
-                <div onclick="selectTarget('jarvis', 'JARVIS Komuta Merkezi', '')" class="p-2.5 rounded-xl hover:bg-white/[0.05] transition-all cursor-pointer flex items-center space-x-3 ${activeTarget.id === 'jarvis' ? 'bg-white/[0.06] border border-amber-500/30' : ''}">
+                <!-- JARVIS AI Direct Channel -->
+                <div onclick="selectTarget('jarvis', 'JARVIS Komuta Merkezi', '')" 
+                     class="p-2.5 rounded-xl hover:bg-white/[0.05] transition-all cursor-pointer flex items-center space-x-3 ${activeTarget.id === 'jarvis' ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-white/[0.02] border border-white/[0.04]'} mb-2">
                     <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 font-bold font-mono text-xs flex items-center justify-center shrink-0">
                         J
                     </div>
                     <div class="flex-1 min-w-0">
-                        <div class="text-xs font-semibold text-white truncate">JARVIS Core</div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-white truncate">JARVIS Core</span>
+                            <span class="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-400">AI</span>
+                        </div>
                         <div class="text-[10px] text-slate-400 truncate">Doğrudan Yapay Zeka Hattı</div>
                     </div>
                 </div>
             `;
 
-            contacts.slice(0, 50).forEach(c => {
-                const initial = (c.name || 'K').charAt(0).toUpperCase();
-                const isSelected = activeTarget.id === c.id;
+            // If searching
+            if (query && query.trim()) {
+                const q = query.toLowerCase().trim();
+                const filtered = allContacts.filter(c => 
+                    (c.name && c.name.toLowerCase().includes(q)) || 
+                    (c.phone && c.phone.includes(q)) ||
+                    (c.relationship && c.relationship.toLowerCase().includes(q))
+                );
+
+                if (!filtered.length) {
+                    html += '<div class="p-4 text-center text-xs text-slate-500 font-mono">Aramaya uygun kişi bulunamadı.</div>';
+                } else {
+                    html += '<div class="text-[10px] font-mono text-slate-500 uppercase tracking-wider px-2 py-1">Arama Sonuçları</div>';
+                    filtered.slice(0, 40).forEach(c => {
+                        const initial = (c.name || 'K').charAt(0).toUpperCase();
+                        const isSelected = activeTarget.id === c.id || activeTarget.phone === c.phone;
+                        html += `
+                            <div onclick="selectTarget('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}', '${c.phone || ''}')" 
+                                 class="p-2.5 rounded-xl hover:bg-white/[0.05] transition-all cursor-pointer flex items-center space-x-3 ${isSelected ? 'bg-white/[0.08] border border-amber-500/30' : ''}">
+                                <div class="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.06] text-slate-300 font-semibold font-mono text-xs flex items-center justify-center shrink-0">
+                                    ${initial}
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-xs font-medium text-slate-200 truncate">${c.name}</div>
+                                    <div class="text-[10px] text-slate-500 font-mono truncate">${c.phone || ''}</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                container.innerHTML = html;
+                return;
+            }
+
+            // Normal mode: Active WhatsApp Chats followed by full directory
+            if (allChats.length > 0) {
                 html += `
-                    <div onclick="selectTarget('${c.id}', '${(c.name || '').replace(/'/g, "\\'")}', '${c.phone || ''}')" class="p-2.5 rounded-xl hover:bg-white/[0.05] transition-all cursor-pointer flex items-center space-x-3 ${isSelected ? 'bg-white/[0.06] border border-amber-500/30' : ''}">
-                        <div class="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.06] text-slate-300 font-semibold font-mono text-xs flex items-center justify-center shrink-0">
-                            ${initial}
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-xs font-medium text-slate-200 truncate">${c.name}</div>
-                            <div class="text-[10px] text-slate-500 font-mono truncate">${c.phone || ''}</div>
-                        </div>
+                    <div class="flex items-center justify-between text-[10px] font-mono text-slate-500 uppercase tracking-wider px-2 pt-2 pb-1">
+                        <span>Aktif Sohbetler</span>
+                        <span class="text-emerald-400/80">${allChats.length}</span>
                     </div>
                 `;
-            });
+
+                allChats.slice(0, 25).forEach(c => {
+                    const initial = (c.short_name || c.name || 'K').charAt(0).toUpperCase();
+                    const isSelected = activeTarget.id === c.id || (c.phone && activeTarget.phone === c.phone);
+                    const cleanName = (c.short_name || c.name || '').replace(/'/g, "\\'");
+                    
+                    html += `
+                        <div onclick="selectTarget('${c.id}', '${cleanName}', '${c.phone || ''}')" 
+                             class="p-2.5 rounded-xl hover:bg-white/[0.05] transition-all cursor-pointer flex items-center space-x-3 ${isSelected ? 'bg-white/[0.08] border border-emerald-500/30 shadow-sm' : ''}">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold font-mono text-xs flex items-center justify-center shrink-0">
+                                ${initial}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-medium text-slate-200 truncate">${c.short_name || c.name}</span>
+                                    <span class="text-[9px] font-mono text-slate-500">${c.last_time || ''}</span>
+                                </div>
+                                <div class="text-[10px] text-slate-400 truncate mt-0.5">${c.last_text || ''}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Directory Section
+            const nonChatContacts = allContacts.filter(c => !allChats.some(ch => ch.phone === c.phone || ch.id === c.id));
+            if (nonChatContacts.length > 0) {
+                html += `
+                    <div class="flex items-center justify-between text-[10px] font-mono text-slate-500 uppercase tracking-wider px-2 pt-3 pb-1 border-t border-white/[0.04] mt-2">
+                        <span>Tüm Kişiler</span>
+                        <span>${nonChatContacts.length}</span>
+                    </div>
+                `;
+
+                nonChatContacts.slice(0, 30).forEach(c => {
+                    const initial = (c.name || 'K').charAt(0).toUpperCase();
+                    const isSelected = activeTarget.id === c.id;
+                    const cleanName = (c.name || '').replace(/'/g, "\\'");
+                    html += `
+                        <div onclick="selectTarget('${c.id}', '${cleanName}', '${c.phone || ''}')" 
+                             class="p-2 rounded-xl hover:bg-white/[0.04] transition-all cursor-pointer flex items-center space-x-3 ${isSelected ? 'bg-white/[0.08] border border-amber-500/30' : ''}">
+                            <div class="w-7 h-7 rounded-lg bg-white/[0.03] border border-white/[0.05] text-slate-400 font-mono text-[11px] flex items-center justify-center shrink-0">
+                                ${initial}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-xs font-medium text-slate-300 truncate">${c.name}</div>
+                                <div class="text-[9px] text-slate-500 font-mono truncate">${c.phone || ''}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
 
             container.innerHTML = html;
         }
 
         function filterContacts(query) {
-            if (!query) {
-                renderContacts(allContacts);
-                return;
-            }
-            const q = query.toLowerCase();
-            const filtered = allContacts.filter(c => (c.name && c.name.toLowerCase().includes(q)) || (c.phone && c.phone.includes(q)));
-            renderContacts(filtered);
+            renderContactSidebar(query);
         }
 
         function selectTarget(id, name, phone) {
             activeTarget = { id, name, phone };
-            document.getElementById('cockpitTargetName').innerText = name;
-            document.getElementById('cockpitTargetSubtitle').innerText = phone ? `WhatsApp: ${phone}` : 'Doğrudan Yönetici Hattı';
-            renderContacts(allContacts);
+            activeContactIdentifier = phone || id;
+            lastKnownMsgCount = -1;
+
+            const nameEl = document.getElementById('cockpitTargetName');
+            const subtitleEl = document.getElementById('cockpitTargetSubtitle');
+            const badgeEl = document.getElementById('cockpitTargetBadge');
+            const iconEl = document.getElementById('cockpitTargetIcon');
+
+            if (nameEl) nameEl.innerText = name;
+            if (subtitleEl) subtitleEl.innerText = phone ? `WhatsApp: ${phone}` : 'Doğrudan Yönetici Hattı';
+
+            if (id === 'jarvis') {
+                if (badgeEl) {
+                    badgeEl.innerText = 'AI Core';
+                    badgeEl.className = 'text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20';
+                }
+                if (iconEl) {
+                    iconEl.innerHTML = 'J';
+                    iconEl.className = 'w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-amber-400 text-xs font-bold font-mono';
+                }
+                if (activeChatPollInterval) {
+                    clearInterval(activeChatPollInterval);
+                    activeChatPollInterval = null;
+                }
+                resetJarvisGreeting();
+            } else {
+                const initial = (name || 'K').charAt(0).toUpperCase();
+                if (badgeEl) {
+                    badgeEl.innerText = 'WhatsApp';
+                    badgeEl.className = 'text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                }
+                if (iconEl) {
+                    iconEl.innerHTML = initial;
+                    iconEl.className = 'w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold font-mono';
+                }
+
+                // Immediately load chat history
+                loadContactChatHistory(activeContactIdentifier, false);
+
+                // Start polling active contact messages every 3.5 seconds
+                if (activeChatPollInterval) clearInterval(activeChatPollInterval);
+                activeChatPollInterval = setInterval(() => {
+                    if (activeTarget.id !== 'jarvis' && activeContactIdentifier) {
+                        loadContactChatHistory(activeContactIdentifier, true);
+                    }
+                }, 3500);
+            }
+
+            renderContactSidebar(document.getElementById('contactSearchInput')?.value || '');
             if (currentMode === 'spotlight') {
                 setViewMode('cockpit');
             }
         }
 
-        // WhatsApp Socket Poll & Telemetry
+        async function loadContactChatHistory(identifier, isSilent = false) {
+            if (!identifier) return;
+            const feed = document.getElementById('cockpitChatFeed');
+            if (!feed) return;
+
+            if (!isSilent) {
+                feed.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-48 space-y-2 text-slate-500 font-mono text-xs">
+                        <i class="fa-solid fa-spinner fa-spin text-amber-400 text-base"></i>
+                        <span>Sohbet geçmişi ve mesajlar getiriliyor...</span>
+                    </div>
+                `;
+            }
+
+            try {
+                const res = await authFetch(`/api/jarvis/chats/${encodeURIComponent(identifier)}/messages`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data.status === 'success' && Array.isArray(data.messages)) {
+                    const msgs = data.messages;
+                    // If polling quietly and message count didn't change, avoid DOM flicker
+                    if (isSilent && msgs.length === lastKnownMsgCount) {
+                        return;
+                    }
+                    lastKnownMsgCount = msgs.length;
+                    renderChatHistoryFeed(msgs);
+                } else if (!isSilent) {
+                    feed.innerHTML = `
+                        <div class="p-8 text-center text-xs text-slate-500 font-mono">
+                            Bu kişiyle henüz kayıtlı mesaj bulunmuyor. Aşağıdan yeni mesaj gönderebilirsiniz.
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                console.error("[JARVIS] Load chat error:", e);
+                if (!isSilent) {
+                    feed.innerHTML = `
+                        <div class="p-8 text-center text-xs text-rose-400 font-mono">
+                            Mesaj geçmişi yüklenemedi: ${e.message}
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        function renderChatHistoryFeed(messages) {
+            const feed = document.getElementById('cockpitChatFeed');
+            if (!feed) return;
+
+            if (!messages || messages.length === 0) {
+                feed.innerHTML = `
+                    <div class="p-8 text-center text-xs text-slate-500 font-mono">
+                        Bu sohbette henüz mesaj bulunmuyor.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            let lastDate = '';
+
+            messages.forEach(msg => {
+                const msgDate = msg.date || '';
+                if (msgDate && msgDate !== lastDate) {
+                    lastDate = msgDate;
+                    html += `
+                        <div class="flex items-center justify-center my-3">
+                            <span class="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-white/[0.04] text-slate-400 border border-white/[0.05]">
+                                ${msgDate}
+                            </span>
+                        </div>
+                    `;
+                }
+
+                const isUser = Boolean(msg.from_me);
+                const senderLabel = isUser ? 'Siz (Hilmi)' : (msg.sender_name || activeTarget.name || 'İletişim');
+                const timeLabel = msg.time || (msg.timestamp ? new Date(msg.timestamp * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '');
+
+                let mediaHtml = '';
+                if (msg.media && typeof msg.media === 'string') {
+                    if (msg.media.match(/\.(jpeg|jpg|png|webp|gif)$/i)) {
+                        mediaHtml = `<div class="mb-2 rounded-lg overflow-hidden border border-white/10 max-w-xs"><img src="${msg.media}" alt="Görsel" class="w-full object-cover"></div>`;
+                    } else {
+                        mediaHtml = `<div class="mb-2"><a href="${msg.media}" target="_blank" class="inline-flex items-center space-x-1.5 text-xs text-amber-400 hover:underline font-mono"><i class="fa-solid fa-paperclip"></i><span>Ek Dosya</span></a></div>`;
+                    }
+                }
+
+                html += `
+                    <div class="flex space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}">
+                        <div class="w-7 h-7 rounded-lg ${isUser ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'} flex items-center justify-center text-[11px] shrink-0 font-bold font-mono">
+                            ${isUser ? 'H' : (senderLabel.charAt(0).toUpperCase())}
+                        </div>
+                        <div class="flex-1 max-w-[82%]">
+                            <div class="text-[10px] font-mono text-slate-500 mb-1 ${isUser ? 'text-right' : ''}">
+                                ${senderLabel} ${timeLabel ? '• ' + timeLabel : ''}
+                            </div>
+                            <div class="p-3.5 rounded-xl ${isUser ? 'bg-amber-500/15 border border-amber-500/25 text-amber-100 shadow-sm' : 'bg-white/[0.04] border border-white/[0.06] text-slate-200'} text-xs leading-relaxed font-sans">
+                                ${mediaHtml}
+                                <div class="whitespace-pre-wrap break-words">${formatResponseMarkdown(msg.text || '')}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            feed.innerHTML = html;
+            feed.scrollTop = feed.scrollHeight;
+        }
+
+        // ========================================================
+        // Hardware Telemetry, WhatsApp Socket & LTX Status Polling
+        // ========================================================
         async function pollTelemetryAndStatus() {
             try {
-                // Telemetry
+                // 1. Hardware Telemetry
                 const tRes = await authFetch('/api/jarvis/system/telemetry');
                 if (tRes.ok) {
                     const tData = await tRes.json();
@@ -1060,26 +1503,49 @@
                     }
                 }
 
-                // WhatsApp Status
+                // 2. WhatsApp Baileys Socket Connectivity Status
                 const wRes = await authFetch('/api/jarvis/whatsapp/qr_status');
                 if (wRes.ok) {
                     const wData = await wRes.json();
                     const waLabel = document.getElementById('waStatusText');
-                    if (waLabel) {
-                        if (wData.is_connected || wData.status === 'connected') {
-                            waLabel.innerText = 'Socket Aktif';
+                    const waSync = document.getElementById('waSyncIndicator');
+                    const isConn = Boolean(wData.is_connected || wData.status === 'connected');
+                    const hasQr = Boolean(wData.has_qr);
+
+                    if (isConn) {
+                        if (waLabel) {
+                            waLabel.innerHTML = '<span class="flex items-center"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-1.5"></span>WhatsApp Bağlı</span>';
                             waLabel.className = 'text-emerald-400 font-semibold';
-                        } else if (wData.has_qr) {
-                            waLabel.innerText = 'QR Bekleniyor';
-                            waLabel.className = 'text-amber-400';
-                        } else {
+                        }
+                        if (waSync) {
+                            waSync.innerHTML = '<span class="text-emerald-400 font-mono"><i class="fa-solid fa-circle text-[7px] mr-1"></i>Soket Aktif</span>';
+                        }
+                    } else if (hasQr) {
+                        if (waLabel) {
+                            waLabel.innerHTML = '<span class="flex items-center"><span class="w-2 h-2 rounded-full bg-amber-400 animate-ping mr-1.5"></span>QR Bekleniyor (Tıkla)</span>';
+                            waLabel.className = 'text-amber-400 font-semibold';
+                        }
+                        if (waSync) {
+                            waSync.innerHTML = '<span class="text-amber-400 font-mono hover:underline cursor-pointer"><i class="fa-solid fa-qrcode mr-1"></i>QR Okutun</span>';
+                        }
+                    } else {
+                        if (waLabel) {
                             waLabel.innerText = wData.status || 'Bağlı Değil';
                             waLabel.className = 'text-slate-400';
                         }
+                        if (waSync) {
+                            waSync.innerHTML = '<span class="text-slate-400 font-mono"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>Bağlanıyor</span>';
+                        }
+                    }
+
+                    // If QR modal is open, keep its state synced
+                    const modal = document.getElementById('whatsappQrModal');
+                    if (modal && !modal.classList.contains('hidden')) {
+                        checkWhatsAppQRModalState();
                     }
                 }
 
-                // LTX-2 Status
+                // 3. LTX-2 Zero-VRAM Status
                 const lRes = await authFetch('/api/jarvis/studio/status');
                 if (lRes.ok) {
                     const lData = await lRes.json();
@@ -1100,9 +1566,19 @@
             }
         }
 
-        function refreshWhatsAppSync() {
-            authFetch('/api/jarvis/whatsapp/reconnect_sync', { method: 'POST' });
-            loadContacts();
+        function refreshWhatsAppSync(forceReset = false) {
+            const waSync = document.getElementById('waSyncIndicator');
+            if (waSync) waSync.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Senkronize ediliyor...';
+
+            authFetch('/api/jarvis/whatsapp/reconnect_sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ force_reset: forceReset })
+            }).then(async () => {
+                await loadContacts();
+                await pollTelemetryAndStatus();
+                checkWhatsAppQRModalState();
+            }).catch(e => console.warn("[JARVIS] WhatsApp sync error:", e));
         }
 
         async function changeActiveModel(modelName) {
@@ -1122,7 +1598,7 @@
             await initSessionAuth();
             loadContacts();
             pollTelemetryAndStatus();
-            setInterval(pollTelemetryAndStatus, 4000);
+            setInterval(pollTelemetryAndStatus, 3500);
             const input = document.getElementById('spotlightInput');
             if (input) input.focus();
         });

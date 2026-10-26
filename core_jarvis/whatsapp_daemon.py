@@ -1145,10 +1145,11 @@ class WhatsAppDaemon:
                 self.pending_replies.pop(request_id, None)
             return {"success": False, "status": "failed", "error": str(e)}
 
-    def reconnect_and_sync(self) -> Dict[str, Any]:
+    def reconnect_and_sync(self, force_reset: bool = False) -> Dict[str, Any]:
         """
-        Clears existing WhatsApp auth tokens, terminates bridge,
-        restarts fresh to trigger QR code generation and force full chat history synchronization.
+        Reconnects WhatsApp Baileys bridge.
+        If force_reset=True, wipes auth tokens to trigger a new QR code.
+        Otherwise preserves existing credentials and restarts bridge cleanly.
         """
         with self.lock:
             try:
@@ -1165,20 +1166,21 @@ class WhatsAppDaemon:
                 self._kill_zombies()
                 time.sleep(0.4)
 
-                if AUTH_DIR.exists():
-                    for item in AUTH_DIR.glob("*"):
+                if force_reset:
+                    if AUTH_DIR.exists():
+                        for item in AUTH_DIR.glob("*"):
+                            try:
+                                if item.is_file():
+                                    item.unlink()
+                            except Exception:
+                                pass
+
+                    qr_status_file = MEDIA_DIR / "qr_status.json"
+                    if qr_status_file.exists():
                         try:
-                            if item.is_file():
-                                item.unlink()
+                            qr_status_file.unlink()
                         except Exception:
                             pass
-
-                qr_status_file = MEDIA_DIR / "qr_status.json"
-                if qr_status_file.exists():
-                    try:
-                        qr_status_file.unlink()
-                    except Exception:
-                        pass
 
                 self.status = "connecting"
                 self.latest_qr = None
@@ -1186,10 +1188,10 @@ class WhatsAppDaemon:
                 self.socket_ready.clear()
 
                 self.start_bridge()
-                logger.info("[WhatsApp] Reconnect & sync initiated. Session reset, awaiting new QR code.")
+                logger.info(f"[WhatsApp] Reconnect & sync initiated. force_reset={force_reset}")
                 return {
                     "success": True,
-                    "message": "WhatsApp oturumu sıfırlandı. Yeni QR kodu oluşturuluyor, lütfen QR kodu telefonunuzla okutun.",
+                    "message": "WhatsApp bağlantısı yenilendi." if not force_reset else "WhatsApp oturumu sıfırlandı. Yeni QR kodu bekleniyor.",
                     "status": self.status,
                     "qr_image": self.latest_qr_image
                 }
