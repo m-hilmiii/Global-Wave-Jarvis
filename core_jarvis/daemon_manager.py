@@ -352,6 +352,8 @@ class JarvisDaemonManager:
         desktop = self.get_desktop_dir()
         lnk_path = desktop / "JARVIS AI Operating System.lnk"
         bat_target = self.workspace_root / "start_jarvis.bat"
+        if not bat_target.exists():
+            bat_target = self.workspace_root / "baslat.bat"
 
         ps_script = f"""
         $WshShell = New-Object -ComObject WScript.Shell

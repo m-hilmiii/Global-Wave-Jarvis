@@ -21,11 +21,11 @@ PARENT_DIR = CURRENT_DIR.parent                             # Jarvis master fold
 # Locate Global Wawe directory
 GLOBAL_WAVE_DIR: Path = CURRENT_DIR
 for candidate in [
+    CURRENT_DIR,
     PARENT_DIR / "Global Wawe",
     PARENT_DIR / "Global-Wave",
     PARENT_DIR / "Global-Wawe",
     CURRENT_DIR.parent / "Global-Wawe",
-    CURRENT_DIR
 ]:
     if (candidate / "engine").exists():
         GLOBAL_WAVE_DIR = candidate
