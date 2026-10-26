@@ -28,12 +28,8 @@ from core_jarvis.vram_guard import vram_guard as default_vram_guard
 from core_jarvis.tools.contacts import contacts_mgr as default_contacts_mgr
 from core_jarvis.tools.whatsapp_tool import whatsapp_tool as default_whatsapp_tool
 
-logger = logging.getLogger("Jarvis.Brain")
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] %(name)s: %(message)s"))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
+from core_jarvis.logger import get_logger
+logger = get_logger("Jarvis.Brain")
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 YT_TOKEN_FILE = CONFIG_DIR / "youtube_tokens.json"
@@ -403,6 +399,58 @@ class JarvisBrain:
         except requests.RequestException as exc:
             logger.error(f"Ollama API communication failure: {exc}", exc_info=True)
             return None
+
+    def _call_ollama_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.65,
+        timeout: int = 60,
+        model_override: Optional[str] = None,
+        keep_alive_override: Optional[Any] = None
+    ):
+        """
+        Executes a real-time HTTP streaming call to Ollama (/api/chat).
+        Yields token fragments as they arrive, optimizing perceived latency (TTFT < 200ms).
+        """
+        target_model = model_override or self.model_name
+        if keep_alive_override is not None:
+            keep_alive = -1 if str(keep_alive_override).strip() in ("-1", "-1m") else keep_alive_override
+        else:
+            keep_alive = -1 if "8b" in target_model.lower() else "15m"
+
+        payload: Dict[str, Any] = {
+            "model": target_model,
+            "messages": messages,
+            "stream": True,
+            "keep_alive": keep_alive,
+            "options": {
+                "temperature": temperature,
+                "num_ctx": 4096
+            }
+        }
+
+        try:
+            with self.http_session.post(
+                f"{self.ollama_url}/api/chat",
+                json=payload,
+                stream=True,
+                timeout=timeout
+            ) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines(decode_unicode=True):
+                    if line:
+                        try:
+                            chunk_data = json.loads(line)
+                            chunk_text = chunk_data.get("message", {}).get("content", "")
+                            if chunk_text:
+                                yield chunk_text
+                            if chunk_data.get("done", False):
+                                break
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as exc:
+            logger.error(f"[JarvisBrain] Ollama streaming error: {exc}")
+            yield f"\n[Bağlantı kesildi: {exc}]"
 
     def _route_intent(self, user_text: str, session_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """Stage 1: Fast, low-temperature intent classification with dialogue context (v3.0 zero-hop optimization)."""
@@ -1947,6 +1995,123 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
         self.conversation_history.append({"role": "assistant", "content": assistant_msg})
         if len(self.conversation_history) > 20:
             self.conversation_history = self.conversation_history[-20:]
+
+    def stream_message(self, user_text: str, session_history: Optional[List[Dict[str, str]]] = None):
+        """
+        Executes a real-time streaming response for JARVIS chat.
+        Yields token fragments (TTFT < 200ms) for general conversation,
+        or yields full atomic results for tool/fast-path actions.
+        """
+        from core_jarvis.event_bus import event_bus
+        from core_jarvis.tools.model_manager import model_manager
+
+        cleaned_input = re.sub(r"\b(?:üründür|döndür|yöndür)\b", "gönder", user_text, flags=re.IGNORECASE)
+        cleaned_input = re.sub(r"\bhali hatru\b", "hali hatrı", cleaned_input, flags=re.IGNORECASE)
+        for variant in ["vatsa bir", "vatsab", "vatsap", "watsap", "whatsap", "watsapp", "wp"]:
+            cleaned_input = re.sub(r"\b" + re.escape(variant) + r"\b", "whatsapp", cleaned_input, flags=re.IGNORECASE)
+
+        q_lower = cleaned_input.lower().strip()
+
+        # 1. Fast-Path / Tool Check: If this request requires tool execution or draft confirmation
+        # We delegate directly to process_message and yield the result
+        tool_keywords = (
+            "whatsapp", "mesaj", "yaz", "gönder", "gonder", "yolla", "ilet", "yanıt", "yanit", "cevap",
+            "rehber", "kişi ekle", "kisi ekle", "kişiyi ekle", "kişi sil", "kisi sil", "numara",
+            "hatırlat", "hatirlat", "alarm", "not al", "not ekle", "notlara",
+            "görev ekle", "gorev ekle", "todo", "kapat", "sonlandır", "açık uygulamalar",
+            "ekranı oku", "ekrana bak", "görsel", "resim", "fotoğraf", "ekran görüntüsü",
+            "araştır", "arastir", "doküman", "pdf", "özetle", "özet çıkar",
+            "testleri çalıştır", "unit test", "git diff", "commit",
+            "sistem durumu", "telemetri", "ram kullanımı", "müzik", "spotify", "şarkı", "oyun", "steam",
+            "wake on lan", "bilgisayarı aç", "youtube raporu", "taslak", "evet", "onayla", "iptal"
+        )
+
+        if self.pending_draft or any(kw in q_lower for kw in tool_keywords):
+            # Atomic tool execution
+            res = self.process_message(user_text, session_history=session_history)
+            reply = res.get("reply", "")
+            speak_text = res.get("speak_text", reply)
+            event_bus.publish("chat.tool_dispatched", {"user": user_text, "action": res.get("action_taken")})
+            yield {
+                "token": reply,
+                "done": True,
+                "reply": reply,
+                "speak_text": speak_text,
+                "action_taken": res.get("action_taken"),
+                "result": res
+            }
+            return
+
+        # 2. General Conversational Chat with Real-time Ollama Streaming
+        mem_summary = self.memory.get_context_summary()
+        rel_memories = self.memory.search_memories(user_text, limit=4)
+        mem_block = mem_summary
+        if rel_memories:
+            mem_block += "\nİlgili Hafıza Kayıtları:\n" + "\n".join(
+                f"- {m['key_term']}: {m['content']}" for m in rel_memories
+            )
+
+        rag_block = ""
+        rag_triggers = [
+            "youtube", "shorts", "niş", "kanal", "kanca", "hook", "izlenme", "abone", "para kazan",
+            "gelir", "monetizasyon", "transkript", "global wave", "global-wawe", "stark", "mimari", "dosya"
+        ]
+        if any(k in q_lower for k in rag_triggers):
+            try:
+                from core_jarvis.tools.knowledge_indexer import knowledge_indexer
+                rag_hits = knowledge_indexer.search(user_text, top_k=2).get("results", [])
+                if rag_hits:
+                    snippets = [f"• [{h['file_name']}]: {h['preview']}" for h in rag_hits]
+                    rag_block = "\n\n[YEREL BİLGİ TABANI & TRANSKRİPT ARŞİVİ]:\n" + "\n".join(snippets)
+            except Exception as rag_exc:
+                logger.debug(f"Auto-RAG lookup skipped: {rag_exc}")
+
+        chosen_model, keep_alive_val = model_manager.get_active_model_for_request(user_text)
+        domain = model_manager.classify_task_domain(user_text)
+
+        system_content = f"{JARVIS_PERSONA_PROMPT}\n\n[AKTİF HAFIZA ÖZETİ]:\n{mem_block}{rag_block}"
+        messages = [{"role": "system", "content": system_content}]
+
+        history_source = session_history if session_history is not None else self.conversation_history
+        for turn in history_source[-10:]:
+            messages.append({"role": turn["role"], "content": turn["content"]})
+        messages.append({"role": "user", "content": user_text})
+
+        event_bus.publish("chat.streaming_started", {"user": user_text, "model": chosen_model})
+
+        collected_tokens: List[str] = []
+        for chunk in self._call_ollama_stream(
+            messages,
+            temperature=0.7,
+            timeout=75,
+            model_override=chosen_model,
+            keep_alive_override=keep_alive_val
+        ):
+            collected_tokens.append(chunk)
+            yield {"token": chunk, "done": False}
+
+        full_raw = "".join(collected_tokens)
+        parsed = model_manager.strip_thinking_tags(full_raw)
+        reply = parsed["clean_reply"]
+
+        speak_text = re.sub(r"[*_#`~>]", "", reply)
+        if len(speak_text) > 320:
+            speak_text = speak_text[:320].rsplit(".", 1)[0] + ". Ayrıntıları ekrana yansıttım efendim."
+
+        self._record_turn(user_text, reply)
+        self._auto_learn_fact(user_text)
+
+        event_bus.publish("chat.streaming_completed", {"user": user_text, "reply_len": len(reply)})
+
+        yield {
+            "token": "",
+            "done": True,
+            "reply": reply,
+            "speak_text": speak_text,
+            "action_taken": "conversational_chat_stream",
+            "specialist_domain": domain,
+            "model_used": chosen_model
+        }
 
 
 jarvis_brain = JarvisBrain()

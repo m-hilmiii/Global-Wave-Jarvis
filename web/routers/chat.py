@@ -3,8 +3,9 @@ JARVIS Chat & Conversational Router
 Handles chat interactions, draft approvals (HITL), and orchestrator task dispatches.
 """
 
+import json
 from fastapi import APIRouter, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from core_jarvis.jarvis_brain import jarvis_brain
@@ -21,6 +22,45 @@ from web.schemas import (
 
 logger = get_logger("Jarvis.Router.Chat")
 router = APIRouter(prefix="/api/jarvis", tags=["Chat & Orchestrator"])
+
+
+@router.post("/chat/stream")
+async def api_jarvis_chat_stream(payload: ChatRequest):
+    """
+    Real-time Server-Sent Events (SSE) streaming endpoint for JARVIS chat.
+    Streams token fragments with TTFT < 200ms and yields completion packet.
+    """
+    msg = payload.message.strip()
+    if not msg:
+        return JSONResponse({"status": "error", "message": "Mesaj boş olamaz."}, status_code=status.HTTP_400_BAD_REQUEST)
+
+    def event_stream():
+        for chunk_data in jarvis_brain.stream_message(msg):
+            done = chunk_data.get("done", False)
+            if done:
+                final_reply = chunk_data.get("reply", "")
+                final_speak = chunk_data.get("speak_text", final_reply)
+                audio_url = None
+                if payload.voice_response and final_speak:
+                    try:
+                        v_res = voice_tool.synthesize_speech(text=final_speak, voice_name="tr-TR-AhmetNeural")
+                        if v_res.get("success"):
+                            audio_url = v_res.get("audio_url")
+                    except Exception as v_err:
+                        logger.warning(f"Voice synthesis in stream completion failed: {v_err}")
+                chunk_data["audio_url"] = audio_url
+
+            yield f"data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @router.post("/chat")

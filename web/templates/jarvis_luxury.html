@@ -740,11 +740,11 @@
             const respCard = document.getElementById('spotlightResponseCard');
             const respBody = document.getElementById('spotlightResponseBody');
             respCard.classList.remove('hidden');
-            respBody.innerHTML = '<span class="text-xs text-amber-400 font-mono"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Jarvis düşünüyor ve yanıt hazırlıyor...</span>';
+            respBody.innerHTML = '<span class="text-xs text-amber-400 font-mono"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Jarvis düşünüyor ve akış hazırlanıyor...</span>';
 
-            try {
-                // If chatting with a specific WhatsApp contact in Cockpit
-                if (activeTarget.id !== 'jarvis' && activeTarget.phone) {
+            // If chatting with a specific WhatsApp contact in Cockpit
+            if (activeTarget.id !== 'jarvis' && activeTarget.phone) {
+                try {
                     const sendRes = await authFetch(`/api/jarvis/chats/${encodeURIComponent(activeTarget.phone)}/send`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -754,11 +754,19 @@
                     const statusText = sData.status === 'success' ? 'Mesaj WhatsApp üzerinden başarıyla iletildi efendim.' : ('Hata: ' + (sData.error || sData.message));
                     respBody.innerText = statusText;
                     appendChatMessage('JARVIS', statusText, 'jarvis');
-                    return;
+                } catch (wErr) {
+                    const wErrMsg = 'WhatsApp iletim hatası: ' + wErr.message;
+                    respBody.innerText = wErrMsg;
+                    appendChatMessage('JARVIS', wErrMsg, 'jarvis');
                 }
+                return;
+            }
 
-                // General JARVIS Query
-                const res = await authFetch('/api/jarvis/chat', {
+            // Real-time Streaming for JARVIS Query
+            const bubbleId = appendStreamingChatMessage('JARVIS', 'jarvis');
+
+            try {
+                const res = await authFetch('/api/jarvis/chat/stream', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -768,34 +776,70 @@
                     })
                 });
 
-                const data = await res.json();
-                if (data.status === 'error') {
-                    const errMsg = data.message || 'Jarvis işlem hatası oluştu.';
-                    respBody.innerHTML = `<span class="text-rose-400 text-xs font-mono">Hata: ${errMsg}</span>`;
-                    appendChatMessage('JARVIS', `Hata: ${errMsg}`, 'jarvis');
-                    return;
+                if (!res.ok || !res.body) {
+                    throw new Error(`HTTP ${res.status}: Sunucu akış bağlantısı kurulamadı.`);
                 }
 
-                const resObj = (data.result && typeof data.result === 'object') ? data.result : data;
-                const replyText = resObj.reply || data.reply || resObj.response || data.response || (typeof resObj === 'string' ? resObj : "Komutunuz yürütüldü efendim.");
-                const speakText = resObj.speak_text || data.speak_text || replyText;
-                const audioUrl = resObj.audio_url || data.audio_url || null;
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
+                let accumulatedText = '';
+                let finalPacket = null;
 
-                // Format markdown response safely
-                respBody.innerHTML = formatResponseMarkdown(replyText);
-                appendChatMessage('JARVIS', replyText, 'jarvis');
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // keep partial line
+
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed || !trimmed.startsWith('data:')) continue;
+                        const jsonStr = trimmed.slice(5).trim();
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            if (data.done) {
+                                finalPacket = data;
+                                if (data.reply) {
+                                    accumulatedText = data.reply;
+                                }
+                            } else if (data.token) {
+                                accumulatedText += data.token;
+                                respBody.innerHTML = formatResponseMarkdown(accumulatedText) + '<span class="inline-block w-1.5 h-3 bg-amber-400 animate-pulse ml-1 align-middle"></span>';
+                                updateStreamingChatMessage(bubbleId, accumulatedText, false);
+                            }
+                        } catch (parseErr) {
+                            console.warn("[Stream Parse Error]", parseErr, jsonStr);
+                        }
+                    }
+                }
+
+                const finalReply = accumulatedText || (finalPacket && finalPacket.reply) || "Komutunuz yürütüldü efendim.";
+                respBody.innerHTML = formatResponseMarkdown(finalReply);
+                updateStreamingChatMessage(bubbleId, finalReply, true);
+
+                if (finalPacket && finalPacket.model_used) {
+                    const engineBadge = document.getElementById('responseEngineBadge');
+                    if (engineBadge) engineBadge.innerText = finalPacket.model_used;
+                }
 
                 // Play Turkish Audio Voice if enabled
-                if (isVoiceEnabled && audioUrl) {
-                    playAudio(audioUrl);
-                } else if (isVoiceEnabled && speakText) {
-                    // Synthesize voice via backend Turkish neural
-                    synthesizeAndPlayVoice(speakText);
+                if (isVoiceEnabled && finalPacket) {
+                    const audioUrl = finalPacket.audio_url;
+                    const speakText = finalPacket.speak_text || finalReply;
+                    if (audioUrl) {
+                        playAudio(audioUrl);
+                    } else if (speakText) {
+                        synthesizeAndPlayVoice(speakText);
+                    }
                 }
 
             } catch (err) {
-                respBody.innerHTML = `<span class="text-rose-400 text-xs font-mono">Bağlantı hatası: ${err.message}</span>`;
-                appendChatMessage('JARVIS', `Bağlantı hatası: ${err.message}`, 'jarvis');
+                console.error("[JARVIS Stream Error]", err);
+                const errMsg = `Bağlantı veya akış hatası: ${err.message}`;
+                respBody.innerHTML = `<span class="text-rose-400 text-xs font-mono">${errMsg}</span>`;
+                updateStreamingChatMessage(bubbleId, errMsg, true);
             }
         }
 
@@ -865,6 +909,38 @@
             `;
             feed.insertAdjacentHTML('beforeend', msgHtml);
             feed.scrollTop = feed.scrollHeight;
+        }
+
+        function appendStreamingChatMessage(sender, type) {
+            const feed = document.getElementById('cockpitChatFeed');
+            const isUser = type === 'user';
+            const bubbleId = 'stream-bubble-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+            
+            const msgHtml = `
+                <div class="flex space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}">
+                    <div class="w-7 h-7 rounded-lg ${isUser ? 'bg-white/10 text-slate-200' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'} flex items-center justify-center text-[11px] shrink-0 font-bold font-mono">
+                        ${isUser ? 'H' : 'J'}
+                    </div>
+                    <div class="flex-1 max-w-[85%]">
+                        <div class="text-[10px] font-mono text-slate-500 mb-1 ${isUser ? 'text-right' : ''}">${sender} • ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div id="${bubbleId}" class="p-3.5 rounded-xl ${isUser ? 'bg-amber-500/10 border border-amber-500/20 text-amber-100' : 'bg-white/[0.04] border border-white/[0.06] text-slate-200'} text-xs leading-relaxed font-sans">
+                            <span class="inline-block w-1.5 h-3 bg-amber-400 animate-pulse align-middle"></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            feed.insertAdjacentHTML('beforeend', msgHtml);
+            feed.scrollTop = feed.scrollHeight;
+            return bubbleId;
+        }
+
+        function updateStreamingChatMessage(bubbleId, text, isFinal = false) {
+            const el = document.getElementById(bubbleId);
+            if (!el) return;
+            const cursor = isFinal ? '' : '<span class="inline-block w-1.5 h-3 bg-amber-400 animate-pulse ml-1 align-middle"></span>';
+            el.innerHTML = formatResponseMarkdown(text) + cursor;
+            const feed = document.getElementById('cockpitChatFeed');
+            if (feed) feed.scrollTop = feed.scrollHeight;
         }
 
         function clearChatFeed() {
