@@ -88,4 +88,5 @@ data/baileys_store.json
 config/personal_agenda.json
 config/jarvis_reality_state.json
 data/logs/
+JARVIS_AI_ANALYSIS_EXPORT/
 
