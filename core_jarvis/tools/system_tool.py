@@ -18,8 +18,9 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from core_jarvis.permission_guard import permission_guard, PermissionLevel
+from core_jarvis.logger import get_logger
 
-logger = logging.getLogger("Jarvis.SystemTool")
+logger = get_logger("Jarvis.SystemTool")
 
 WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent
 BACKUP_DIR = WORKSPACE_DIR / ".jarvis_backups"
@@ -446,8 +447,8 @@ class SystemTool:
                         buf = ctypes.create_unicode_buffer(length + 1)
                         ctypes.windll.user32.GetWindowTextW(hwnd, buf, length + 1)
                         foreground_title = buf.value.strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[SystemTool] Foreground window title fetch: {e}")
 
         open_windows: List[Dict[str, Any]] = []
         try:
@@ -544,8 +545,8 @@ class SystemTool:
                             "track_id": track_id,
                             "message": f"🎵 **Spotify** açıldı ve **\"{song_candidate}\"** parçası doğrudan çalınmaya başlandı efendim."
                         }
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"[SystemTool] Spotify track play tier 1: {e}")
 
                 # Tier 2: URI search navigation + deep keystroke auto-play
                 encoded = urllib.parse.quote(song_candidate)
@@ -916,10 +917,10 @@ for ($i = 0; $i -lt 8; $i++) {{
                                 norm = val.replace("/", "\\")
                                 if norm not in steam_paths:
                                     steam_paths.insert(0, norm)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except Exception as e:
+                        logger.debug(f"[SystemTool] Spotify track play tier 1: {e}")
+        except Exception as e:
+            logger.debug(f"[SystemTool] Foreground window title fetch: {e}")
 
         # 2. Parse libraryfolders.vdf to find all installed games across all disks
         for sp in list(steam_paths):
@@ -933,8 +934,8 @@ for ($i = 0; $i -lt 8; $i++) {{
                             steam_paths.append(p)
                     for m_app in re.finditer(r'"(\d{2,8})"\s+"', txt):
                         owned_appids.add(int(m_app.group(1)))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[SystemTool] VDF parse error: {e}")
 
         # 3. Parse localconfig.vdf and sharedconfig.vdf in all Steam/userdata/*/config/ directories
         for sp in steam_paths:
@@ -953,8 +954,8 @@ for ($i = 0; $i -lt 8; $i++) {{
                                 owned_appids.add(int(m.group(1)))
                         except Exception:
                             continue
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[SystemTool] Steam userdata scan: {e}")
 
         # Always include Free to Play games
         owned_appids.update(self.FREE_TO_PLAY_APPIDS)
@@ -1043,10 +1044,10 @@ for ($i = 0; $i -lt 8; $i++) {{
                                 norm = val.replace("/", "\\")
                                 if norm not in steam_paths:
                                     steam_paths.insert(0, norm)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except Exception as e:
+                        logger.debug(f"[SystemTool] Spotify track play tier 1: {e}")
+        except Exception as e:
+            logger.debug(f"[SystemTool] Foreground window title fetch: {e}")
 
         library_dirs = set(steam_paths)
 
@@ -1060,8 +1061,8 @@ for ($i = 0; $i -lt 8; $i++) {{
                         p = match.group(1).replace("\\\\", "\\")
                         if Path(p).exists():
                             library_dirs.add(p)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[SystemTool] Steam libraryfolders parse: {e}")
 
         # 3. Scan appmanifest_<appid>.acf files in all discovered steamapps folders
         for lib in library_dirs:
@@ -1078,8 +1079,8 @@ for ($i = 0; $i -lt 8; $i++) {{
                                 installed[appid] = m_name.group(1)
                         except Exception:
                             continue
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[SystemTool] Steam appmanifest glob error: {e}")
 
         return installed
 
@@ -1491,8 +1492,8 @@ for ($i = 0; $i -lt 8; $i++) {{
                 if temp_db and os.path.exists(temp_db):
                     try:
                         os.remove(temp_db)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"[SystemTool] Temp DB cleanup: {e}")
 
         if not matches:
             return {

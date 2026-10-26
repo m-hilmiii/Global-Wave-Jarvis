@@ -11,8 +11,9 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+from core_jarvis.logger import get_logger
 
-logger = logging.getLogger("Jarvis.Memory")
+logger = get_logger("Jarvis.Memory")
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "jarvis_memory.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -191,19 +192,20 @@ class MemoryGraph:
         if not words:
             return self.get_top_directives()
 
-        conditions = " OR ".join(["content LIKE ? OR key_term LIKE ?" for _ in words])
+        where_clauses = ["(content LIKE ? OR key_term LIKE ?)" for _ in words]
         params = []
         for w in words:
             params.extend([f"%{w}%", f"%{w}%"])
 
+        sql_query = (
+            "SELECT * FROM memory_nodes WHERE "
+            + " OR ".join(where_clauses)
+            + " ORDER BY importance DESC, access_count DESC LIMIT ?"
+        )
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(f"""
-                SELECT * FROM memory_nodes
-                WHERE {conditions}
-                ORDER BY importance DESC, access_count DESC
-                LIMIT ?
-            """, (*params, limit))
+            cursor.execute(sql_query, (*params, limit))
             return [dict(r) for r in cursor.fetchall()]
 
     def get_top_directives(self, limit: int = 12) -> List[dict]:

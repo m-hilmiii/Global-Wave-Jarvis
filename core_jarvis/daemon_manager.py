@@ -13,6 +13,9 @@ import subprocess
 import urllib.request
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+from core_jarvis.logger import get_logger
+
+logger = get_logger("Jarvis.Daemon")
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 CACHE_DIR = WORKSPACE_ROOT / ".jarvis_cache"
@@ -50,8 +53,8 @@ def get_process_info(pid: int) -> Optional[Dict[str, Any]]:
                 "memory_mb": d.get("WorkingSet", 0.0),
                 "cpu_time_s": d.get("CPU", 0.0)
             }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"[DaemonManager] Process info fetch for PID {pid} skipped: {e}")
     return {"pid": pid, "name": "python", "memory_mb": 0.0}
 
 
@@ -116,8 +119,8 @@ class JarvisDaemonManager:
             try:
                 startup_path.mkdir(parents=True, exist_ok=True)
                 return startup_path
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[DaemonManager] Could not create startup directory: {e}")
         fallback = self.cache_dir / "simulated_startup"
         fallback.mkdir(parents=True, exist_ok=True)
         return fallback
@@ -158,9 +161,9 @@ class JarvisDaemonManager:
                             if pid > 0 and pid not in pids:
                                 pids.append(pid)
                         except ValueError:
-                            pass
-        except Exception:
-            pass
+                            continue
+        except Exception as e:
+            logger.debug(f"[DaemonManager] Netstat PID lookup error: {e}")
         return pids
 
     def read_saved_pid(self) -> Optional[int]:
@@ -170,8 +173,8 @@ class JarvisDaemonManager:
                 pid = int(self.pid_file.read_text(encoding="utf-8").strip())
                 if pid_exists(pid):
                     return pid
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[DaemonManager] Failed reading saved PID: {e}")
         return None
 
     def save_pid(self, pid: int) -> None:
@@ -183,8 +186,8 @@ class JarvisDaemonManager:
         if self.pid_file.exists():
             try:
                 self.pid_file.unlink()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[DaemonManager] Failed unlinking PID file: {e}")
 
     # -------------------------------------------------------------------------
     # Lifecycle Operations (Start, Stop, Restart, Status)
@@ -206,8 +209,8 @@ class JarvisDaemonManager:
         try:
             with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=0.8) as r:
                 ollama_ready = r.status == 200
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[DaemonManager] Ollama tag ping: {e}")
 
         return {
             "running": bool(port_alive and (http_ready or proc_info)),
@@ -264,8 +267,8 @@ class JarvisDaemonManager:
                 try:
                     import webbrowser
                     webbrowser.open(f"http://{HOST}:{PORT}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"[DaemonManager] Auto-opening browser skipped: {e}")
 
             return {
                 "success": started,
@@ -309,8 +312,8 @@ class JarvisDaemonManager:
                 # Forcefully kill process tree
                 subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=4)
                 stopped_pids.append(pid)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"[DaemonManager] Taskkill PID {pid} error: {e}")
 
         self.clear_saved_pid()
         return {
