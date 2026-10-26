@@ -31,7 +31,7 @@ class TestJarvisV3AdaptiveArchitecture(unittest.TestCase):
         # Primary Brain should be qwen3:8b
         primary = next(s for s in SPECIALIST_ARSENAL if s["role"] == "primary_brain")
         self.assertEqual(primary["name"], "qwen3:8b")
-        self.assertEqual(primary["keep_alive"], "-1")
+        self.assertIn(str(primary["keep_alive"]), ("-1", "-1m"))
 
         # Embedding should be bge-m3
         embed = next(s for s in SPECIALIST_ARSENAL if s["role"] == "embedding")

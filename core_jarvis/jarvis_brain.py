@@ -677,11 +677,14 @@ GEÇMİŞ SOHBET AKIŞI (Samimiyet ve üslup analizi için):
 
 GÖREVİN:
 1. Yukarıdaki geçmiş sohbeti inceleyerek Mücahit Hilmi ile {c_name} arasındaki samimiyet derecesini (resmi, samimi dost, aile büyüğü, iş ortağı vb.) ve hitap şeklini tespit et.
-2. Eğer karşı tarafın son mesajı selamlaşma, hal hatır sorma ("Selam", "Naber", "Nasılsın", "Nerdesin", "Günaydın" vb.) ise VEYA kullanıcı ne yazılacağını belirttiyse VEYA kullanıcı "son mesajına cevap ver / yanıtla" dediyse:
+2. EĞER Kendini Tanıtma Modu EVET ise:
+   - KESİNLİKLE "needs_user_decision": false yap!
+   - "draft_message": {c_name} kişisine kendini Mücahit'in kişisel yapay zeka asistanı JARVIS olarak tanıtan sıcak, hürmetli ve samimi bir Türkçe mesaj hazırla. (Örn: Annem ise "Merhabalar Gülhan Teyzeciğim, ben Mücahit'in yapay zeka asistanı JARVIS. Mücahit şu an önemli bir çalışma üzerinde meşgul olduğunda onun adına iletişimde kalarak not ve randevuları anında kendisine ulaştırıyorum. Sizinle tanıştığıma çok memnun oldum!", Babam ise "Merhabalar Yaşar Amcacığım..." vb.)
+3. EĞER Kendini Tanıtma Modu HAYIR ise ve karşı tarafın son mesajı selamlaşma, hal hatır sorma ("Selam", "Naber", "Nasılsın", "Nerdesin", "Günaydın" vb.) ise VEYA kullanıcı ne yazılacağını belirttiyse VEYA kullanıcı "son mesajına cevap ver / yanıtla" dediyse:
    - KESİNLİKLE "needs_user_decision": false yap!
    - "draft_message": Karşı tarafın son mesajına ("{last_in_text}") aradaki samimiyete %100 uygun, doğal, sıcak Türkçe yanıt metnini yaz (Örn: Annem ise "Selam anneciğim, iyiyim bilgisayar başında çalışıyorum şu an, sen nasılsın?", Babam ise "Selam babacığım, iyiyim çalışıyorum, sen nasılsın?" vb.).
-3. Sadece karşı taraf Mücahit Hilmi'nin bilmediğin çok spesifik bir kararını/randevu saatini soruyorsa VE ne cevap verileceği tahmin edilemiyorsa "needs_user_decision": true yap.
-4. ASLA yanıt metninde `<external_whatsapp_data>` gibi sistem etiketlerini kullanma!
+4. Sadece karşı taraf Mücahit Hilmi'nin bilmediğin çok spesifik bir kararını/randevu saatini soruyorsa VE ne cevap verileceği tahmin edilemiyorsa "needs_user_decision": true yap.
+5. ASLA yanıt metninde `<external_whatsapp_data>` gibi sistem etiketlerini kullanma!
 
 JSON ŞEMASI:
 {{
@@ -706,20 +709,28 @@ JSON ŞEMASI:
                         parsed["draft_message"] = self._sanitize_external_text(parsed["draft_message"])
                     # Guard: if LLM wrongly claimed no record exists in <external_whatsapp_data> when last_in_text exists
                     q_own = (parsed.get("question_to_owner") or "").lower()
-                    if last_in_text and ("kayıt bulunmamaktadır" in q_own or "external_whatsapp_data" in q_own or not parsed.get("draft_message")):
-                        if not parsed.get("needs_user_decision") or "kayıt bulunmamaktadır" in q_own:
+                    if (last_in_text or is_introduction) and ("kayıt bulunmamaktadır" in q_own or "external_whatsapp_data" in q_own or not parsed.get("draft_message")):
+                        if not parsed.get("needs_user_decision") or "kayıt bulunmamaktadır" in q_own or is_introduction:
                             parsed["needs_user_decision"] = False
-                            parsed["draft_message"] = self._build_fallback_draft(c_name, c_rel, last_in_text)
+                            parsed["draft_message"] = self._build_fallback_draft(c_name, c_rel, last_in_text, is_introduction=is_introduction)
                             parsed["question_to_owner"] = ""
                     return parsed
             except json.JSONDecodeError as exc:
                 logger.error(f"Failed to parse WhatsApp synthesis JSON: {exc}")
 
+        if is_introduction:
+            return {
+                "detected_intimacy": "aile" if c_rel.lower() in ["anne", "annem", "baba", "babam", "kardeş"] else "samimi",
+                "needs_user_decision": False,
+                "draft_message": self._build_fallback_draft(c_name, c_rel, last_in_text, is_introduction=True),
+                "question_to_owner": ""
+            }
+
         if last_in_text:
             return {
                 "detected_intimacy": "aile" if c_rel.lower() in ["anne", "annem", "baba", "babam", "kardeş"] else "samimi",
                 "needs_user_decision": False,
-                "draft_message": self._build_fallback_draft(c_name, c_rel, last_in_text),
+                "draft_message": self._build_fallback_draft(c_name, c_rel, last_in_text, is_introduction=False),
                 "question_to_owner": ""
             }
         return {
@@ -730,13 +741,25 @@ JSON ŞEMASI:
         }
 
     @staticmethod
-    def _build_fallback_draft(c_name: str, c_rel: str, last_in_text: str) -> str:
+    def _build_fallback_draft(c_name: str, c_rel: str, last_in_text: str, is_introduction: bool = False) -> str:
         """Builds a natural, relationship-aware Turkish reply when LLM synthesis is unavailable."""
         rel_low = (c_rel or "").lower()
         name_low = (c_name or "").lower()
-        if "anne" in rel_low or "anne" in name_low or "gülhan" in name_low:
+        is_mother = "anne" in rel_low or "anne" in name_low or "gülhan" in name_low
+        is_father = "baba" in rel_low or "baba" in name_low or "yaşar" in name_low
+
+        salutation = "Gülhan Teyzeciğim" if is_mother else ("Yaşar Amcacığım" if is_father else c_name)
+
+        if is_introduction:
+            return (
+                f"Merhabalar {salutation}, ben Mücahit'in yapay zeka asistanı JARVIS. "
+                f"Mücahit şu anda önemli bir çalışma üzerinde odaklandığı için mesajlaşma ve ajandasını ben asiste ediyorum. "
+                f"Size eşlik etmekten ve tanışmaktan çok mutlu oldum, Mücahit'e iletmek istediğiniz her şeyi bana yazabilirsiniz!"
+            )
+
+        if is_mother:
             return "Selam anneciğim, iyiyim bilgisayar başında çalışıyorum şu an, sen nasılsın?"
-        if "baba" in rel_low or "baba" in name_low or "yaşar" in name_low:
+        if is_father:
             return "Selam babacığım, iyiyim çalışıyorum şu an, sen nasılsın?"
         return "Selam, iyiyim teşekkür ederim, şu an bir çalışma üzerindeyim. Sen nasılsın?"
 
@@ -792,9 +815,31 @@ JSON ŞEMASI:
 
         inc_low = (incoming_text or "").lower()
 
+        # Check if recent dialogue has a looping question (e.g. asking to summarize news repeatedly)
+        prev_has_loop = any(
+            any(k in str(m.get("text", "")).lower() for k in ["özetleyeyim mi", "haberleri getiriyorum", "kontrol ediyorum", "topluyorum", "özet vereyim"])
+            for m in chat_history[-4:]
+        )
+
         # Dynamic Knowledge Injection based on user question
         extra_knowledge = ""
-        if any(w in inc_low for w in ["hava", "derece", "yağmur", "yagmur", "kar", "soğuk", "soguk", "sıcak", "sicak"]):
+        if prev_has_loop and any(w in inc_low for w in ["evet", "bekliyorum", "tamam", "olur", "dinliyorum", "anlat", "söyle", "soyle"]):
+            extra_knowledge = (
+                f"\n[DÖNGÜYÜ KIRMA VE DÜRÜSTLÜK TALİMATI]:\n"
+                f"- Önceki mesajlarda karşı tarafa haber getireceğini söylemişsin, ANCAK BU BİR HATAYDI!\n"
+                f"- Senin canlı internet haber bültenlerine doğrudan erişimin YOK!\n"
+                f"- KESİNLİKLE 'haberleri getiriyorum' ya da 'özetleyeyim mi' DEME!\n"
+                f"- Samimi ve açık ol: 'Kusura bakmayın {salutation}, ben Mücahit\\'in ajanda ve mesaj asistanıyım; canlı haber bülteni akışına doğrudan erişimim bulunmuyor. Dilerseniz televizyondan veya haber sitelerinden takip edebilirsiniz. Mücahit\\'e iletmek istediğiniz bir randevu veya not varsa hemen kaydedeyim.' şeklinde dürüst ve net bir cevap ver."
+            )
+        elif any(w in inc_low for w in ["haber", "son dakika", "gündem", "gundem", "gazete", "neler olmuş", "neler olmus"]):
+            extra_knowledge = (
+                f"\n[CANLI HABER VE GÜNDEM TALEBİ - KESİN KURAL]:\n"
+                f"- Sen canlı haber bültenine veya internet gazete akışına sahip değilsin.\n"
+                f"- KESİNLİKLE 'haberleri getiriyorum', 'kontrol ediyorum', 'özetleyeyim mi?', 'topluyorum', 'bekleyin' GİBİ OYALAYICI VE YALAN VAATLER VERME!\n"
+                f"- Dürüst ve açık sözlü ol: {salutation} diye hitap ederek Mücahit'in ajanda ve mesajlaşma asistanı olduğunu, canlı haber bültenlerine doğrudan erişiminin bulunmadığını belirt.\n"
+                f"- Mücahit'e iletmek istediği bir not veya randevu varsa hemen ajandasına kaydedebileceğini söyle."
+            )
+        elif any(w in inc_low for w in ["hava", "derece", "yağmur", "yagmur", "kar", "soğuk", "soguk", "sıcak", "sicak"]):
             extra_knowledge = (
                 "\n[GÜNCEL HAVA DURUMU - Eskişehir]:\n"
                 "- Bu hafta tipik sonbahar havası hakim.\n"
@@ -851,6 +896,8 @@ GELEN SON MESAJ: "{incoming_text}"
 1. {intro_rule}
 2. ASLA her mesajın sonuna 'Size nasıl yardımcı olabilirim?', 'Başka bir şey de yardımcı olmamı ister misiniz?' kalıplarını ekleme! Sadece karşı taraf soru sorarsa yanıt ver.
 3. Asla robotik olma. Türkçeyi sıcak, doğal ve saygılı bir asistan gibi kullan. 1-2 cümleyi geçmeyen derli toplu mesaj yaz.
+4. ASLA OYALAMA VEYA BOŞ VAAT VERME: 'araştırıyorum', 'topluyorum', 'getiriyorum', 'özetleyeyim mi', 'biraz bekleyin' gibi boş vaatlerde bulunmak KESİNLİKLE YASAKTIR. Yapamayacağın, bilmediğin veya erişimin olmayan bir konu olduğunda DÜRÜST VE AÇIK OL: "{salutation}, ben Mücahit'in ajanda ve mesaj asistanıyım, canlı haber bültenine doğrudan erişimim bulunmuyor..." diyerek sınırlarını hemen netleştir.
+5. TEKRARLAYAN SORU DÖNGÜSÜ YASAK: Karşı tarafa peş peşe 'özetleyeyim mi?', 'ister misiniz?' gibi ucu açık sorular sorarak diyaloğu kilitleme.
 
 Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metnini yaz (tırnak işareti veya ek açıklama olmadan):"""
 
@@ -865,7 +912,9 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
 
         # Intelligent Contextual Fallback if Ollama is unreachable
         if not reply:
-            if any(w in inc_low for w in ["günlerden ne", "hangi gün", "bugün ne", "bugun ne"]):
+            if any(w in inc_low for w in ["haber", "son dakika", "gündem", "gazete"]) or (prev_has_loop and any(w in inc_low for w in ["evet", "bekliyorum", "tamam"])):
+                reply = f"Kusura bakmayın {salutation}, ben Mücahit'in ajanda ve mesaj asistanıyım; anlık canlı haber yayınına doğrudan erişimim bulunmuyor. Mücahit'e iletmek istediğiniz başka bir not veya konu varsa hemen kendisine iletmek üzere kaydedebilirim."
+            elif any(w in inc_low for w in ["günlerden ne", "hangi gün", "bugün ne", "bugun ne"]):
                 reply = f"{salutation}, bugün günlerden {day_name} ({now.day} {months_tr[now.month]})."
             elif any(w in inc_low for w in ["hava", "hava durumu", "yağmur", "soğuk"]):
                 from core_jarvis.tools.system_tool import system_tool
@@ -922,21 +971,48 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
     # =================================================================
 
     def _resolve_target_contact(self, text: str, hinted_name: str = "") -> Optional[Dict[str, Any]]:
-        """Resolves contact from router hint or user text against contacts database and inbox."""
+        """Resolves contact from user text or router hint against contacts database and inbox."""
         search_pool = f"{hinted_name} {text}".lower().strip()
         if not search_pool:
             return None
 
         all_contacts = self.contacts.get_all()
         pool_words = set(re.findall(r"[a-zçğıöşü0-9]+", search_pool))
+        text_words = set(re.findall(r"[a-zçğıöşü0-9]+", (text or "").lower()))
 
-        # 0. Direct exact lookup via hinted_name from LLM Router first
+        # 0. STRICT DETERMINISTIC MATCH FROM USER TEXT FIRST (Never let LLM router dialogue hallucination override explicit user input!)
+        if text_words & {"annem", "anneme", "annemin", "annemden", "annemle", "anne", "valide", "gülhan", "gulhan"}:
+            for c in all_contacts:
+                if c.get("id") == "c_annem" or c.get("name", "").lower() == "annem" or c.get("relationship", "").lower() == "anne":
+                    return c
+        if text_words & {"babam", "babama", "babamın", "babamdan", "babamla", "baba", "peder", "yaşar", "yasar"}:
+            for c in all_contacts:
+                if c.get("id") == "c_babam" or c.get("name", "").lower() == "babam" or c.get("relationship", "").lower() == "baba":
+                    return c
+        if text_words & {"kendim", "kendime"}:
+            for c in all_contacts:
+                if c.get("id") == "c_owner" or "mücahit" in c.get("name", "").lower():
+                    return c
+        if (text_words & {"abim", "abime", "abimin", "abimden", "abimle"}) and not (text_words & {"mehmet", "sami", "emin", "yusuf"}):
+            for c in all_contacts:
+                if c.get("name", "").lower() == "abim":
+                    return c
+
+        # Explicit name tokens in user text
+        for c in sorted(all_contacts, key=lambda x: len(x.get("name", "")), reverse=True):
+            c_name = c.get("name", "").lower().strip()
+            if c.get("id") == "c_owner" and not (text_words & {"mücahit", "mucahit", "hilmi", "kendim", "kendime"}):
+                continue
+            if len(c_name) >= 3 and re.search(r"\b" + re.escape(c_name) + r"\b", (text or "").lower()):
+                return c
+
+        # 1. Direct exact lookup via hinted_name from LLM Router (if text didn't contain explicit target)
         if hinted_name:
             found = self.contacts.find_contact(hinted_name)
             if found:
                 return found
 
-        # 1. Relationship aliases (strict word-token match so 'benim' or 'yaşar abi' never misfires)
+        # 2. Relationship aliases in full search_pool
         if pool_words & {"babam", "babama", "babamın", "babamdan", "babamla", "baba", "peder"}:
             for c in all_contacts:
                 if c.get("id") == "c_babam" or c.get("name", "").lower() == "babam" or c.get("relationship", "").lower() == "baba":
@@ -945,16 +1021,12 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             for c in all_contacts:
                 if c.get("id") == "c_annem" or c.get("name", "").lower() == "annem" or c.get("relationship", "").lower() == "anne":
                     return c
-        if (pool_words & {"abim", "abime", "abimin", "abimden", "abimle"}) and not (pool_words & {"mehmet", "sami", "emin", "yusuf"}):
-            for c in all_contacts:
-                if c.get("name", "").lower() == "abim":
-                    return c
         if pool_words & {"kendim", "kendime"}:
             for c in all_contacts:
                 if c.get("id") == "c_owner" or "mücahit" in c.get("name", "").lower():
                     return c
 
-        # 2. Registered contacts match (longest first, excluding owner unless explicitly named)
+        # 3. Registered contacts match in search_pool (longest first, excluding owner unless explicitly named)
         for c in sorted(all_contacts, key=lambda x: len(x.get("name", "")), reverse=True):
             c_name = c.get("name", "").lower().strip()
             if c.get("id") == "c_owner" and not (pool_words & {"mücahit", "mucahit", "hilmi", "kendim", "kendime"}):
@@ -1230,6 +1302,11 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             return {"reply": reply, "speak_text": f"Meşgul modunu açtım efendim. {target or 'Gelen mesajları'} ben karşılayacağım.", "action_taken": "ai_delegate_enabled", "target": target}
 
         elif any(k in q_lower for k in [
+            "sistemin son durumu", "sistem durumu", "sistem durumu nedir", "sistemin durumu",
+            "donanım durumu", "donanim durumu", "telemetri", "ram kullanımı", "vram durumu", "donanım telemetrisi"
+        ]):
+            decision = {"action": "system_status"}
+        elif any(k in q_lower for k in [
             "yanıt vermem gerektiğini söyle", "ne yanıt vermem", "ne cevap vermem",
             "yanıt önerisi", "cevap önerisi", "mesajlarını analiz et", "mesajlarini analiz et"
         ]):
@@ -1250,18 +1327,43 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
         is_unread_only = bool(decision.get("is_unread_only", False))
         is_intro = bool(decision.get("is_introduction", False))
 
+        # Deterministic extraction of target and introduction from raw input
+        # Explicit target named in user's prompt ALWAYS overrides LLM Router dialogue hallucinations!
+        explicit_target = ""
+        for rel_token, mapped_name in [
+            ("annem", "annem"), ("anneme", "annem"), ("annemin", "annem"), ("annemle", "annem"), ("anne", "annem"), ("gülhan", "annem"),
+            ("babam", "babam"), ("babama", "babam"), ("babamın", "babam"), ("babamla", "babam"), ("baba", "babam"), ("yaşar", "babam"),
+            ("kendim", "kendim"), ("kendime", "kendim"),
+            ("adem", "adem"), ("ademe", "adem"), ("ademin", "adem"),
+            ("emir", "emir"), ("emire", "emir"),
+            ("ahmet", "ahmet"), ("ahmete", "ahmet")
+        ]:
+            if re.search(r"\b" + re.escape(rel_token) + r"\b", q_lower):
+                explicit_target = mapped_name
+                break
+
+        if not explicit_target:
+            for c in self.contacts.get_all():
+                c_n = c.get("name", "").lower()
+                if len(c_n) >= 3 and re.search(r"\b" + re.escape(c_n) + r"\b", q_lower):
+                    explicit_target = c_n
+                    break
+
+        if explicit_target:
+            target_hint = explicit_target
+
+        if any(k in q_lower for k in ["kendini tanıt", "kendini tanit", "tanıt", "tanit", "kendinden bahset", "kim olduğunu söyle", "kim oldugunu soyle"]):
+            is_intro = True
+
         # Safety Guards against Router Misclassification:
         # Deterministic Guard: WhatsApp reply / send commands should never fall through to chat
-        if action == "chat" and any(k in q_lower for k in [
+        if any(k in q_lower for k in [
+            "mesaj at", "mesaj yaz", "mesaj gönder", "mesaj gonder", "tanıtan bir mesaj", "tanitan bir mesaj",
             "son mesajına cevap ver", "son mesaja cevap ver", "son mesajını yanıtla", "son mesajina cevap ver",
-            "cevap yaz", "cevap ver", "yanıt yaz", "yanıtla", "yanitla", "mesaj at", "mesaj yaz", "mesaj gönder", "mesaj gonder"
+            "cevap yaz", "cevap ver", "yanıt yaz", "yanıtla", "yanitla"
         ]) and not any(k in q_lower for k in ["kod", "fonksiyon", "analiz"]):
-            action = "reply_whatsapp"
-            if not target_hint:
-                for n in ["annem", "anne", "babam", "baba", "abim", "yaşar", "gülhan", "adem", "emir", "ahmet"]:
-                    if n in q_lower:
-                        target_hint = n
-                        break
+            if action not in ("send_whatsapp", "reply_whatsapp"):
+                action = "send_whatsapp"
         # 1. Only run unit tests if user explicitly asked for tests (never on code generation or rule statements)
         if action == "code_tests":
             if not any(t in q_lower for t in ["test", "unittest", "testleri"]) or any(c in q_lower for c in ["kod yaz", "fonksiyon"]):
@@ -1321,17 +1423,48 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
                 self._record_turn(user_text, reply)
                 return {"reply": reply, "speak_text": speak_text, "action_taken": "draft_revised", "draft": self.pending_draft}
 
-        # 3. SYSTEM TELEMETRY
+        # 3. SYSTEM TELEMETRY & FULL ECOSYSTEM STATUS
         if action == "system_status":
             metrics = self.vram.get_system_metrics()
+            is_wa_conn = self.whatsapp.is_connected() if callable(getattr(self.whatsapp, "is_connected", None)) else False
+            inbox_count = len(self.whatsapp.get_inbox(limit=100))
+            is_delegate = self.whatsapp.ai_delegate_active
+            is_auto = self.auto_dispatch_whatsapp
+            active_model = self.model_name
+
+            # Personal Assistant Telemetry
+            pending_tasks_count = 0
+            agenda_items_count = 0
+            try:
+                from core_jarvis.personal_assistant import personal_assistant
+                briefing = personal_assistant.get_daily_briefing()
+                pending_tasks_count = len(briefing.get("pending_tasks", []))
+                agenda_items_count = len(briefing.get("agenda_today", []))
+            except Exception:
+                pass
+
             reply = (
-                f"Anlık donanım telemetrisi Sayın Hilmi:\n\n"
-                f"🧠 **Aktif LLM Modeli:** `{self.model_name}` (VRAM Sabitlenmiş)\n"
-                f"💾 **RAM Durumu:** %{metrics['ram_used_pct']} dolu ({metrics['ram_available_gb']} GB boş / {metrics['ram_total_gb']} GB)\n"
-                f"🔄 **Takas Bellek (Swap):** %{metrics['swap_used_pct']} ({metrics['swap_total_gb']} GB)\n"
-                f"🛡️ **VRAM Kalkanı:** {'Yeşil (Render İçin Güvenli)' if metrics['safe_for_diffusion'] else 'Sarı (Bellek Yoğun)'}"
+                f"### 🛡️ JARVIS Master Ekosistem & Telemetri Durumu (Sayın Hilmi)\n\n"
+                f"📱 **WhatsApp Operasyon Hattı:**\n"
+                f"- **Bağlantı Durumu:** {'🟢 Çevrimiçi & Aktif' if is_wa_conn else '🟡 Bağlanıyor / QR Bekleniyor'}\n"
+                f"- **Senkronize Mesaj:** {inbox_count} adet kayıtlı ileti\n"
+                f"- **🤖 Meşgul Modu (AI Vekil):** {'🟢 Açık (Gelen mesajları JARVIS karşılıyor)' if is_delegate else '⚪ Kapalı'}\n"
+                f"- **⚡ Otomatik Gönderim (Zero-Click):** {'🟢 Açık (Onaysız doğrudan gönderim)' if is_auto else '🟡 Kapalı (Taslak onayı beklenir)'}\n\n"
+                f"💻 **Donanım & VRAM Kalkanı:**\n"
+                f"- **İşlemci (CPU):** Intel Core i5-14400F (10 Çekirdek, 16 İş Parçacığı)\n"
+                f"- **Ekran Kartı (GPU):** AMD Radeon RX 9060 XT (16 GB GDDR6 VRAM)\n"
+                f"- **RAM Durumu:** %{metrics['ram_used_pct']} dolu ({metrics['ram_available_gb']} GB boş / {metrics['ram_total_gb']} GB)\n"
+                f"- **VRAM Kalkanı:** {'🟢 Yeşil (Render ve model için güvenli)' if metrics['safe_for_diffusion'] else '🟡 Sarı (Bellek Yoğun)'}\n\n"
+                f"🧠 **Yapay Zeka Motorları:**\n"
+                f"- **Aktif Dil Modeli:** `{active_model}` (VRAM Sabitlenmiş)\n"
+                f"- **Ses Algılama (STT):** Faster-Whisper Türkçe VAD Motoru\n"
+                f"- **Ses Sentezleme (TTS):** Microsoft Edge Neural / Kokoro-82M\n\n"
+                f"📋 **Kişisel Ajanda & Görevler:**\n"
+                f"- **Bugünkü Randevular:** {agenda_items_count} kayıt\n"
+                f"- **Bekleyen Görevler:** {pending_tasks_count} görev\n\n"
+                f"Sistem tüm fonksiyonlarıyla stabil ve emrinizdedir efendim."
             )
-            speak_text = f"Sistem durumu stabil efendim. Bellek kullanımı yüzde {metrics['ram_used_pct']}."
+            speak_text = f"Sistem durumu stabil efendim. WhatsApp {'bağlı' if is_wa_conn else 'bağlantıda'}, Meşgul modu {'açık' if is_delegate else 'kapalı'}, bellek kullanımı yüzde {metrics['ram_used_pct']}."
             self._record_turn(user_text, reply)
             return {"reply": reply, "speak_text": speak_text, "action_taken": "system_telemetry", "details": metrics}
 
@@ -2040,24 +2173,39 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             "ekranı oku", "ekrana bak", "görsel", "resim", "fotoğraf", "ekran görüntüsü",
             "araştır", "arastir", "doküman", "pdf", "özetle", "özet çıkar",
             "testleri çalıştır", "unit test", "git diff", "commit",
-            "sistem durumu", "telemetri", "ram kullanımı", "müzik", "spotify", "şarkı", "oyun", "steam",
+            "sistem", "durum", "telemetri", "ram kullanımı", "vram", "hava", "müzik", "spotify", "şarkı", "oyun", "steam",
             "wake on lan", "bilgisayarı aç", "youtube raporu", "taslak", "evet", "onayla", "iptal"
         )
 
         if self.pending_draft or any(kw in q_lower for kw in tool_keywords):
-            # Atomic tool execution
-            res = self.process_message(user_text, session_history=session_history)
-            reply = res.get("reply", "")
-            speak_text = res.get("speak_text", reply)
-            event_bus.publish("chat.tool_dispatched", {"user": user_text, "action": res.get("action_taken")})
+            # Immediate feedback token so user UI never sits on an empty cursor
             yield {
-                "token": reply,
-                "done": True,
-                "reply": reply,
-                "speak_text": speak_text,
-                "action_taken": res.get("action_taken"),
-                "result": res
+                "token": "⚡ *İşlem analiz ediliyor ve komut yürütülüyor...*\n\n",
+                "done": False
             }
+            try:
+                res = self.process_message(user_text, session_history=session_history)
+                reply = res.get("reply", "")
+                speak_text = res.get("speak_text", reply)
+                event_bus.publish("chat.tool_dispatched", {"user": user_text, "action": res.get("action_taken")})
+                yield {
+                    "token": reply,
+                    "done": True,
+                    "reply": reply,
+                    "speak_text": speak_text,
+                    "action_taken": res.get("action_taken"),
+                    "result": res
+                }
+            except Exception as e:
+                logger.error(f"process_message error in stream_message: {e}", exc_info=True)
+                err_msg = f"Komut yürütülürken bir aksaklık oluştu: {str(e)}"
+                yield {
+                    "token": err_msg,
+                    "done": True,
+                    "reply": err_msg,
+                    "speak_text": "Komut yürütülürken bir aksaklık oluştu efendim.",
+                    "action_taken": "error"
+                }
             return
 
         # 2. General Conversational Chat with Real-time Ollama Streaming

@@ -242,7 +242,7 @@
                         </div>
                         <span id="speechLiveTranscript" class="text-xs font-mono text-amber-300">Sizi dinliyorum, konuşabilirsiniz...</span>
                     </div>
-                    <button onclick="stopVoiceRecognition()" class="text-xs text-amber-400 hover:text-white px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 transition-all font-mono">
+                    <button type="button" onclick="stopVoiceRecognition()" class="text-xs text-amber-400 hover:text-white px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 transition-all font-mono">
                         Bitir <i class="fa-solid fa-check ml-1"></i>
                     </button>
                 </div>
@@ -1072,7 +1072,12 @@
         let currentMode = (function() {
             try { return localStorage.getItem('jarvis_view_mode') || 'cockpit'; } catch(e) { return 'cockpit'; }
         })(); // Defaults to executive 'cockpit' mode
-        let isVoiceEnabled = true;
+        let isVoiceEnabled = (function() {
+            try {
+                const stored = localStorage.getItem('jarvis_voice_enabled');
+                return stored !== null ? stored === 'true' : true;
+            } catch(e) { return true; }
+        })();
         let isListening = false;
         let recognition = null;
         let activeTarget = { id: 'jarvis', name: 'JARVIS Komuta Merkezi', phone: '' };
@@ -1136,9 +1141,14 @@
             }
         }
 
-        // Voice Toggle - STRICT MUTE & CANCEL ENGINE
-        function toggleVoicePlayback() {
-            isVoiceEnabled = !isVoiceEnabled;
+        // Voice Toggle - STRICT MUTE & PERSISTENT CANCEL ENGINE
+        function toggleVoicePlayback(forceState = null) {
+            if (forceState !== null) {
+                isVoiceEnabled = Boolean(forceState);
+            } else {
+                isVoiceEnabled = !isVoiceEnabled;
+            }
+            try { localStorage.setItem('jarvis_voice_enabled', isVoiceEnabled ? 'true' : 'false'); } catch(e) {}
             const label = document.getElementById('voiceToggleLabel');
             const icon = document.getElementById('voiceToggleIcon');
             const btn = document.getElementById('btnVoiceToggle');
@@ -1312,7 +1322,7 @@
             // Prefer local Faster-Whisper if audio was recorded (much higher accuracy for Turkish and custom commands!)
             if (audioChunks.length > 0) {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                if (audioBlob.size > 2000) {
+                if (audioBlob.size > 500) {
                     const st1 = document.getElementById('speechLiveTranscript');
                     const st2 = document.getElementById('cockpitSpeechLiveTranscript');
                     const statusMsg = 'Yerel Whisper sesinizi Türkçe metne döküyor...';
@@ -1487,8 +1497,15 @@
                     if (engineBadge) engineBadge.innerText = finalPacket.model_used;
                 }
 
+                // Check if user requested voice mute via intent router
+                if (finalPacket && (finalPacket.action_taken === 'mute_voice' || (finalPacket.result && finalPacket.result.action_taken === 'mute_voice'))) {
+                    if (isVoiceEnabled) {
+                        toggleVoicePlayback(false);
+                    }
+                }
+
                 // Play Turkish Audio Voice if enabled
-                if (isVoiceEnabled && finalPacket) {
+                if (isVoiceEnabled && finalPacket && finalPacket.action_taken !== 'mute_voice') {
                     const audioUrl = finalPacket.audio_url;
                     const speakText = finalPacket.speak_text || finalReply;
                     if (audioUrl) {
@@ -1596,7 +1613,7 @@
                     <div class="flex-1 max-w-[85%]">
                         <div class="text-[10px] font-mono text-slate-500 mb-1 ${isUser ? 'text-right' : ''}">${sender} • ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</div>
                         <div id="${bubbleId}" class="p-3.5 rounded-xl ${isUser ? 'bg-amber-500/10 border border-amber-500/20 text-amber-100' : 'bg-white/[0.04] border border-white/[0.06] text-slate-200'} text-xs leading-relaxed font-sans">
-                            <span class="inline-block w-1.5 h-3 bg-amber-400 animate-pulse align-middle"></span>
+                            <span class="text-amber-400/90 text-xs font-mono italic flex items-center space-x-2"><i class="fa-solid fa-circle-notch fa-spin text-amber-400 mr-2"></i>Jarvis komutunuzu işliyor...</span>
                         </div>
                     </div>
                 </div>
@@ -2845,6 +2862,7 @@
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', async () => {
             setViewMode(currentMode);
+            toggleVoicePlayback(isVoiceEnabled);
             await initSessionAuth();
             loadContacts();
             fetchAutoDispatchStatus();
