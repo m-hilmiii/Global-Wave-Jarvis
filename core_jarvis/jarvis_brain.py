@@ -1016,13 +1016,24 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
     # MAIN MESSAGE ORCHESTRATOR
     # =================================================================
 
+    @staticmethod
+    def _normalize_stt_input(text: str) -> str:
+        """Corrects acoustic/phonetic misrecognitions and colloquial phrasing from Turkish STT."""
+        cleaned = re.sub(r"\b(?:üründür|döndür|yöndür)\b", "gönder", text, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bhali hatru\b", "hali hatrı", cleaned, flags=re.IGNORECASE)
+        for variant in ["vatsa bir", "vatsab", "vatsap", "watsap", "whatsap", "watsapp", "wp"]:
+            cleaned = re.sub(r"\b" + re.escape(variant) + r"\b", "whatsapp", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b(?:müşkül|muskul|meşgül|mesgul|müşküllük|müşkülü)\b", "meşgul", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b(?:müdürüm\s+aç|modumu\s+aç|modu\s+aç|modum\s+aç)\b", "meşgul modunu aç", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b(?:aktiflemeni\s+istiyorum|aktifleştir|aktifle|açmanı\s+istiyorum|devreye\s+al)\b", "aç", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b(?:göndermeni\s+istiyor|iletmeni\s+istiyor|yazmanı\s+istiyor)\b", "gönder", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b(?:göndermeni\s+istiyorum|iletmeni\s+istiyorum|yazmanı\s+istiyorum)\b", "gönder", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b(?:kendime\s+benim\s+yerime|kendime\s+yerime)\b", "kendime", cleaned, flags=re.IGNORECASE)
+        return cleaned
+
     def process_message(self, user_text: str, session_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """Main entrypoint: normalizes STT artifacts, routes intent via Qwen, and executes action."""
-        cleaned_input = re.sub(r"\b(?:üründür|döndür|yöndür)\b", "gönder", user_text, flags=re.IGNORECASE)
-        cleaned_input = re.sub(r"\bhali hatru\b", "hali hatrı", cleaned_input, flags=re.IGNORECASE)
-        for variant in ["vatsa bir", "vatsab", "vatsap", "watsap", "whatsap", "watsapp", "wp"]:
-            cleaned_input = re.sub(r"\b" + re.escape(variant) + r"\b", "whatsapp", cleaned_input, flags=re.IGNORECASE)
-
+        cleaned_input = self._normalize_stt_input(user_text)
         q_lower = cleaned_input.lower().strip()
 
         # Fast-Path: Sub-millisecond direct draft confirmation or cancellation when pending draft exists
@@ -2015,18 +2026,15 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
         from core_jarvis.event_bus import event_bus
         from core_jarvis.tools.model_manager import model_manager
 
-        cleaned_input = re.sub(r"\b(?:üründür|döndür|yöndür)\b", "gönder", user_text, flags=re.IGNORECASE)
-        cleaned_input = re.sub(r"\bhali hatru\b", "hali hatrı", cleaned_input, flags=re.IGNORECASE)
-        for variant in ["vatsa bir", "vatsab", "vatsap", "watsap", "whatsap", "watsapp", "wp"]:
-            cleaned_input = re.sub(r"\b" + re.escape(variant) + r"\b", "whatsapp", cleaned_input, flags=re.IGNORECASE)
-
+        cleaned_input = self._normalize_stt_input(user_text)
         q_lower = cleaned_input.lower().strip()
 
         # 1. Fast-Path / Tool Check: If this request requires tool execution or draft confirmation
         # We delegate directly to process_message and yield the result
         tool_keywords = (
             "whatsapp", "mesaj", "yaz", "gönder", "gonder", "yolla", "ilet", "yanıt", "yanit", "cevap",
-            "rehber", "kişi ekle", "kisi ekle", "kişiyi ekle", "kişi sil", "kisi sil", "numara",
+            "meşgul", "mesgul", "vekil", "modunu aç", "modu aç", "modunu aktifle", "modunu kapat",
+            "kendime", "rehber", "kişi ekle", "kisi ekle", "kişiyi ekle", "kişi sil", "kisi sil", "numara",
             "hatırlat", "hatirlat", "alarm", "not al", "not ekle", "notlara",
             "görev ekle", "gorev ekle", "todo", "kapat", "sonlandır", "açık uygulamalar",
             "ekranı oku", "ekrana bak", "görsel", "resim", "fotoğraf", "ekran görüntüsü",

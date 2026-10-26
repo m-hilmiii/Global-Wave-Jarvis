@@ -1309,9 +1309,8 @@
                 micStream = null;
             }
 
-            // If Web Speech didn't capture text (e.g. Brave shields blocked Google speech server)
-            // But MediaRecorder recorded audio, send to local Whisper!
-            if (!candidateText && audioChunks.length > 0) {
+            // Prefer local Faster-Whisper if audio was recorded (much higher accuracy for Turkish and custom commands!)
+            if (audioChunks.length > 0) {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 if (audioBlob.size > 2000) {
                     const st1 = document.getElementById('speechLiveTranscript');
@@ -1330,13 +1329,13 @@
                             body: formData
                         });
                         const data = await res.json();
-                        if (data.status === 'success' && data.transcript) {
+                        if (data.status === 'success' && data.transcript && data.transcript.trim()) {
                             candidateText = data.transcript.trim();
                             if (spotInput) spotInput.value = candidateText;
                             if (cockInput) cockInput.value = candidateText;
                         }
                     } catch (whErr) {
-                        console.error("[JARVIS] Local Whisper transcribe error:", whErr);
+                        console.warn("[JARVIS] Whisper transcribe error, falling back to Web Speech text:", whErr);
                     } finally {
                         if (spotInput) spotInput.placeholder = 'Bir komut veya soru yazın...';
                         if (cockInput) cockInput.placeholder = 'Mesaj yazın veya komut verin...';
@@ -1497,6 +1496,12 @@
                     } else if (speakText) {
                         synthesizeAndPlayVoice(speakText);
                     }
+                }
+
+                // Real-time synchronization of WhatsApp sidebar and active chat
+                setTimeout(loadContacts, 800);
+                if (activeTarget.id !== 'jarvis' && activeContactIdentifier) {
+                    setTimeout(() => loadContactChatHistory(activeContactIdentifier, true), 1200);
                 }
 
             } catch (err) {
@@ -2013,10 +2018,28 @@
                 const msgDate = msg.date || '';
                 if (msgDate && msgDate !== lastDate) {
                     lastDate = msgDate;
+
+                    const now = new Date();
+                    const pad = n => String(n).padStart(2, '0');
+                    const todayStr = `${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()}`;
+                    const yest = new Date(now);
+                    yest.setDate(yest.getDate() - 1);
+                    const yestStr = `${pad(yest.getDate())}.${pad(yest.getMonth() + 1)}.${yest.getFullYear()}`;
+
+                    let dateLabel = msgDate;
+                    let isSpecial = false;
+                    if (msgDate === todayStr) {
+                        dateLabel = 'Bugün';
+                        isSpecial = true;
+                    } else if (msgDate === yestStr) {
+                        dateLabel = 'Dün';
+                        isSpecial = true;
+                    }
+
                     html += `
                         <div class="flex items-center justify-center my-3">
-                            <span class="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-white/[0.04] text-slate-400 border border-white/[0.05]">
-                                ${msgDate}
+                            <span class="text-[10px] font-mono px-3 py-0.5 rounded-full ${isSpecial ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20 font-semibold' : 'bg-white/[0.04] text-slate-400 border border-white/[0.05]'} shadow-sm">
+                                ${dateLabel}
                             </span>
                         </div>
                     `;
@@ -2698,8 +2721,14 @@
         // ========================================================
         // Hardware Telemetry, WhatsApp Socket & LTX Status Polling
         // ========================================================
+        let telemetryPollCounter = 0;
         async function pollTelemetryAndStatus() {
             try {
+                telemetryPollCounter++;
+                if (telemetryPollCounter % 2 === 0) {
+                    loadContacts();
+                }
+
                 // 1. Hardware Telemetry
                 const tRes = await authFetch('/api/jarvis/system/telemetry');
                 if (tRes.ok) {

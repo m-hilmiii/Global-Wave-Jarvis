@@ -117,7 +117,7 @@ async def api_jarvis_transcribe(request: Request):
             def _do_transcribe(fpath: str) -> str:
                 from engine.subtitle_whisper import get_whisper_model
                 model = get_whisper_model()
-                prompt_text = "Jarvis, Mücahit, Hilmi, WhatsApp, YouTube, Gönder, İptal, Onayla, Ses, Durdur, Başlat"
+                prompt_text = "Jarvis, Mücahit Hilmi, WhatsApp, Meşgul Modu, Otomatik Gönderim, Kendime test mesajı gönder, Ekranı kilitle, Hava durumu, Brifing, Gönder, İptal, Onayla, Ses, Durdur, Başlat, Valthera"
                 segments, _ = model.transcribe(
                     fpath,
                     language="tr",
