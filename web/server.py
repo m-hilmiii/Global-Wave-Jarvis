@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import uuid
+import ipaddress
 import threading
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -67,15 +68,34 @@ TRANSCRIBE_SEMAPHORE = asyncio.Semaphore(1)
 STREAM_TICKETS = {}
 STREAM_TICKETS_LOCK = threading.Lock()
 
-# Security: Restrict CORS to trusted local origins to mitigate cross-origin attacks & DNS rebinding
-ALLOWED_ORIGINS = [
-    "http://127.0.0.1:7860",
-    "http://localhost:7860",
+# Security: Restrict CORS to trusted local/private origins to mitigate cross-origin attacks & DNS rebinding
+LOCAL_SUBNETS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
 ]
+
+def is_trusted_or_local_ip(host: str) -> bool:
+    if not host:
+        return False
+    if host in {"127.0.0.1", "localhost", "::1", "testclient"}:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return any(ip in net for net in LOCAL_SUBNETS)
+    except ValueError:
+        return False
+
+ALLOWED_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -103,12 +123,11 @@ SENSITIVE_PREFIXES = (
 
 @app.middleware("http")
 async def security_origin_check(request: Request, call_next):
-    trusted_hosts = {"127.0.0.1", "localhost", "::1", "testclient"}
     client_host = request.client.host if request.client else "127.0.0.1"
     path = request.url.path
 
-    # Block external client IPs from accessing local API or private output files
-    if path.startswith(("/api/", "/output/")) and client_host not in trusted_hosts:
+    # Block public external WAN client IPs from accessing local API or private output files (allows localhost, WSL host gateway & private LAN)
+    if path.startswith(("/api/", "/output/")) and not is_trusted_or_local_ip(client_host):
         return JSONResponse(
             {"status": "error", "message": "Unauthorized: External client access blocked."},
             status_code=403
@@ -121,7 +140,7 @@ async def security_origin_check(request: Request, call_next):
             try:
                 parsed_origin = urlparse(origin)
                 origin_host = parsed_origin.hostname or ""
-                if origin_host not in trusted_hosts or parsed_origin.scheme not in ("http", "https"):
+                if not is_trusted_or_local_ip(origin_host) or parsed_origin.scheme not in ("http", "https"):
                     return JSONResponse(
                         {"status": "error", "message": "Forbidden: Cross-origin request rejected."},
                         status_code=403
@@ -187,7 +206,7 @@ async def generate_stream_ticket(request: Request):
 @app.get("/api/session/token")
 async def api_get_session_token(request: Request):
     client_host = request.client.host if request.client else "127.0.0.1"
-    if client_host not in {"127.0.0.1", "localhost", "::1", "testclient"}:
+    if not is_trusted_or_local_ip(client_host):
         return JSONResponse({"status": "error", "message": "Forbidden"}, status_code=403)
     return {"status": "success", "token": LOCAL_SESSION_TOKEN}
 

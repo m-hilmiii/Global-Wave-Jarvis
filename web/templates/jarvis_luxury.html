@@ -1034,6 +1034,16 @@
 
     <!-- Global Client Logic (JavaScript) -->
     <script>
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return "";
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
         // Authentication token handling for secure local API communication
         let localSessionToken = "";
         let sessionAuthPromise = null;
@@ -1201,20 +1211,35 @@
             }
         }
 
+        let audioCtx = null;
+        let analyser = null;
+        let silenceTimer = null;
+        let voiceDetected = false;
+        let maxRecordingTimer = null;
+
         async function startVoiceRecognition() {
             if (isListening) return;
             isListening = true;
+            voiceDetected = false;
             accumulatedTranscript = '';
             audioChunks = [];
             updateMicUI(true);
 
-            const promptTranscript = 'Sizi dinliyorum, konuşabilirsiniz... (Bitirmek için mikrofona tekrar basın)';
+            const promptTranscript = 'Sizi dinliyorum, konuşabilirsiniz... (Konuşmanız bitince otomatik algılar)';
             const st1 = document.getElementById('speechLiveTranscript');
             const st2 = document.getElementById('cockpitSpeechLiveTranscript');
             if (st1) st1.innerText = promptTranscript;
             if (st2) st2.innerText = promptTranscript;
 
-            // 1. Start MediaRecorder (Guaranteed to work in Brave, Chrome, Edge, Firefox locally!)
+            // Safety max duration: 25 seconds
+            maxRecordingTimer = setTimeout(() => {
+                if (isListening) {
+                    console.log("[JARVIS Voice] Max recording timeout reached, stopping...");
+                    stopVoiceRecognition();
+                }
+            }, 25000);
+
+            // 1. Start MediaRecorder & Web Audio Analyser (VAD)
             try {
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                     micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1225,6 +1250,48 @@
                         if (e.data && e.data.size > 0) audioChunks.push(e.data);
                     };
                     mediaRecorder.start(250);
+
+                    // Silence detection via AnalyserNode
+                    try {
+                        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                        if (AudioCtxClass) {
+                            audioCtx = new AudioCtxClass();
+                            const source = audioCtx.createMediaStreamSource(micStream);
+                            analyser = audioCtx.createAnalyser();
+                            analyser.fftSize = 256;
+                            source.connect(analyser);
+
+                            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                            const checkVAD = () => {
+                                if (!isListening || !analyser) return;
+                                analyser.getByteFrequencyData(dataArray);
+                                let sum = 0;
+                                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                                const avg = sum / dataArray.length;
+
+                                if (avg > 18) {
+                                    voiceDetected = true;
+                                    if (silenceTimer) {
+                                        clearTimeout(silenceTimer);
+                                        silenceTimer = null;
+                                    }
+                                } else if (voiceDetected) {
+                                    if (!silenceTimer) {
+                                        silenceTimer = setTimeout(() => {
+                                            if (isListening && voiceDetected) {
+                                                console.log("[JARVIS Voice] Silence detected after speech, auto-submitting...");
+                                                stopVoiceRecognition();
+                                            }
+                                        }, 2200);
+                                    }
+                                }
+                                requestAnimationFrame(checkVAD);
+                            };
+                            requestAnimationFrame(checkVAD);
+                        }
+                    } catch (vadErr) {
+                        console.debug("[JARVIS Voice] Analyser setup: ", vadErr);
+                    }
                 }
             } catch (mediaErr) {
                 console.warn("[JARVIS] MediaRecorder initialization:", mediaErr);
@@ -1251,6 +1318,11 @@
                         }
                         const spoken = (accumulatedTranscript + ' ' + final + ' ' + interim).trim();
                         if (spoken) {
+                            voiceDetected = true;
+                            if (silenceTimer) {
+                                clearTimeout(silenceTimer);
+                                silenceTimer = null;
+                            }
                             if (st1) st1.innerText = spoken;
                             if (st2) st2.innerText = spoken;
                             const inp1 = document.getElementById('spotlightInput');
@@ -1267,16 +1339,20 @@
                         console.warn("[JARVIS] Speech Recognition error:", ev.error);
                         // Do NOT abort on no-speech or network! Let MediaRecorder handle it!
                         if (ev.error === 'network' || ev.error === 'not-allowed') {
-                            const note = 'Brave/Google bulut engeli algılandı; yerel Whisper devreye alınıyor...';
+                            const note = 'Brave/Google bulut engeli algılandı; yerel Faster-Whisper devreye alınıyor...';
                             if (st1) st1.innerText = note;
                             if (st2) st2.innerText = note;
                         }
                     };
 
                     recognition.onend = () => {
-                        // If still supposed to be listening, gently restart Web Speech
+                        // If still supposed to be listening, gently restart Web Speech after a brief delay
                         if (isListening && recognition) {
-                            try { recognition.start(); } catch(e) {}
+                            setTimeout(() => {
+                                try {
+                                    if (isListening && recognition) recognition.start();
+                                } catch(e) {}
+                            }, 200);
                         }
                     };
 
@@ -1291,6 +1367,10 @@
             if (!isListening) return;
             isListening = false;
             updateMicUI(false);
+
+            if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+            if (maxRecordingTimer) { clearTimeout(maxRecordingTimer); maxRecordingTimer = null; }
+            if (audioCtx) { try { audioCtx.close(); } catch(e) {} audioCtx = null; analyser = null; }
 
             // Stop Web Speech
             if (recognition) {
@@ -2071,7 +2151,12 @@
             let lastDate = '';
 
             messages.forEach(msg => {
-                const msgDate = msg.date || '';
+                let msgDate = msg.date || '';
+                if (!msgDate && msg.timestamp) {
+                    const dObj = new Date(msg.timestamp * 1000);
+                    const pad = n => String(n).padStart(2, '0');
+                    msgDate = `${pad(dObj.getDate())}.${pad(dObj.getMonth() + 1)}.${dObj.getFullYear()}`;
+                }
                 if (msgDate && msgDate !== lastDate) {
                     lastDate = msgDate;
 
@@ -2114,21 +2199,21 @@
                     }
                 }
 
-                const jidAttr = (msg.chat_jid || activeTarget.phone || '').replace(/'/g, "\\'");
-                const idAttr = (msg.id || '').replace(/'/g, "\\'");
+                const safeJid = escapeHtml(msg.chat_jid || activeTarget.phone || '');
+                const safeId = escapeHtml(msg.id || '');
 
                 html += `
-                    <div id="msg-${idAttr}" data-msg-id="${idAttr}" class="group flex space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}">
+                    <div id="msg-${safeId}" data-msg-id="${safeId}" class="group flex space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}">
                         <div class="w-7 h-7 rounded-lg ${isUser ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'} flex items-center justify-center text-[11px] shrink-0 font-bold font-mono">
                             ${isUser ? 'H' : (senderLabel.charAt(0).toUpperCase())}
                         </div>
                         <div class="flex-1 max-w-[82%]">
                             <div class="flex items-center justify-between text-[10px] font-mono text-slate-500 mb-1 ${isUser ? 'flex-row-reverse' : ''}">
-                                <span>${senderLabel} ${timeLabel ? '• ' + timeLabel : ''}</span>
+                                <span>${escapeHtml(senderLabel)} ${timeLabel ? '• ' + timeLabel : ''}</span>
                                 ${activeTarget.id !== 'jarvis' ? `
                                 <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 px-1">
-                                    <button onclick="deleteSingleMessage('${jidAttr}', '${idAttr}', true)" title="Herkesten Sil" class="hover:text-rose-400 text-slate-500 p-0.5 text-[9px] transition-colors"><i class="fa-solid fa-trash-can"></i></button>
-                                    <button onclick="deleteSingleMessage('${jidAttr}', '${idAttr}', false)" title="Benden Sil" class="hover:text-amber-400 text-slate-500 p-0.5 text-[9px] transition-colors"><i class="fa-solid fa-eye-slash"></i></button>
+                                    <button data-jid="${safeJid}" data-msg-id="${safeId}" data-everyone="true" title="Herkesten Sil" class="btn-delete-msg hover:text-rose-400 text-slate-500 p-0.5 text-[9px] transition-colors"><i class="fa-solid fa-trash-can"></i></button>
+                                    <button data-jid="${safeJid}" data-msg-id="${safeId}" data-everyone="false" title="Benden Sil" class="btn-delete-msg hover:text-amber-400 text-slate-500 p-0.5 text-[9px] transition-colors"><i class="fa-solid fa-eye-slash"></i></button>
                                 </div>` : ''}
                             </div>
                             <div class="p-3.5 rounded-xl ${isUser ? 'bg-amber-500/15 border border-amber-500/25 text-amber-100 shadow-sm' : 'bg-white/[0.04] border border-white/[0.06] text-slate-200'} text-xs leading-relaxed font-sans">
@@ -2141,6 +2226,17 @@
             });
 
             feed.innerHTML = html;
+            if (!feed._hasDeleteListener) {
+                feed._hasDeleteListener = true;
+                feed.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.btn-delete-msg');
+                    if (!btn) return;
+                    const jid = btn.getAttribute('data-jid') || '';
+                    const msgId = btn.getAttribute('data-msg-id') || '';
+                    const everyone = btn.getAttribute('data-everyone') === 'true';
+                    deleteSingleMessage(jid, msgId, everyone);
+                });
+            }
             feed.scrollTop = feed.scrollHeight;
         }
 

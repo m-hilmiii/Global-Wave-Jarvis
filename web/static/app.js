@@ -2885,9 +2885,10 @@ document.addEventListener("DOMContentLoaded", () => {
                                     body: formData
                                 });
                                 const trData = await resp.json();
-                                if (trData.status === "success" && trData.text) {
-                                    if (inputEl) inputEl.value = trData.text;
-                                    handleSendMessage(trData.text);
+                                const recognizedText = trData.transcript || trData.text || "";
+                                if (trData.status === "success" && recognizedText) {
+                                    if (inputEl) inputEl.value = recognizedText;
+                                    handleSendMessage(recognizedText);
                                 } else {
                                     if (inputEl) inputEl.placeholder = "Ses anlaşılamadı, tekrar deneyin...";
                                 }

@@ -71,6 +71,7 @@ GEÇERLİ AKSİYONLAR (action):
 - "git_diff": Kaydedilmemiş kod değişikliklerini inceleme ("ne değişti", "git diff").
 - "system_status": Donanım (CPU, RAM, Disk, GPU), telemetri veya kaynak durumunu sorma.
 - "read_whatsapp": WhatsApp'tan gelen mesajları veya bir kişinin ne yazdığını öğrenme.
+- "analyze_whatsapp_chat": Bir kişiyle (anne, baba, arkadaş vb.) olan geçmiş WhatsApp konuşmalarını analiz etme, özetleme veya inceleme ("annemle olan konuşmaları analiz et", "babamla olan mesajları özetle", "konuşmalarımızı incele").
 - "reply_whatsapp": Bir kişiye WhatsApp mesajı yanıtlama.
 - "send_whatsapp": Birine yeni WhatsApp mesajı gönderme veya kendini tanıtma.
 - "confirm_draft": Onay bekleyen mesaj taslağını onaylama ("gönder", "onayla", "evet", "yolla", "tamamdır").
@@ -469,7 +470,7 @@ class JarvisBrain:
             "hatırlat", "hatirlat", "alarm", "not al", "not ekle", "notlara",
             "görev ekle", "gorev ekle", "todo",
             "ekranı oku", "ekrana bak", "görsel", "resim", "fotoğraf", "ekran görüntüsü",
-            "araştır", "arastir", "doküman", "pdf", "özetle", "özet çıkar",
+            "araştır", "arastir", "doküman", "pdf", "özetle", "özet çıkar", "analiz", "konuşma", "sohbet", "incele",
             "testleri çalıştır", "unit test", "git diff", "commit",
             "sistem durumu", "telemetri", "ram kullanımı",
             "wake on lan", "bilgisayarı aç", "youtube raporu", "yorum analizi", "taslak"
@@ -477,6 +478,10 @@ class JarvisBrain:
         t_low = (user_text or "").lower()
         if not self.pending_draft and not any(kw in t_low for kw in tool_keywords):
             return {"action": "chat", "target_person": "", "user_instruction": ""}
+
+        # Fast-Path: Deterministic analysis of WhatsApp chats
+        if any(w in t_low for w in ["konuşmaları analiz", "konuşmayı analiz", "mesajları analiz", "sohbeti analiz", "analiz et", "konuşmaları özetle", "mesajları özetle", "konuşmaları incele"]):
+            return {"action": "analyze_whatsapp_chat", "target_person": "", "user_instruction": user_text}
 
         history_context = ""
         history_source = session_history if session_history is not None else self.conversation_history
@@ -1122,7 +1127,7 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
                 return self.cancel_pending_draft()
 
         # Fast-Path: Direct voice mute and chat clear
-        if any(k in q_lower for k in ["sesini kapat", "sessize al", "sus", "sesi kapat", "konuşma", "sesi kes"]):
+        if any(k in q_lower for k in ["sesini kapat", "sessize al", "sesi kapat", "sesi kes", "artık konuşma"]) or q_lower.strip() in ("sus", "konuşma"):
             reply = "Sesli yanıtı kapattım efendim. Yazılı olarak devam ediyorum."
             self._record_turn(user_text, reply)
             return {"reply": reply, "speak_text": "", "action_taken": "mute_voice"}
@@ -1349,6 +1354,11 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
                 break
 
         if not explicit_target:
+            phone_m = re.search(r"\b(\+?[0-9]{10,13})\b", cleaned_input)
+            if phone_m:
+                explicit_target = phone_m.group(1)
+
+        if not explicit_target:
             for c in self.contacts.get_all():
                 c_n = c.get("name", "").lower()
                 if len(c_n) >= 3 and re.search(r"\b" + re.escape(c_n) + r"\b", q_lower):
@@ -1362,6 +1372,9 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             is_intro = True
 
         # Safety Guards against Router Misclassification:
+        if any(k in q_lower for k in ["analiz et", "konuşmaları analiz", "mesajları analiz", "sohbeti analiz", "konuşmaları özetle", "mesajları özetle", "konuşmaları incele"]):
+            action = "analyze_whatsapp_chat"
+
         # Deterministic Guard: WhatsApp reply / send commands should never fall through to chat
         if any(k in q_lower for k in [
             "mesaj at", "mesaj yaz", "mesaj gönder", "mesaj gonder", "tanıtan bir mesaj", "tanitan bir mesaj",
@@ -1516,6 +1529,70 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
                 "speak_text": f"Rehberde {target_hint} bulunamadı efendim.",
                 "action_taken": "contact_not_found"
             }
+
+        # 6. ANALYZE WHATSAPP CHAT HISTORY
+        if action == "analyze_whatsapp_chat":
+            contact = self._resolve_target_contact(cleaned_input, target_hint)
+            if not contact and target_hint:
+                candidates = self.contacts.find_contacts_candidates(target_hint)
+                if len(candidates) > 1:
+                    cand_names = ", ".join(f"**{c.get('full_name') or c.get('name')}** ({c.get('phone')})" for c in candidates)
+                    reply = f"Sayın Hilmi, rehberinizde '{target_hint}' ile eşleşen {len(candidates)} kişi var: {cand_names}. Hangisinin konuşmalarını analiz etmemi istersiniz?"
+                    self._record_turn(user_text, reply)
+                    return {"reply": reply, "speak_text": reply, "action_taken": "contact_ambiguous", "candidates": candidates}
+                elif not candidates:
+                    reply = f"Sayın Hilmi, rehberinizde '{target_hint}' adında bir kişi veya kayıtlı sohbet bulunamadı. Yapamayacağım bir işlemde sizi oyalamam."
+                    self._record_turn(user_text, reply)
+                    return {"reply": reply, "speak_text": reply, "action_taken": "contact_not_found"}
+
+            contact = contact or self._last_contact
+            if not contact:
+                reply = "Sayın Hilmi, kiminle olan konuşmaları analiz etmemi istediğinizi belirleyemedim. Lütfen kişi adını belirtin (örneğin: 'annemle olan konuşmaları analiz et')."
+                self._record_turn(user_text, reply)
+                return {"reply": reply, "speak_text": reply, "action_taken": "contact_not_specified"}
+
+            c_name = contact.get("name", "")
+            disp_name = contact.get("full_name") or c_name
+            history = self.whatsapp.get_chat_history(c_name)
+            if not history:
+                reply = f"Sayın Hilmi, **{disp_name}** ile sistemde kayıtlı herhangi bir WhatsApp mesaj geçmişi bulunamadı. Yapamayacağım bir işlemde sizi asla oyalamam; analiz edebilmem için en az bir mesaj kaydı olması gerekiyor."
+                self._record_turn(user_text, reply)
+                return {"reply": reply, "speak_text": f"{disp_name} ile kayıtlı sohbet geçmişi bulunamadı efendim.", "action_taken": "no_chat_history"}
+
+            # Take up to 35 most recent messages for comprehensive analysis
+            recent_msgs = history[-35:]
+            transcript_lines = []
+            for m in recent_msgs:
+                sender = "Hilmi (Siz)" if m.get("from_me") else (m.get("sender_name") or disp_name)
+                t_str = m.get("time") or m.get("date") or ""
+                transcript_lines.append(f"[{t_str} - {sender}]: {m.get('text', '')}")
+            transcript_text = "\n".join(transcript_lines)
+
+            analysis_prompt = f"""Aşağıda Mücahit Hilmi ile {disp_name} arasındaki son WhatsApp konuşma dökümü yer almaktadır:
+
+{transcript_text}
+
+GÖREV:
+Bu konuşma geçmişini derinlemesine incele ve Mücahit Hilmi'ye şu formatta net, açık, dürüst ve özet bir rapor sun:
+1. 📌 **Konuşulan Ana Konular ve Özet:** (Neler konuşuldu?)
+2. 🎭 **Genel Duygu ve İletişim Tonu:** (İlişkinin havası, samimiyet, endişe veya memnuniyet durumu)
+3. ⏳ **Açıkta Kalan Konular / Bekleyenler:** (Cevap bekleyen bir soru, yapılacak bir iş veya çözülmemiş bir durum var mı?)
+4. 💡 **JARVIS Önerisi:** (Hilmi'ye bu iletişimle ilgili ne önerirsin?)
+
+Cevabını doğrudan bu başlıklarla, samimi ama net ve dürüst bir dille ver."""
+
+            messages = [
+                {"role": "system", "content": f"{JARVIS_PERSONA_PROMPT}\n\nSen dürüst, gerçekçi ve analitik bir sistem müfettişisin."},
+                {"role": "user", "content": analysis_prompt}
+            ]
+            analysis_reply = self._call_ollama(messages, temperature=0.3, timeout=45)
+            if not analysis_reply:
+                analysis_reply = f"Sayın Hilmi, **{disp_name}** ile olan son {len(recent_msgs)} mesaj incelendi ancak model özet üretemedi."
+
+            reply = f"📊 **{disp_name} ile WhatsApp Konuşma Analizi ({len(recent_msgs)} Mesaj):**\n\n{analysis_reply}"
+            speak_text = f"{disp_name} ile olan konuşmalarınızı analiz ettim efendim. Rapor hazır."
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak_text, "action_taken": "whatsapp_chat_analyzed", "contact": contact, "message_count": len(recent_msgs)}
 
         # 6. READ WHATSAPP MESSAGES
         if action == "read_whatsapp":
@@ -2177,7 +2254,7 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             "hatırlat", "hatirlat", "alarm", "not al", "not ekle", "notlara",
             "görev ekle", "gorev ekle", "todo", "kapat", "sonlandır", "açık uygulamalar",
             "ekranı oku", "ekrana bak", "görsel", "resim", "fotoğraf", "ekran görüntüsü",
-            "araştır", "arastir", "doküman", "pdf", "özetle", "özet çıkar",
+            "araştır", "arastir", "doküman", "pdf", "özetle", "özet çıkar", "analiz", "konuşma", "sohbet", "geçmişi", "incele",
             "testleri çalıştır", "unit test", "git diff", "commit",
             "sistem", "durum", "telemetri", "ram kullanımı", "vram", "hava", "müzik", "spotify", "şarkı", "oyun", "steam",
             "wake on lan", "bilgisayarı aç", "youtube raporu", "taslak", "evet", "onayla", "iptal"

@@ -37,7 +37,7 @@ def get_audio_duration(file_path: str) -> float:
         file_path
     ]
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=15)
         dur = float(res.stdout.strip())
         if dur <= 0:
             raise ValueError(f"Invalid duration {dur}")
@@ -260,7 +260,7 @@ def concatenate_audios(audio_chunks: list, master_mp3_path: str) -> float:
         "-i", concat_list_file, "-c:a", "libmp3lame", "-q:a", "2",
         master_mp3_path
     ]
-    subprocess.run(cmd, capture_output=True, text=True, check=True)
+    subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=60)
     return get_audio_duration(master_mp3_path)
 
 def generate_subtitles(master_audio_path: str, audio_chunks: list, out_ass_path: str, font_name: str = "Arial Black"):

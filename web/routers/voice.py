@@ -128,7 +128,7 @@ async def api_jarvis_transcribe(request: Request):
                 return " ".join([s.text for s in segments]).strip()
 
             transcript = await run_in_threadpool(_do_transcribe, str(temp_file))
-            return {"status": "success", "transcript": transcript}
+            return {"status": "success", "transcript": transcript, "text": transcript}
         except Exception as e:
             logger.error(f"Whisper transcription error: {e}")
             return JSONResponse({"status": "error", "message": f"Deşifre hatası: {e}"}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)

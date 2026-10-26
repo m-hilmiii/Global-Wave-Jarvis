@@ -21,6 +21,14 @@ logger = get_logger("Jarvis.Router.Assistant")
 router = APIRouter(prefix="/api/jarvis", tags=["Assistant & Pipelines"])
 
 
+async def _safe_json(request: Request) -> dict:
+    try:
+        data = await request.json()
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Personal Assistant & Task Management
 # ---------------------------------------------------------------------------
@@ -38,7 +46,7 @@ async def api_jarvis_assistant_tasks(status: Optional[str] = None):
 
 @router.post("/assistant/tasks")
 async def api_jarvis_assistant_add_task(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     title = payload.get("title", "").strip()
     priority = payload.get("priority", "normal")
     due_date = payload.get("due_date")
@@ -63,10 +71,13 @@ async def api_jarvis_assistant_reminders():
 
 @router.post("/assistant/reminders")
 async def api_jarvis_assistant_add_reminder(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     title = payload.get("title", "").strip()
     datetime_iso = payload.get("datetime_iso", "")
-    lead_minutes = int(payload.get("lead_minutes", 15))
+    try:
+        lead_minutes = int(payload.get("lead_minutes", 15))
+    except (ValueError, TypeError):
+        lead_minutes = 15
     recurring = payload.get("recurring")
     if not title or not datetime_iso:
         return JSONResponse({"status": "error", "message": "Başlık ve tarih zorunludur."}, status_code=status.HTTP_400_BAD_REQUEST)
@@ -82,7 +93,7 @@ async def api_jarvis_assistant_notes():
 
 @router.post("/assistant/notes")
 async def api_jarvis_assistant_add_note(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     title = payload.get("title", "").strip()
     content = payload.get("content", "").strip()
     tags = payload.get("tags", [])
@@ -120,7 +131,7 @@ async def api_jarvis_job_cancel(job_id: str):
 # ---------------------------------------------------------------------------
 @router.post("/content/produce")
 async def api_jarvis_content_produce(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     topic = payload.get("topic", "").strip()
     target_duration = payload.get("target_duration", "45s")
     orientation = payload.get("orientation", "vertical")
@@ -139,7 +150,7 @@ async def api_jarvis_content_produce(request: Request):
 
 @router.post("/content/qc")
 async def api_jarvis_content_qc(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     video_path = payload.get("video_path", "").strip()
     script_data = payload.get("script_data", {})
     if not video_path:
@@ -150,7 +161,7 @@ async def api_jarvis_content_qc(request: Request):
 
 @router.post("/content/publish")
 async def api_jarvis_content_publish(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     video_path = payload.get("video_path", "").strip()
     title = payload.get("title", "").strip()
     description = payload.get("description", "").strip()
@@ -176,7 +187,7 @@ async def api_jarvis_content_publish(request: Request):
 # ---------------------------------------------------------------------------
 @router.post("/research/query")
 async def api_jarvis_research_query(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     query = payload.get("query", "").strip()
     auto_note = payload.get("auto_note", True)
     if not query:
@@ -187,7 +198,7 @@ async def api_jarvis_research_query(request: Request):
 
 @router.post("/research/hardware-models")
 async def api_jarvis_research_models(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     category = payload.get("category", "coding")
     res = await run_in_threadpool(browser_research_tool.compare_hardware_models, category=category)
     return {"status": "success", "comparison": res}
@@ -195,7 +206,7 @@ async def api_jarvis_research_models(request: Request):
 
 @router.post("/research/fetch")
 async def api_jarvis_research_fetch(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     url = payload.get("url", "").strip()
     if not url:
         return JSONResponse({"status": "error", "message": "url zorunludur."}, status_code=status.HTTP_400_BAD_REQUEST)
@@ -205,7 +216,7 @@ async def api_jarvis_research_fetch(request: Request):
 
 @router.post("/knowledge/search")
 async def api_jarvis_knowledge_search(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     query = payload.get("query", "").strip()
     top_k = payload.get("top_k", 5)
     file_filter = payload.get("file_filter")
@@ -217,11 +228,7 @@ async def api_jarvis_knowledge_search(request: Request):
 
 @router.post("/knowledge/index")
 async def api_jarvis_knowledge_index(request: Request):
-    payload = {}
-    try:
-        payload = await request.json()
-    except Exception:
-        pass
+    payload = await _safe_json(request)
     force = payload.get("force", False)
     res = await run_in_threadpool(knowledge_indexer.index_workspace, force=force)
     return {"status": "success" if res.get("success") else "error", "index": res}
@@ -229,7 +236,7 @@ async def api_jarvis_knowledge_index(request: Request):
 
 @router.post("/knowledge/summarize")
 async def api_jarvis_knowledge_summarize(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     file_path = payload.get("file_path", "").strip()
     if not file_path:
         return JSONResponse({"status": "error", "message": "file_path zorunludur."}, status_code=status.HTTP_400_BAD_REQUEST)
@@ -307,7 +314,7 @@ async def api_jarvis_models_arsenal():
 
 @router.post("/autonomous/execute")
 async def api_jarvis_autonomous_execute(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     task = payload.get("task", "")
     dry_run = payload.get("dry_run", False)
     from core_jarvis.autonomous_engine import autonomous_engine

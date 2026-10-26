@@ -19,6 +19,14 @@ logger = get_logger("Jarvis.Router.WhatsApp")
 router = APIRouter(prefix="/api/jarvis", tags=["WhatsApp & Contacts"])
 
 
+async def _safe_json(request: Request) -> dict:
+    try:
+        data = await request.json()
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # WhatsApp Core & QR Status
 # ---------------------------------------------------------------------------
@@ -61,7 +69,7 @@ async def api_jarvis_contacts():
 @router.post("/contacts")
 async def api_jarvis_add_contact(request: Request):
     """Adds a new contact with name, phone, relationship, and notes."""
-    data = await request.json()
+    data = await _safe_json(request)
     name = data.get("name", "").strip()
     phone = data.get("phone", "").strip()
     relationship = data.get("relationship", "").strip()
@@ -85,7 +93,7 @@ async def api_jarvis_delete_contact(identifier: str):
 @router.post("/contacts/import")
 async def api_jarvis_import_contacts(request: Request):
     """Imports contacts from raw text or structured lists."""
-    data = await request.json()
+    data = await _safe_json(request)
     raw_text = data.get("text", "")
     contacts_list = data.get("contacts", [])
     if contacts_list:
@@ -150,7 +158,7 @@ async def api_jarvis_chat_read(identifier: str):
 @router.post("/chats/{identifier}/send")
 async def api_jarvis_chat_send(identifier: str, request: Request):
     """Sends a WhatsApp message to target recipient with safety check."""
-    data = await request.json()
+    data = await _safe_json(request)
     text = data.get("text") or data.get("message", "")
     text = text.strip()
     if not text:
@@ -173,7 +181,7 @@ async def api_jarvis_delete_chat(identifier: str):
 @router.post("/message/delete")
 async def api_jarvis_message_delete(request: Request):
     """Deletes a specific message from WhatsApp."""
-    data = await request.json()
+    data = await _safe_json(request)
     jid = data.get("jid", "")
     msg_id = data.get("message_id", "")
     everyone = data.get("everyone", True)
@@ -211,7 +219,7 @@ async def api_jarvis_get_auto_dispatch():
 
 @router.post("/settings/whatsapp_auto_dispatch")
 async def api_jarvis_set_auto_dispatch(request: Request):
-    data = await request.json()
+    data = await _safe_json(request)
     enabled = bool(data.get("enabled", False))
     from core_jarvis.jarvis_brain import jarvis_brain
     val = jarvis_brain.set_auto_dispatch_whatsapp(enabled)
@@ -230,7 +238,7 @@ async def api_jarvis_get_ai_delegate():
 
 @router.post("/settings/ai_delegate")
 async def api_jarvis_set_ai_delegate(request: Request):
-    data = await request.json()
+    data = await _safe_json(request)
     action = data.get("action", "toggle")
     target = data.get("target")
     if action == "enable":

@@ -19,6 +19,14 @@ logger = get_logger("Jarvis.Router.Telemetry")
 router = APIRouter(prefix="/api/jarvis", tags=["Telemetry & System"])
 
 
+async def _safe_json(request: Request) -> dict:
+    try:
+        data = await request.json()
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 @router.get("/system/telemetry")
 async def api_jarvis_system_telemetry():
     """Returns real-time CPU, RAM, Disk, GPU, and top process telemetry."""
@@ -46,7 +54,7 @@ async def api_jarvis_system_powershell(payload: PowerShellRequest):
 @router.post("/system/backup")
 async def api_jarvis_system_backup(request: Request):
     """Creates a snapshot backup of a file."""
-    payload = await request.json()
+    payload = await _safe_json(request)
     file_path = payload.get("file_path", "").strip()
     note = payload.get("note", "api_backup").strip()
     if not file_path:
@@ -117,7 +125,7 @@ async def api_jarvis_wol_identity():
 @router.post("/wol/wake")
 async def api_jarvis_wol_wake(request: Request):
     """Sends a magic packet to wake up a remote workstation with strict validation and Level 3 confirmation."""
-    data = await request.json()
+    data = await _safe_json(request)
     mac = data.get("mac_address", "").strip()
     broadcast_ip = data.get("broadcast_ip", "255.255.255.255").strip()
     raw_port = data.get("port", 9)
