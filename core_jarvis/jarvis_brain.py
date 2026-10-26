@@ -984,7 +984,13 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             r"(?:cevap\s+yaz|cevap\s+ver|yanıtla|yanıt\s+ver)\s+([A-Za-zçğıöşüÇĞİÖŞÜ0-9_+]+)",
             r"([A-Za-zçğıöşüÇĞİÖŞÜ0-9_+]+)(?:'e|'a|'ye|'ya|e|a|ye|ya|'i|'ı|'ü|'u|i|ı|ü|u)?\s+(?:cevap\s+yaz|cevap\s+ver|yanıtla|yanıt\s+ver|mesaj\s+at)"
         ]
-        blacklist = {"bana", "benim", "kendime", "jarvis", "kullanıcının", "kullanici", "kişinin", "kişi", "kişisi", "biri", "birisi", "lütfen", "hemen", "şöyle", "bunu", "son", "mesaj", "mesajına", "mesajını", "cevap"}
+        blacklist = {
+            "bana", "benim", "kendime", "jarvis", "kullanıcının", "kullanici", "kişinin", "kişi", "kişisi",
+            "biri", "birisi", "birine", "birini", "biriyle", "birinden",
+            "arkadaş", "arkadaşım", "arkadaşıma", "arkadaşa", "arkadaşlar", "arkadaşımla", "arkadaşla", "arkadaşın",
+            "dostum", "tanıdık", "onunla", "onun", "ona", "ondan", "kimse", "herhangi",
+            "lütfen", "hemen", "şöyle", "bunu", "son", "mesaj", "mesajına", "mesajını", "cevap", "yanıt"
+        }
         for pat in name_patterns:
             m = re.search(pat, text, re.IGNORECASE)
             if m:
@@ -1453,9 +1459,13 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
                         contact = {"name": s_name, "phone": s_phone, "relationship": "Bilinmeyen Numara", "synthetic": True}
 
             if not contact:
-                reply = "Efendim, mesajın kime gönderileceğini netleştiremedim. Kişi adını belirtir misiniz?"
+                reply = (
+                    "Efendim, mesajı hangi arkadaşınıza veya kişiye iletmemi arzu edersiniz?\n\n"
+                    "Sol taraftaki rehberden dilediğiniz kişiye tıklayabilir veya bana doğrudan isim/numara belirtebilirsiniz (Örn: *'Adem'e mesaj at'*, *'Anneme mesaj at'*)."
+                )
+                speak_text = "Hangi kişiye mesaj yazmamı istersiniz efendim? Sol rehberden seçebilir veya ismini belirtebilirsiniz."
                 self._record_turn(user_text, reply)
-                return {"reply": reply, "speak_text": "Kime mesaj yazacağımızı belirtir misiniz efendim?", "action_taken": "contact_not_found"}
+                return {"reply": reply, "speak_text": speak_text, "action_taken": "contact_not_found"}
 
             self._last_contact = contact
             c_name = contact.get("name", "")

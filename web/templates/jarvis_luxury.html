@@ -463,6 +463,22 @@
                         </div>
                     </div>
 
+                    <!-- Cockpit Voice / Microphone Visualizer Status Bar -->
+                    <div id="cockpitVoiceWaveBar" class="hidden mb-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <div class="flex items-center space-x-1 h-4">
+                                <span class="w-1 bg-amber-400 rounded-full sound-wave-bar" style="animation-delay: 0.1s;"></span>
+                                <span class="w-1 bg-amber-400 rounded-full sound-wave-bar" style="animation-delay: 0.3s;"></span>
+                                <span class="w-1 bg-amber-400 rounded-full sound-wave-bar" style="animation-delay: 0.2s;"></span>
+                                <span class="w-1 bg-amber-400 rounded-full sound-wave-bar" style="animation-delay: 0.4s;"></span>
+                            </div>
+                            <span id="cockpitSpeechLiveTranscript" class="text-xs font-mono text-amber-300">Sizi dinliyorum, konuşabilirsiniz...</span>
+                        </div>
+                        <button type="button" onclick="stopVoiceRecognition()" class="text-xs text-amber-400 hover:text-white px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 transition-all font-mono">
+                            Bitir <i class="fa-solid fa-check ml-1"></i>
+                        </button>
+                    </div>
+
                     <!-- Input Box & Mic in Cockpit -->
                     <form id="cockpitForm" onsubmit="handleCockpitSubmit(event)" class="relative pt-2 border-t border-white/[0.06]">
                         <div class="relative flex items-center">
@@ -1147,103 +1163,198 @@
             }
         }
 
-        // Voice Recognition (Speech-to-Text via Web Speech API with tr-TR)
-        function initSpeechRecognition() {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                console.warn("[JARVIS] Web Speech API not supported in this browser.");
-                return null;
-            }
-
-            const rec = new SpeechRecognition();
-            rec.lang = 'tr-TR';
-            rec.continuous = false;
-            rec.interimResults = true;
-
-            rec.onstart = () => {
-                isListening = true;
-                updateMicUI(true);
-                document.getElementById('voiceWaveBar').classList.remove('hidden');
-                document.getElementById('speechLiveTranscript').innerText = 'Sizi dinliyorum, konuşabilirsiniz...';
-            };
-
-            rec.onresult = (event) => {
-                let interimTranscript = '';
-                let finalTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
-                    } else {
-                        interimTranscript += event.results[i][0].transcript;
-                    }
-                }
-                const spokenText = finalTranscript || interimTranscript;
-                if (spokenText) {
-                    document.getElementById('speechLiveTranscript').innerText = spokenText;
-                    document.getElementById('spotlightInput').value = spokenText;
-                    document.getElementById('cockpitInput').value = spokenText;
-                }
-            };
-
-            rec.onerror = (event) => {
-                console.error("[JARVIS] Speech Recognition error:", event.error);
-                stopVoiceRecognition();
-            };
-
-            rec.onend = () => {
-                isListening = false;
-                updateMicUI(false);
-                document.getElementById('voiceWaveBar').classList.add('hidden');
-                const spotInput = document.getElementById('spotlightInput');
-                const cockInput = document.getElementById('cockpitInput');
-                const val = (spotInput.value || cockInput.value || '').trim();
-                if (val) {
-                    spotInput.value = '';
-                    cockInput.value = '';
-                    handlePromptSubmission(val);
-                }
-            };
-
-            return rec;
-        }
-
-        function toggleVoiceRecognition() {
-            if (!recognition) {
-                recognition = initSpeechRecognition();
-            }
-            if (!recognition) {
-                alert("Tarayıcınızda canlı ses tanıma desteklenmiyor. Lütfen Chrome, Edge veya Brave kullanın.");
-                return;
-            }
-
-            if (isListening) {
-                recognition.stop();
-            } else {
-                try {
-                    recognition.start();
-                } catch (e) {
-                    recognition.stop();
-                }
-            }
-        }
-
-        function stopVoiceRecognition() {
-            if (recognition && isListening) {
-                recognition.stop();
-            }
-        }
+        // Voice Recognition (Dual Engine: Web Speech API Continuous + Local Faster-Whisper Fallback)
+        let recognition = null;
+        let isListening = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let micStream = null;
+        let accumulatedTranscript = '';
 
         function updateMicUI(listening) {
             const btnSpot = document.getElementById('btnSpotlightMic');
-            const iconSpot = document.getElementById('spotlightMicIcon');
             const btnCock = document.getElementById('btnCockpitMic');
+            const waveSpot = document.getElementById('voiceWaveBar');
+            const waveCock = document.getElementById('cockpitVoiceWaveBar');
 
             if (listening) {
-                btnSpot.classList.add('listening-active');
+                if (btnSpot) btnSpot.classList.add('listening-active');
                 if (btnCock) btnCock.classList.add('listening-active');
+                if (waveSpot) waveSpot.classList.remove('hidden');
+                if (waveCock) waveCock.classList.remove('hidden');
             } else {
-                btnSpot.classList.remove('listening-active');
+                if (btnSpot) btnSpot.classList.remove('listening-active');
                 if (btnCock) btnCock.classList.remove('listening-active');
+                if (waveSpot) waveSpot.classList.add('hidden');
+                if (waveCock) waveCock.classList.add('hidden');
+            }
+        }
+
+        async function startVoiceRecognition() {
+            if (isListening) return;
+            isListening = true;
+            accumulatedTranscript = '';
+            audioChunks = [];
+            updateMicUI(true);
+
+            const promptTranscript = 'Sizi dinliyorum, konuşabilirsiniz... (Bitirmek için mikrofona tekrar basın)';
+            const st1 = document.getElementById('speechLiveTranscript');
+            const st2 = document.getElementById('cockpitSpeechLiveTranscript');
+            if (st1) st1.innerText = promptTranscript;
+            if (st2) st2.innerText = promptTranscript;
+
+            // 1. Start MediaRecorder (Guaranteed to work in Brave, Chrome, Edge, Firefox locally!)
+            try {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '');
+                    mediaRecorder = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = (e) => {
+                        if (e.data && e.data.size > 0) audioChunks.push(e.data);
+                    };
+                    mediaRecorder.start(250);
+                }
+            } catch (mediaErr) {
+                console.warn("[JARVIS] MediaRecorder initialization:", mediaErr);
+            }
+
+            // 2. Start Web Speech API (Continuous mode)
+            const SpeechRecClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecClass) {
+                try {
+                    recognition = new SpeechRecClass();
+                    recognition.lang = 'tr-TR';
+                    recognition.continuous = true; // Stay alive continuously!
+                    recognition.interimResults = true;
+
+                    recognition.onresult = (event) => {
+                        let interim = '';
+                        let final = '';
+                        for (let i = event.resultIndex; i < event.results.length; ++i) {
+                            if (event.results[i].isFinal) {
+                                final += event.results[i][0].transcript;
+                            } else {
+                                interim += event.results[i][0].transcript;
+                            }
+                        }
+                        const spoken = (accumulatedTranscript + ' ' + final + ' ' + interim).trim();
+                        if (spoken) {
+                            if (st1) st1.innerText = spoken;
+                            if (st2) st2.innerText = spoken;
+                            const inp1 = document.getElementById('spotlightInput');
+                            const inp2 = document.getElementById('cockpitInput');
+                            if (inp1) inp1.value = spoken;
+                            if (inp2) inp2.value = spoken;
+                        }
+                        if (final) {
+                            accumulatedTranscript = (accumulatedTranscript + ' ' + final).trim();
+                        }
+                    };
+
+                    recognition.onerror = (ev) => {
+                        console.warn("[JARVIS] Speech Recognition error:", ev.error);
+                        // Do NOT abort on no-speech or network! Let MediaRecorder handle it!
+                        if (ev.error === 'network' || ev.error === 'not-allowed') {
+                            const note = 'Brave/Google bulut engeli algılandı; yerel Whisper devreye alınıyor...';
+                            if (st1) st1.innerText = note;
+                            if (st2) st2.innerText = note;
+                        }
+                    };
+
+                    recognition.onend = () => {
+                        // If still supposed to be listening, gently restart Web Speech
+                        if (isListening && recognition) {
+                            try { recognition.start(); } catch(e) {}
+                        }
+                    };
+
+                    recognition.start();
+                } catch (recInitErr) {
+                    console.warn("[JARVIS] Web Speech start failed:", recInitErr);
+                }
+            }
+        }
+
+        async function stopVoiceRecognition() {
+            if (!isListening) return;
+            isListening = false;
+            updateMicUI(false);
+
+            // Stop Web Speech
+            if (recognition) {
+                try {
+                    recognition.onend = null;
+                    recognition.stop();
+                } catch(e) {}
+                recognition = null;
+            }
+
+            const spotInput = document.getElementById('spotlightInput');
+            const cockInput = document.getElementById('cockpitInput');
+            let candidateText = (spotInput.value || cockInput.value || accumulatedTranscript || '').trim();
+
+            // Stop MediaRecorder
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                const finishPromise = new Promise(resolve => {
+                    mediaRecorder.onstop = resolve;
+                });
+                mediaRecorder.stop();
+                await finishPromise;
+            }
+
+            if (micStream) {
+                micStream.getTracks().forEach(t => t.stop());
+                micStream = null;
+            }
+
+            // If Web Speech didn't capture text (e.g. Brave shields blocked Google speech server)
+            // But MediaRecorder recorded audio, send to local Whisper!
+            if (!candidateText && audioChunks.length > 0) {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                if (audioBlob.size > 2000) {
+                    const st1 = document.getElementById('speechLiveTranscript');
+                    const st2 = document.getElementById('cockpitSpeechLiveTranscript');
+                    const statusMsg = 'Yerel Whisper sesinizi Türkçe metne döküyor...';
+                    if (st1) st1.innerText = statusMsg;
+                    if (st2) st2.innerText = statusMsg;
+                    if (spotInput) spotInput.placeholder = statusMsg;
+                    if (cockInput) cockInput.placeholder = statusMsg;
+
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', audioBlob, 'voice.webm');
+                        const res = await authFetch('/api/jarvis/transcribe', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success' && data.transcript) {
+                            candidateText = data.transcript.trim();
+                            if (spotInput) spotInput.value = candidateText;
+                            if (cockInput) cockInput.value = candidateText;
+                        }
+                    } catch (whErr) {
+                        console.error("[JARVIS] Local Whisper transcribe error:", whErr);
+                    } finally {
+                        if (spotInput) spotInput.placeholder = 'Bir komut veya soru yazın...';
+                        if (cockInput) cockInput.placeholder = 'Mesaj yazın veya komut verin...';
+                    }
+                }
+            }
+
+            if (candidateText) {
+                if (spotInput) spotInput.value = '';
+                if (cockInput) cockInput.value = '';
+                handlePromptSubmission(candidateText);
+            }
+        }
+
+        function toggleVoiceRecognition() {
+            if (isListening) {
+                stopVoiceRecognition();
+            } else {
+                startVoiceRecognition();
             }
         }
 

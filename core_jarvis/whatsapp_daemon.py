@@ -1657,7 +1657,8 @@ class WhatsAppDaemon:
                     break
             if not s_name:
                 raw_p = ("0" + ident["p10"]) if ident["p10"] else c_jid.split("@")[0]
-                s_name = self._resolve_sender_name(c_jid, raw_p, "")
+                resolved_s, _ = self._resolve_sender_name(c_jid, raw_p)
+                s_name = resolved_s
                 if s_name == "Mücahit Hilmi (Ben)":
                     s_name = raw_p
 
@@ -1810,7 +1811,8 @@ class WhatsAppDaemon:
             ident = self._extract_msg_identity(m)
             m_c_jid = ident["chat_jid"].lower()
             m_sender = ident["counterparty_name"]
-            resolved_label = self._resolve_sender_name(ident["chat_jid"], ident["p10"], "").lower()
+            resolved_tuple = self._resolve_sender_name(ident["chat_jid"], ident["p10"])
+            resolved_label = (resolved_tuple[0] if isinstance(resolved_tuple, tuple) else str(resolved_tuple)).lower()
             if (
                 q == m_c_jid
                 or (q_jid_base and len(q_jid_base) >= 5 and q_jid_base == m_c_jid.split("@")[0])
