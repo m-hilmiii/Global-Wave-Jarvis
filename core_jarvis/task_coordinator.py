@@ -12,6 +12,7 @@ import time
 import uuid
 import threading
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List, Optional, Callable
 
 logger = logging.getLogger("Jarvis.TaskCoordinator")
@@ -40,6 +41,7 @@ class ManagedJob:
         self.result: Optional[Any] = None
         self.error: Optional[str] = None
         self.cancel_requested = False
+        self.cancel_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -64,10 +66,11 @@ class ManagedJob:
 
 
 class TaskCoordinator:
-    def __init__(self):
+    def __init__(self, max_workers: int = 6):
         self.jobs: Dict[str, ManagedJob] = {}
         self.lock = threading.RLock()
         self.listeners: List[Callable[[Dict[str, Any]], None]] = []
+        self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="JarvisWorker")
 
     def spawn_job(
         self,
@@ -78,7 +81,7 @@ class TaskCoordinator:
         kwargs: dict = None
     ) -> Dict[str, Any]:
         """
-        Dispatches a task to run asynchronously in a supervised worker thread.
+        Dispatches a task to run asynchronously in a supervised worker pool with bounded capacity.
         """
         job_id = f"job_{uuid.uuid4().hex[:8]}"
         job = ManagedJob(
@@ -91,16 +94,19 @@ class TaskCoordinator:
         )
 
         with self.lock:
+            # Memory Hygiene: Prune completed jobs if over 100 entries
+            if len(self.jobs) >= 100:
+                terminal_ids = [
+                    jid for jid, j in self.jobs.items()
+                    if j.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+                ]
+                terminal_ids.sort(key=lambda jid: self.jobs[jid].started_at or 0)
+                for tid in terminal_ids[:20]:
+                    del self.jobs[tid]
+
             self.jobs[job_id] = job
 
-        worker = threading.Thread(
-            target=self._execute_supervised_job,
-            args=(job,),
-            name=f"Worker-{job_id}",
-            daemon=True
-        )
-        job.thread = worker
-        worker.start()
+        self.executor.submit(self._execute_supervised_job, job)
 
         logger.info(f"[TaskCoordinator] Spawned {job_id} ('{title}') on specialist '{specialist}'")
         return job.to_dict()
@@ -112,7 +118,7 @@ class TaskCoordinator:
         job.current_step = "Başlatılıyor..."
 
         def progress_callback(pct: int, step_desc: str):
-            if job.cancel_requested:
+            if job.cancel_requested or job.cancel_event.is_set():
                 raise InterruptedError("Görev kullanıcı tarafından iptal edildi.")
             job.progress_pct = max(0, min(100, pct))
             job.current_step = step_desc
@@ -125,12 +131,17 @@ class TaskCoordinator:
                 kwargs["progress_callback"] = progress_callback
 
             result = job.target_func(*job.args, **kwargs)
-            job.result = result
-            job.status = JobStatus.COMPLETED
-            job.progress_pct = 100
-            job.current_step = "Tamamlandı"
+            if job.cancel_requested or job.cancel_event.is_set():
+                job.status = JobStatus.CANCELLED
+                job.current_step = "İptal edildi"
+                job.error = "Görev tamamlanmadan önce iptal edildi."
+            else:
+                job.result = result
+                job.status = JobStatus.COMPLETED
+                job.progress_pct = 100
+                job.current_step = "Tamamlandı"
             job.completed_at = time.time()
-            logger.info(f"[TaskCoordinator] Job {job.job_id} completed successfully.")
+            logger.info(f"[TaskCoordinator] Job {job.job_id} status: {job.status}")
         except InterruptedError as ie:
             job.status = JobStatus.CANCELLED
             job.error = str(ie)
@@ -153,6 +164,7 @@ class TaskCoordinator:
                 return {"success": False, "error": f"Görev zaten sonlanmış: {job.status}"}
 
             job.cancel_requested = True
+            job.cancel_event.set()
             job.current_step = "İptal ediliyor..."
             return {"success": True, "message": f"Görev iptal isteği gönderildi: {job_id}"}
 

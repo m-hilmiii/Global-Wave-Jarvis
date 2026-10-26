@@ -9,7 +9,10 @@ Features:
 
 import re
 import time
+import socket
+import ipaddress
 import urllib.parse
+from urllib.parse import urlparse
 import html.parser
 import requests
 import logging
@@ -125,17 +128,48 @@ class BrowserResearchTool:
 
         return results
 
+    @staticmethod
+    def is_safe_public_url(url: str) -> (bool, str):
+        """SSRF Guard: Rejects loopback, private IP ranges, local schemes, and malformed URLs."""
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                return False, f"Yalnızca http/https protokolleri desteklenmektedir ({parsed.scheme})."
+            hostname = parsed.hostname
+            if not hostname:
+                return False, "Geçersiz URL: Sunucu adı (hostname) bulunamadı."
+            if hostname.lower() in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+                return False, "Güvenlik engeli: Yerel sunucu adreslerine (localhost) erişim engellendi."
+
+            addr_info = socket.getaddrinfo(hostname, None)
+            for entry in addr_info:
+                ip_str = entry[4][0]
+                ip_obj = ipaddress.ip_address(ip_str)
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_reserved or ip_obj.is_link_local:
+                    return False, f"Güvenlik engeli: Özel veya yerel ağ IP adresine erişim engellendi ({ip_str})."
+            return True, ""
+        except Exception as e:
+            return False, f"URL adres çözümleme hatası: {e}"
+
     def fetch_page_content(self, url: str, max_chars: int = 3500) -> Dict[str, Any]:
         """
-        Fetches an article/doc URL and extracts clean sanitized text.
+        Fetches an article/doc URL and extracts clean sanitized text with strict SSRF protection.
         """
+        is_safe, reason = self.is_safe_public_url(url)
+        if not is_safe:
+            return {"success": False, "error": reason}
+
         try:
-            resp = self.session.get(url, timeout=8)
+            resp = self.session.get(url, timeout=8, stream=True)
             if resp.status_code != 200:
                 return {"success": False, "error": f"HTTP {resp.status_code}"}
 
+            # Max 2MB raw content limit
+            raw_bytes = resp.raw.read(2 * 1024 * 1024, decode_content=True)
+            text_content = raw_bytes.decode(resp.encoding or "utf-8", errors="replace")
+
             parser = HTMLTextExtractor()
-            parser.feed(resp.text)
+            parser.feed(text_content)
             plain_text = parser.get_text()[:max_chars]
             safe_text = self.sanitize_untrusted_text(plain_text)
 

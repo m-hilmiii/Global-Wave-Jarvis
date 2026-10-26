@@ -188,14 +188,15 @@ class JarvisBrain:
         self.draft_lock = threading.Lock()
         self._last_contact: Optional[Dict[str, Any]] = None
 
-        # Auto-Dispatch WhatsApp (Zero-Click vs HITL Confirmation)
+        # Auto-Dispatch WhatsApp (Zero-Click vs HITL Confirmation) - Secure Default False
         self.auto_dispatch_whatsapp: bool = False
         try:
-            from config.settings import load_settings
+            from config.settings import load_settings, parse_bool
             s = load_settings()
-            self.auto_dispatch_whatsapp = bool(s.get("auto_dispatch_whatsapp", False))
-        except Exception:
-            pass
+            self.auto_dispatch_whatsapp = parse_bool(s.get("auto_dispatch_whatsapp", False))
+        except Exception as e:
+            logger.warning(f"Failed to load auto_dispatch_whatsapp setting: {e}")
+            self.auto_dispatch_whatsapp = False
 
     @property
     def model_name(self) -> str:
@@ -765,12 +766,17 @@ JSON ŞEMASI:
 
     def set_auto_dispatch_whatsapp(self, enabled: bool) -> bool:
         """Toggles between zero-click direct dispatch and HITL confirmation."""
-        self.auto_dispatch_whatsapp = bool(enabled)
+        from config.settings import parse_bool
+        try:
+            self.auto_dispatch_whatsapp = parse_bool(enabled)
+        except Exception:
+            self.auto_dispatch_whatsapp = False
         try:
             from config.settings import load_settings, save_settings
             s = load_settings()
             s["auto_dispatch_whatsapp"] = self.auto_dispatch_whatsapp
             save_settings(s)
+            logger.info(f"[Settings] auto_dispatch_whatsapp set to {self.auto_dispatch_whatsapp}")
         except Exception as e:
             logger.warning(f"Failed to persist auto_dispatch_whatsapp: {e}")
         return self.auto_dispatch_whatsapp

@@ -220,6 +220,94 @@ class TestAuditRemediation(unittest.TestCase):
     def test_engagement_engine_factual_integrity(self):
         self.assertNotIn("milyar", COMMON_TYPO_MAP)
 
+    # =========================================================================
+    # 7. DEEP AUDIT P1/P2 SECURITY REMEDIATIONS
+    # =========================================================================
+    def test_auto_dispatch_whatsapp_string_boolean_parsed_strictly(self):
+        """P1: 'False' string must parse as boolean False, never activating auto-dispatch."""
+        from config.settings import parse_bool, load_settings, save_settings
+        self.assertFalse(parse_bool("False"))
+        self.assertFalse(parse_bool("false"))
+        self.assertFalse(parse_bool("0"))
+        self.assertTrue(parse_bool("True"))
+        self.assertTrue(parse_bool("1"))
+
+        # Test settings persistence
+        s = load_settings()
+        s["auto_dispatch_whatsapp"] = "False"
+        saved = save_settings(s)
+        self.assertIs(saved["auto_dispatch_whatsapp"], False)
+        reloaded = load_settings()
+        self.assertIs(reloaded["auto_dispatch_whatsapp"], False)
+
+    def test_path_traversal_blocked_in_summarize_and_snapshot(self):
+        """P1: Traversal out of workspace in summarize_document and create_snapshot must be blocked."""
+        from core_jarvis.tools.knowledge_indexer import knowledge_indexer
+        from core_jarvis.tools.system_tool import system_tool
+
+        # 1. Traversal in document summarize
+        res_doc = knowledge_indexer.summarize_document("../../Windows/System32/drivers/etc/hosts")
+        self.assertFalse(res_doc["success"])
+        self.assertIn("Güvenlik engeli", res_doc["error"])
+
+        # 2. Sensitive pattern blocking
+        res_secret = knowledge_indexer.summarize_document("config/tokens.json")
+        self.assertFalse(res_secret["success"])
+        self.assertIn("Güvenlik engeli", res_secret["error"])
+
+        # 3. Traversal in create_snapshot
+        res_snap = system_tool.create_snapshot("../../../etc/passwd")
+        self.assertFalse(res_snap["success"])
+        self.assertIn("engellendi", res_snap["error"].lower())
+
+    def test_powershell_true_allowlist_enforcement(self):
+        """P1: Arbitrary PowerShell execution without allowlist membership must be blocked."""
+        from core_jarvis.tools.system_tool import system_tool
+
+        # Command not on allowlist
+        res = system_tool.run_safe_powershell("Invoke-Expression 'Get-Host'")
+        self.assertFalse(res["allowed"])
+        self.assertIn("GÜVENLİK", res["error"])
+
+        # Command chaining attempt
+        res_chain = system_tool.run_safe_powershell("Get-Process; whoami")
+        self.assertFalse(res_chain["allowed"])
+        self.assertIn("GÜVENLİK İHLALİ", res_chain["error"])
+
+    def test_ssrf_blocked_on_private_and_loopback_ips(self):
+        """P2: SSRF attempts against loopback, private IPs or non-http schemes must be rejected."""
+        from core_jarvis.tools.browser_research_tool import browser_research_tool
+
+        safe1, reason1 = browser_research_tool.is_safe_public_url("http://127.0.0.1:8000/api")
+        self.assertFalse(safe1)
+        self.assertIn("engellendi", reason1.lower())
+
+        safe2, reason2 = browser_research_tool.is_safe_public_url("http://localhost:5000/admin")
+        self.assertFalse(safe2)
+        self.assertIn("engellendi", reason2.lower())
+
+        safe3, reason3 = browser_research_tool.is_safe_public_url("file:///etc/passwd")
+        self.assertFalse(safe3)
+        self.assertIn("http/https", reason3)
+
+    def test_wol_requires_server_side_confirmation(self):
+        """P1: WOL endpoint requires confirmed=True and valid MAC."""
+        # 1. Missing confirmation -> 403
+        res = self.client.post(
+            "/api/jarvis/wol/wake",
+            json={"mac_address": "9C:6B:00:B2:A2:0F", "confirmed": False},
+            headers={"X-Local-Token": LOCAL_SESSION_TOKEN}
+        )
+        self.assertEqual(res.status_code, 403)
+
+        # 2. Invalid MAC -> 400
+        res_bad = self.client.post(
+            "/api/jarvis/wol/wake",
+            json={"mac_address": "INVALID_MAC_ADDR", "confirmed": True},
+            headers={"X-Local-Token": LOCAL_SESSION_TOKEN}
+        )
+        self.assertEqual(res_bad.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

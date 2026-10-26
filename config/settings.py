@@ -148,7 +148,7 @@ def load_settings() -> dict:
                 for k, v in data.items():
                     if k not in ALLOWED_SETTING_KEYS or k == "allow_remote_ollama":
                         continue
-                    if k in ["enable_bgm", "strict_local"]:
+                    if k in ["enable_bgm", "strict_local", "auto_dispatch_whatsapp"]:
                         try:
                             merged[k] = parse_bool(v)
                         except ValueError as ve:
@@ -215,7 +215,7 @@ def save_settings(new_settings: dict) -> dict:
                 if not (0.0 <= val <= 1.0):
                     raise ValueError(f"bgm_volume 0.0 ile 1.0 arasinda olmalidir, alinan: {val}")
                 current[k] = val
-            elif k in ["enable_bgm", "strict_local"]:
+            elif k in ["enable_bgm", "strict_local", "auto_dispatch_whatsapp"]:
                 current[k] = parse_bool(v)
             else:
                 current[k] = str(v).strip()

@@ -7,8 +7,11 @@ import sqlite3
 import json
 import os
 import threading
+import logging
 from pathlib import Path
 from datetime import datetime
+
+logger = logging.getLogger("GlobalWave.Database")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_DIR = BASE_DIR / "config"
@@ -70,8 +73,9 @@ def init_db():
             ''')
             try:
                 c.execute("ALTER TABLE tasks ADD COLUMN youtube_url TEXT")
-            except Exception:
-                pass
+            except Exception as mig_err:
+                if "duplicate column name" not in str(mig_err).lower():
+                    logger.debug(f"[Database] Tasks table migration notice: {mig_err}")
             conn.commit()
             _db_initialized = True
         finally:

@@ -57,7 +57,8 @@ class AppLaunchRequest(BaseModel):
 
 
 class ModelRouteRequest(BaseModel):
-    model: str = Field(..., min_length=1, description="Hedef AI uzman modeli (örn. qwen3:8b, qwen2.5:14b).")
+    model: Optional[str] = Field(None, description="Hedef AI uzman modeli (örn. qwen3:8b, qwen2.5:14b).")
+    task_type: Optional[str] = Field(None, description="Görev türü (örn. coding, general, reasoning, vision).")
 
 
 # ---------------------------------------------------------------------------

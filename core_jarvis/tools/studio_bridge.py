@@ -113,20 +113,39 @@ class StudioBridge:
         """
         from core_jarvis.tools.model_manager import model_manager
 
-        if self.is_ltx_rendering():
-            return {
-                "success": False,
-                "error": "Şu anda devam eden aktif bir LTX-2 render işlemi bulunuyor. Lütfen tamamlanmasını bekleyin.",
-                "status": self.get_ltx_status_summary()
-            }
+        with self._ltx_lock:
+            if self._active_ltx_job is not None:
+                return {
+                    "success": False,
+                    "error": "Şu anda devam eden aktif bir LTX-2 render işlemi bulunuyor. Lütfen tamamlanmasını bekleyin.",
+                    "status": self.get_ltx_status_summary()
+                }
 
-        out_path = self.ltx_dir / output_name
+            out_path = self.ltx_dir / output_name
+
+            # Verify LTX directory and script existence
+            gen_script = self.ltx_dir / "scripts" / "generate_video.sh"
+            if not self.ltx_dir.exists() or not gen_script.exists():
+                return {
+                    "success": False,
+                    "error": f"LTX video scripti bulunamadı: {gen_script}. Lütfen kurulum dizinini kontrol edin.",
+                    "status": "NOT_INSTALLED"
+                }
+
+            # Mark as STARTING immediately under lock to prevent concurrent races
+            self._active_ltx_job = {
+                "process": None,
+                "status": "STARTING",
+                "prompt": prompt,
+                "output_path": str(out_path),
+                "start_time": time.time(),
+                "task_name": f"LTX-2 ({frames} kare, {width}x{height})"
+            }
 
         # 1. Zero-VRAM Evacuation: Flush Ollama models so full 16GB VRAM belongs to LTX-2
         logger.info("[StudioBridge] Evacuating VRAM for LTX-2 heavy render...")
         try:
             model_manager.prepare_vram_for_model("__NONE__")
-            # Force keep_alive 0 on active models
             for r in model_manager.get_running_models():
                 model_manager.session.post(
                     f"{model_manager.ollama_url}/api/generate",
@@ -137,7 +156,6 @@ class StudioBridge:
             logger.warning(f"[StudioBridge] VRAM evacuation warning: {exc}")
 
         # 2. Build shell command targeting generate_video.sh
-        gen_script = self.ltx_dir / "scripts" / "generate_video.sh"
         cmd = [
             "bash",
             str(gen_script),
@@ -163,13 +181,9 @@ class StudioBridge:
                     text=True
                 )
                 with self._ltx_lock:
-                    self._active_ltx_job = {
-                        "process": proc,
-                        "prompt": prompt,
-                        "output_path": str(out_path),
-                        "start_time": start_t,
-                        "task_name": f"LTX-2 ({frames} kare, {width}x{height})"
-                    }
+                    if self._active_ltx_job:
+                        self._active_ltx_job["process"] = proc
+                        self._active_ltx_job["status"] = "RUNNING"
 
                 stdout, stderr = proc.communicate()
                 elapsed = round(time.time() - start_t, 1)

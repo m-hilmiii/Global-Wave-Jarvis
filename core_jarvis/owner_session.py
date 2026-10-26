@@ -54,8 +54,8 @@ class OwnerSessionManager:
                     self.owner_phone = me_id
                 if me_lid and me_lid.isdigit():
                     self.owner_lid = me_lid
-            except Exception:
-                pass
+            except Exception as err:
+                logger.debug(f"[OwnerSession] Live credentials read notice: {err}")
 
     def is_owner(self, phone_or_jid: str) -> bool:
         """Checks if the incoming sender or chat is Mücahit Hilmi (c_owner) by phone or LID."""

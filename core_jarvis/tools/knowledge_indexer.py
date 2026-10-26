@@ -521,12 +521,25 @@ class KnowledgeIndexer:
         if not guard_res["allowed"]:
             return {"success": False, "error": guard_res["reason"]}
 
-        target = Path(file_path)
-        if not target.is_absolute():
-            target = self.workspace / file_path
+        # Path Traversal Guard: must be inside workspace and not a sensitive secret file
+        try:
+            ws_resolved = self.workspace.resolve()
+            raw_path = Path(file_path)
+            target = (raw_path if raw_path.is_absolute() else (self.workspace / raw_path)).resolve()
+            target.relative_to(ws_resolved)
+        except (ValueError, Exception) as pe:
+            return {"success": False, "error": f"Güvenlik engeli: Dosya erişimi yalnızca çalışma alanı ile sınırlıdır ({pe})"}
+
+        sensitive_patterns = {".key", ".env", "tokens.json", "session_token", "whatsapp_auth", "client_secret.json", "app.db", "jarvis_memory.db"}
+        if any(sp in target.name.lower() or sp in str(target).lower() for sp in sensitive_patterns):
+            return {"success": False, "error": "Güvenlik engeli: Hassas sistem veya kimlik dosyalarının içeriği görüntülenemez."}
 
         if not target.exists() or not target.is_file():
             return {"success": False, "error": f"Dosya bulunamadı: {file_path}"}
+
+        # Size guard: limit to 5 MB
+        if target.stat().st_size > 5 * 1024 * 1024:
+            return {"success": False, "error": "Dosya boyutu çok büyük (Maksimum 5 MB okunabilir)."}
 
         try:
             with open(target, "r", encoding="utf-8", errors="replace") as f:

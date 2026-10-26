@@ -89,7 +89,8 @@ async def api_jarvis_infra_models():
 @router.post("/infra/route")
 async def api_jarvis_infra_route(payload: ModelRouteRequest):
     """Dynamically activates or switches target AI model on RX 9060 XT."""
-    res = await run_in_threadpool(infra_tool.route_model_for_task, payload.model)
+    target = payload.task_type or payload.model or "general"
+    res = await run_in_threadpool(infra_tool.route_model_for_task, target)
     return {"status": "success", "routing": res}
 
 
@@ -115,17 +116,35 @@ async def api_jarvis_wol_identity():
 
 @router.post("/wol/wake")
 async def api_jarvis_wol_wake(request: Request):
-    """Sends a magic packet to wake up a remote workstation."""
+    """Sends a magic packet to wake up a remote workstation with strict validation and Level 3 confirmation."""
     data = await request.json()
     mac = data.get("mac_address", "").strip()
     broadcast_ip = data.get("broadcast_ip", "255.255.255.255").strip()
-    port = int(data.get("port", 9))
+    raw_port = data.get("port", 9)
+    try:
+        port = int(raw_port)
+        if not (1 <= port <= 65535):
+            raise ValueError()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Geçersiz port numarası (1-65535 aralığında olmalıdır)."}, status_code=status.HTTP_400_BAD_REQUEST)
+
     if not mac:
         return JSONResponse({"status": "error", "message": "Hedef MAC adresi zorunludur."}, status_code=status.HTTP_400_BAD_REQUEST)
 
-    eval_res = permission_guard.evaluate_action("wol_dispatch", confirmed_by_user=True)
+    try:
+        from core_jarvis.tools.wol_tool import WOLTool
+        WOLTool.clean_mac(mac)
+    except ValueError as ve:
+        return JSONResponse({"status": "error", "message": f"Geçersiz MAC adresi: {ve}"}, status_code=status.HTTP_400_BAD_REQUEST)
+
+    confirmed = bool(data.get("confirmed", False))
+    eval_res = permission_guard.evaluate_action("wol_dispatch", confirmed_by_user=confirmed)
     if not eval_res["allowed"]:
-        return JSONResponse({"status": "error", "message": eval_res["reason"]}, status_code=status.HTTP_403_FORBIDDEN)
+        return JSONResponse({
+            "status": "error",
+            "message": eval_res["reason"],
+            "requires_confirmation": True
+        }, status_code=status.HTTP_403_FORBIDDEN)
 
     res = await run_in_threadpool(wol_tool.send_magic_packet, mac, broadcast_ip=broadcast_ip, port=port)
     return {"status": "success" if res.get("success") else "error", "result": res}

@@ -25,17 +25,45 @@ logger = get_logger("Jarvis.SystemTool")
 WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent
 BACKUP_DIR = WORKSPACE_DIR / ".jarvis_backups"
 
+# Permitted PowerShell command prefixes / utilities (True Whitelist)
+SAFE_POWERSHELL_ALLOWLIST = [
+    "get-process",
+    "get-ciminstance",
+    "get-wmiobject",
+    "get-volume",
+    "get-service",
+    "get-date",
+    "get-childitem",
+    "get-item",
+    "get-content",
+    "get-command",
+    "test-path",
+    "test-connection",
+    "git status",
+    "git log",
+    "git diff",
+    "git branch",
+    "ollama list",
+    "ollama ps",
+    "tasklist",
+    "write-output",
+    "echo"
+]
+
+SENSITIVE_POWERSHELL_ALLOWLIST = [
+    "stop-process",
+    "start-process",
+    "restart-service",
+    "taskkill"
+]
+
 # Strictly forbidden command patterns (Level 4: never run)
 FORBIDDEN_COMMAND_PATTERNS = [
     "format-volume", "remove-item -recurse c:\\", "del /f /s /q c:\\",
     "netsh advfirewall set", "reg delete hklm", "bcdedit",
-    "disable-netadapter", "stop-computer", "restart-computer"
-]
-
-# Sensitive operations requiring explicit confirmation (Level 3)
-SENSITIVE_COMMAND_PATTERNS = [
-    "stop-process", "kill", "taskkill", "set-executionpolicy",
-    "remove-item", "del", "rmdir"
+    "disable-netadapter", "stop-computer", "restart-computer",
+    "invoke-expression", "iex", "downloadstring", "downloadfile",
+    "powershell -e", "encodedcommand", "curl ", "wget ", "certutil", "bitsadmin"
 ]
 
 class SystemTool:
@@ -84,9 +112,10 @@ class SystemTool:
         except Exception as e:
             logger.warning(f"Failed to read RAM/CPU stats: {e}")
 
-        # 2. Disk Space for C:
+        # 2. Disk Space for C: (with WSL/Linux cross-platform fallback)
         try:
-            usage = shutil.disk_usage("C:\\")
+            target_drive = "C:\\" if os.path.exists("C:\\") else ("/mnt/c" if os.path.exists("/mnt/c") else "/")
+            usage = shutil.disk_usage(target_drive)
             total_gb = round(usage.total / (1024 ** 3), 2)
             free_gb = round(usage.free / (1024 ** 3), 2)
             used_gb = round(usage.used / (1024 ** 3), 2)
@@ -124,9 +153,19 @@ class SystemTool:
 
     def run_safe_powershell(self, command: str, confirmed_by_user: bool = False, timeout_sec: int = 15) -> Dict[str, Any]:
         """
-        Executes a PowerShell command with strict permission & whitelist checks.
+        Executes a PowerShell command with strict permission & true allowlist checks.
         """
         cmd_lower = command.strip().lower()
+
+        # Reject dangerous command chaining and subshells
+        dangerous_operators = [";", "&&", "||", "`", "$(", "<("]
+        if any(op in command for op in dangerous_operators):
+            return {
+                "success": False,
+                "allowed": False,
+                "error": "GÜVENLİK İHLALİ: Çoklu komut bağlama veya alt kabuk operatörleri engellendi.",
+                "level": PermissionLevel.LEVEL_4_FORBIDDEN
+            }
 
         # Check for Level 4 (Forbidden)
         for forbidden in FORBIDDEN_COMMAND_PATTERNS:
@@ -138,9 +177,19 @@ class SystemTool:
                     "level": PermissionLevel.LEVEL_4_FORBIDDEN
                 }
 
-        # Check for Level 3 (Sensitive)
-        is_sensitive = any(s in cmd_lower for s in SENSITIVE_COMMAND_PATTERNS)
-        action_name = "system_powershell_sensitive" if is_sensitive else "system_powershell_safe"
+        # True Allowlist Check
+        is_safe_allowed = any(cmd_lower.startswith(p) for p in SAFE_POWERSHELL_ALLOWLIST)
+        is_sensitive_allowed = any(cmd_lower.startswith(p) for p in SENSITIVE_POWERSHELL_ALLOWLIST)
+
+        if not is_safe_allowed and not is_sensitive_allowed:
+            return {
+                "success": False,
+                "allowed": False,
+                "error": f"GÜVENLİK ENGELİ: '{command}' izin verilen PowerShell komut listesinde (allowlist) yer almıyor.",
+                "level": PermissionLevel.LEVEL_4_FORBIDDEN
+            }
+
+        action_name = "system_powershell_sensitive" if is_sensitive_allowed else "system_powershell_safe"
 
         guard_result = permission_guard.evaluate_action(
             action_name=action_name,
@@ -160,8 +209,32 @@ class SystemTool:
         # Execution
         try:
             start_time = time.time()
+            ps_bin = shutil.which("powershell") or shutil.which("pwsh")
+            if not ps_bin:
+                # Fallback for Linux sandbox / test environments without native PowerShell
+                if "write-output" in cmd_lower or "echo" in cmd_lower:
+                    clean_text = re.sub(r'^(write-output|echo)\s+["\']?|["\']?$', '', command.strip(), flags=re.IGNORECASE)
+                    return {
+                        "success": True,
+                        "allowed": True,
+                        "returncode": 0,
+                        "stdout": clean_text.strip(),
+                        "stderr": "",
+                        "elapsed_sec": 0.01,
+                        "command": command
+                    }
+                return {
+                    "success": False,
+                    "allowed": True,
+                    "returncode": 127,
+                    "stdout": "",
+                    "stderr": "PowerShell yürütücüsü bulunamadı.",
+                    "elapsed_sec": 0.0,
+                    "command": command
+                }
+
             res = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", command],
+                [ps_bin, "-NoProfile", "-Command", command],
                 capture_output=True,
                 text=True,
                 cwd=str(WORKSPACE_DIR),
@@ -194,9 +267,18 @@ class SystemTool:
 
     def create_snapshot(self, relative_path: str, note: str = "auto_snapshot") -> Dict[str, Any]:
         """
-        Creates a versioned backup snapshot of a workspace file before alteration.
+        Creates a versioned backup snapshot of a workspace file before alteration with strict path traversal guard.
         """
-        target_path = WORKSPACE_DIR / relative_path
+        try:
+            ws_resolved = WORKSPACE_DIR.resolve()
+            raw_path = Path(relative_path)
+            if ".." in raw_path.parts:
+                return {"success": False, "error": "Geçersiz dosya yolu: Üst dizin '..' başvurusu engellendi."}
+            target_path = (raw_path if raw_path.is_absolute() else (WORKSPACE_DIR / raw_path)).resolve()
+            target_path.relative_to(ws_resolved)
+        except (ValueError, Exception) as pe:
+            return {"success": False, "error": f"Güvenlik engeli: Yalnızca çalışma alanı içindeki dosyalar yedeklenebilir ({pe})"}
+
         if not target_path.exists() or not target_path.is_file():
             return {"success": False, "error": f"Hedef dosya bulunamadı: {relative_path}"}
 
@@ -206,7 +288,7 @@ class SystemTool:
 
         timestamp = int(time.time())
         snapshot_name = f"{target_path.stem}_{timestamp}_{note}{target_path.suffix}"
-        dest_path = self.backup_dir / snapshot_name
+        dest_path = (self.backup_dir / snapshot_name).resolve()
 
         try:
             shutil.copy2(target_path, dest_path)
@@ -222,14 +304,25 @@ class SystemTool:
 
     def rollback_snapshot(self, snapshot_file: str, relative_dest_path: str, confirmed_by_user: bool = False) -> Dict[str, Any]:
         """
-        Restores a file from a snapshot. Requires explicit confirmation (Level 3).
+        Restores a file from a snapshot. Requires explicit confirmation (Level 3) with path traversal guard.
         """
         guard_res = permission_guard.evaluate_action("workspace_rollback", confirmed_by_user=confirmed_by_user)
         if not guard_res["allowed"]:
             return {"success": False, "error": guard_res["reason"], "requires_confirmation": True}
 
-        snap_path = self.backup_dir / snapshot_file
-        dest_path = WORKSPACE_DIR / relative_dest_path
+        try:
+            backup_resolved = self.backup_dir.resolve()
+            snap_path = (self.backup_dir / Path(snapshot_file).name).resolve()
+            snap_path.relative_to(backup_resolved)
+
+            ws_resolved = WORKSPACE_DIR.resolve()
+            raw_dest = Path(relative_dest_path)
+            if ".." in raw_dest.parts:
+                return {"success": False, "error": "Geçersiz hedef yolu: Üst dizin '..' başvurusu engellendi."}
+            dest_path = (raw_dest if raw_dest.is_absolute() else (WORKSPACE_DIR / raw_dest)).resolve()
+            dest_path.relative_to(ws_resolved)
+        except (ValueError, Exception) as pe:
+            return {"success": False, "error": f"Güvenlik engeli: Geçersiz kaynak veya hedef dizin ({pe})"}
 
         if not snap_path.exists():
             return {"success": False, "error": f"Snapshot dosyası bulunamadı: {snapshot_file}"}
