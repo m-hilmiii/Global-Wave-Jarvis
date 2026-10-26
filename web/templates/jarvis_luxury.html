@@ -1069,7 +1069,9 @@
         }
 
         // State variables
-        let currentMode = 'spotlight'; // 'spotlight' or 'cockpit'
+        let currentMode = (function() {
+            try { return localStorage.getItem('jarvis_view_mode') || 'cockpit'; } catch(e) { return 'cockpit'; }
+        })(); // Defaults to executive 'cockpit' mode
         let isVoiceEnabled = true;
         let isListening = false;
         let recognition = null;
@@ -1080,6 +1082,7 @@
         // View Mode Switcher
         function setViewMode(mode) {
             currentMode = mode;
+            try { localStorage.setItem('jarvis_view_mode', mode); } catch(e) {}
             const spotlightEl = document.getElementById('spotlightView');
             const cockpitEl = document.getElementById('cockpitView');
             const btnSpotlight = document.getElementById('btnViewSpotlight');
@@ -1164,8 +1167,6 @@
         }
 
         // Voice Recognition (Dual Engine: Web Speech API Continuous + Local Faster-Whisper Fallback)
-        let recognition = null;
-        let isListening = false;
         let mediaRecorder = null;
         let audioChunks = [];
         let micStream = null;
@@ -1377,9 +1378,10 @@
             input.value = '';
         }
 
-        // Quick System Action Dispatch (Always switches to JARVIS Core!)
+        // Quick System Action Dispatch (Always switches to JARVIS Core in Cockpit!)
         function quickDispatch(commandText) {
             selectTarget('jarvis', 'JARVIS Komuta Merkezi', '');
+            setViewMode('cockpit');
             setCockpitSubView('chat');
             document.getElementById('spotlightInput').value = commandText;
             document.getElementById('cockpitInput').value = commandText;
@@ -2813,13 +2815,14 @@
 
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', async () => {
+            setViewMode(currentMode);
             await initSessionAuth();
             loadContacts();
             fetchAutoDispatchStatus();
             fetchAiDelegateStatus();
             pollTelemetryAndStatus();
             setInterval(pollTelemetryAndStatus, 3500);
-            const input = document.getElementById('spotlightInput');
+            const input = currentMode === 'cockpit' ? document.getElementById('cockpitInput') : document.getElementById('spotlightInput');
             if (input) input.focus();
         });
     </script>
