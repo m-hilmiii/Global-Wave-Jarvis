@@ -218,7 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
             page.classList.add("hidden");
         });
 
-        const activePage = document.getElementById("tab_" + tabName);
+        const activePage = document.getElementById("tab_" + tabName) || document.getElementById(tabName);
         if (activePage) {
             activePage.classList.remove("hidden");
         }
@@ -1116,12 +1116,12 @@ document.addEventListener("DOMContentLoaded", () => {
             { date: "Paz", views: 0, earnings: 0 }
         ];
 
-        // Soft vertical gradient fill from neon cyan to transparent
+        // Soft vertical gradient fill from warm amber/gold to transparent
         const gradient1 = ctx1.createLinearGradient(0, 0, 0, 240);
-        gradient1.addColorStop(0, "rgba(0, 242, 254, 0.32)");
-        gradient1.addColorStop(1, "rgba(0, 242, 254, 0.00)");
+        gradient1.addColorStop(0, "rgba(245, 158, 11, 0.28)");
+        gradient1.addColorStop(1, "rgba(245, 158, 11, 0.00)");
 
-        // 1. Line Chart: Fiery Neon Cyan (#00f2fe), NO Gridlines
+        // 1. Line Chart: Luxury Gold/Amber (#F59E0B), NO Gridlines
         viewsChartInstance = new Chart(ctx1, {
             type: "line",
             data: {
@@ -1129,13 +1129,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 datasets: [{
                     label: "Canlı Shorts İzlenmesi",
                     data: dailyStats.map(d => d.views),
-                    borderColor: "#00f2fe",
+                    borderColor: "#F59E0B",
                     backgroundColor: gradient1,
                     fill: true,
                     tension: 0.35,
                     borderWidth: 2.5,
-                    pointBackgroundColor: "#00f2fe",
-                    pointBorderColor: "#0a0f1a",
+                    pointBackgroundColor: "#F59E0B",
+                    pointBorderColor: "#07080B",
                     pointBorderWidth: 2,
                     pointRadius: 3,
                     pointHoverRadius: 6
@@ -1147,10 +1147,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: "rgba(10, 15, 26, 0.95)",
-                        titleColor: "#00f2fe",
+                        backgroundColor: "rgba(12, 14, 20, 0.95)",
+                        titleColor: "#F59E0B",
                         bodyColor: "#f1f5f9",
-                        borderColor: "rgba(0, 242, 254, 0.3)",
+                        borderColor: "rgba(245, 158, 11, 0.3)",
                         borderWidth: 1,
                         padding: 10,
                         displayColors: false
@@ -1169,7 +1169,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
 
-        // 2. Bar Chart: Earnings Distribution, NO Gridlines
+        // 2. Bar Chart: Earnings Distribution (Emerald/Gold), NO Gridlines
         earningsChartInstance = new Chart(ctx2, {
             type: "bar",
             data: {
@@ -1177,8 +1177,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 datasets: [{
                     label: "Tahmini Kazanç ($)",
                     data: dailyStats.map(d => d.earnings),
-                    backgroundColor: "rgba(99, 102, 241, 0.75)",
-                    hoverBackgroundColor: "#00f2fe",
+                    backgroundColor: "rgba(16, 185, 129, 0.7)",
+                    hoverBackgroundColor: "#F59E0B",
                     borderRadius: 4
                 }]
             },
@@ -1188,10 +1188,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: "rgba(10, 15, 26, 0.95)",
-                        titleColor: "#6366f1",
+                        backgroundColor: "rgba(12, 14, 20, 0.95)",
+                        titleColor: "#10B981",
                         bodyColor: "#f1f5f9",
-                        borderColor: "rgba(99, 102, 241, 0.3)",
+                        borderColor: "rgba(16, 185, 129, 0.3)",
                         borderWidth: 1,
                         padding: 10,
                         displayColors: false
