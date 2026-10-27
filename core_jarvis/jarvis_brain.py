@@ -1282,6 +1282,24 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             decision = {"action": "organize_files"}
         elif any(k in q_lower for k in ["sistem uyarıları", "sistem bildirimleri", "gözcü raporu"]):
             decision = {"action": "proactive_alerts"}
+        elif any(k in q_lower for k in ["ekrana bak", "ekranıma bak", "ekranima bak", "ekrandaki hata", "ekran görüntüsü al", "ekran goruntusu al", "ekranı incele", "ekrani incele"]):
+            decision = {"action": "screen_inspect", "user_instruction": cleaned_input}
+        elif any(k in q_lower for k in ["protokol sıfırı kaldır", "protokol sifir kaldir", "protokol sıfır iptal", "protokol sifir iptal", "normale dön", "normale don", "acil durum bitti"]):
+            decision = {"action": "protocol_zero_release"}
+        elif any(k in q_lower for k in ["protokol sıfır", "protokol sifir", "protocol zero", "acil durum durdur", "acil kilit", "kill switch"]):
+            decision = {"action": "protocol_zero_engage"}
+        elif any(k in q_lower for k in ["sistem temizliği", "sistem temizligi", "disk temizle", "önbelleği temizle", "onbellegi temizle", "temp dosyalarını sil", "temp temizle", "sistem hijyeni", "render artıklarını temizle"]):
+            decision = {"action": "system_hygiene"}
+        elif any(k in q_lower for k in ["pdf oku", "pdf incele", "pdf özetle", "pdf ozetle", "faturayı oku", "faturayi oku", "belgeyi oku", "belgeyi özetle", "pdf metnini"]) or (q_lower.endswith(".pdf") and any(w in q_lower for w in ["oku", "özetle", "incele", "aç"])):
+            decision = {"action": "read_pdf", "user_instruction": cleaned_input}
+        elif any(k in q_lower for k in ["dolar kaç", "dolar kac", "dolar ne kadar", "euro kaç", "euro kac", "euro ne kadar", "döviz kuru", "doviz kuru", "sterlin kaç", "dolar kaç tl", "euro kaç tl", "dolar to try"]):
+            decision = {"action": "live_currency", "user_instruction": cleaned_input}
+        elif any(q_lower.startswith(pfx) for pfx in ["hesapla ", "hesapla: ", "matematik "]) or any(k in q_lower for k in ["kdv hesapla", "kâr marjı", "kar marji"]):
+            decision = {"action": "calculate_math", "user_instruction": cleaned_input}
+        elif any(k in q_lower for k in ["deepseek ile", "deepseek-r1 ile", "deepseek r1 ile", "derin muhakeme yap"]):
+            decision = {"action": "deepseek_reasoning", "user_instruction": cleaned_input}
+        elif any(k in q_lower for k in ["mistral ile", "mistral-nemo ile", "nemo ile"]):
+            decision = {"action": "nemo_analysis", "user_instruction": cleaned_input}
         elif any(k in q_lower for k in [
             "mesaj geldi mi", "mesaj var mı", "mesaj var mi", "mesajları oku", "mesajlari oku",
             "mesajı oku", "mesaji oku", "ne yazmış", "ne yazmis", "okunmamış mesaj", "okunmamis mesaj",
@@ -1435,7 +1453,14 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
             is_intro = True
 
         # Safety Guards against Router Misclassification:
-        if any(k in q_lower for k in ["analiz et", "konuşmaları analiz", "mesajları analiz", "sohbeti analiz", "konuşmaları özetle", "mesajları özetle", "konuşmaları incele"]):
+        if action not in (
+            "nemo_analysis", "deepseek_reasoning", "read_pdf", "screen_inspect",
+            "system_hygiene", "protocol_zero_engage", "protocol_zero_release",
+            "live_currency", "calculate_math", "diagnose_pc", "model_arsenal"
+        ) and (
+            any(k in q_lower for k in ["konuşmaları analiz", "mesajları analiz", "sohbeti analiz", "konuşmaları özetle", "mesajları özetle", "konuşmaları incele"])
+            or (target_hint and any(k in q_lower for k in ["analiz et", "analiz yap", "incele"]))
+        ):
             action = "analyze_whatsapp_chat"
 
         # Deterministic Guard: WhatsApp reply / send commands should never fall through to chat
@@ -2286,6 +2311,174 @@ Cevabını doğrudan bu başlıklarla, samimi ama net ve dürüst bir dille ver.
             speak = rep.get("summary", "Çok adımlı otonom görev tamamlandı efendim.")
             self._record_turn(user_text, reply)
             return {"reply": reply, "speak_text": speak, "action_taken": "autonomous_goal", "report": rep}
+
+        if action == "protocol_zero_engage":
+            from core_jarvis.protocol_zero import protocol_zero
+            res = protocol_zero.activate(reason=cleaned_input)
+            cancelled_count = res.get("cancelled_jobs_count", 0)
+            reply = (
+                f"🚨 **PROTOKOL SIFIR DEVREYE ALINDI (Acil Durum Kilidi):**\n\n"
+                f"• **Sistem Durumu:** Kilitlendi (DEFENSIVE LOCKDOWN)\n"
+                f"• **İptal Edilen Arka Plan İşleri:** {cancelled_count} adet iş anında sonlandırıldı.\n"
+                f"• **WhatsApp Otomatik Gönderim:** Güvenle donduruldu (KAPALI).\n"
+                f"• **Taslak Kuyruğu:** Temizlendi.\n"
+                f"• **Güvenlik Kaydı:** Seviye-4 denetim kaydı oluşturuldu.\n\n"
+                f"🛡️ *Sistem şu an koruma modundadır. Normale dönmek için 'Protokol sıfırı kaldır' veya 'Normale dön' diyebilirsiniz efendim.*"
+            )
+            speak = f"Acil durum protokol sıfır devreye alındı efendim. {cancelled_count} işlem donduruldu ve sistem kilitlendi."
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "protocol_zero_engage", "details": res}
+
+        if action == "protocol_zero_release":
+            from core_jarvis.protocol_zero import protocol_zero
+            res = protocol_zero.deactivate()
+            duration = res.get("lockdown_duration_seconds", 0)
+            reply = (
+                f"🟢 **PROTOKOL SIFIR KALDIRILDI — SİSTEMLER NOMİNAL:**\n\n"
+                f"• **Kilit Süresi:** {duration} saniye\n"
+                f"• **Güvenlik Seviyesi:** Normal Operasyon\n"
+                f"• **Ajan & Servis Durumu:** Çekirdek servisler yeniden aktif efendim."
+            )
+            speak = "Protokol sıfır kaldırıldı efendim. Tüm sistemler nominal."
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "protocol_zero_release", "details": res}
+
+        if action == "system_hygiene":
+            from core_jarvis.tools.system_tool import system_tool
+            is_confirmed = any(k in q_lower for k in ["hemen", "onaylıyorum", "onayliyorum", "kesin", "şimdi temizle", "sil gitsin"])
+            res = system_tool.clean_system_hygiene(preview_only=not is_confirmed)
+            freed = res.get("freed_mb", 0)
+            total_cand = res.get("total_candidates", 0)
+            if is_confirmed:
+                reply = (
+                    f"🧹 **Sistem Hijyen Temizliği Tamamlandı:**\n\n"
+                    f"• **Silinen Geçici Dosya:** {res.get('deleted_count', 0)} adet\n"
+                    f"• **Kazanılan Disk Alanı:** **{freed} MB**\n"
+                    f"• **Temizlenen Alanlar:** Render geçici klasörleri (`%TEMP%`), eski cache ve artık kilitler.\n\n"
+                    f"Bilgisayarınız temiz ve ferah efendim."
+                )
+                speak = f"Sistem hijyen temizliği tamamlandı. {freed} megabayt disk alanı kazanıldı efendim."
+            else:
+                reply = (
+                    f"🧹 **Akıllı Disk & Sistem Hijyen Taraması:**\n\n"
+                    f"Toplam **{total_cand}** adet geçici render artığı ve eski önbellek dosyası tespit edildi:\n"
+                    f"• **Render Geçici Dosyaları:** {res.get('categories', {}).get('render_temp', 0)} dosya\n"
+                    f"• **Eski Önbellek & Temp:** {res.get('categories', {}).get('cache', 0)} dosya\n"
+                    f"• **Artık Kilitler (.lock):** {res.get('categories', {}).get('locks', 0)} dosya\n"
+                    f"• **Kazanılacak Alan:** ~**{freed} MB**\n\n"
+                    f"🛡️ *Kaynak kodlar, veritabanları ve kişisel dokümanlara asla dokunulmaz.*\n"
+                    f"Temizliği başlatmamı onaylıyor musunuz efendim?"
+                )
+                speak = f"Sistemde {freed} megabayt boyutunda temizlenebilir geçici dosya buldum. Temizlememi onaylıyor musunuz?"
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "system_hygiene", "result": res}
+
+        if action == "read_pdf":
+            from core_jarvis.tools.pdf_tool import pdf_tool
+            pdf_path = user_inst or ""
+            recent_pdfs = pdf_tool.find_pdf_files()
+            target_file = None
+            if pdf_path and Path(pdf_path).exists() and Path(pdf_path).suffix.lower() == ".pdf":
+                target_file = pdf_path
+            elif recent_pdfs:
+                for p in recent_pdfs:
+                    if p["name"].lower() in q_lower or any(part in q_lower for part in p["name"].lower().split("_") if len(part) > 3):
+                        target_file = p["path"]
+                        break
+                if not target_file:
+                    target_file = recent_pdfs[0]["path"]
+
+            if not target_file:
+                reply = "⚠️ Taranabilecek bir PDF dosyası bulunamadı efendim. Lütfen dosya yolunu belirtin veya PDF'i WhatsApp ya da Downloads klasörüne aktarın."
+                speak = "Taranacak PDF dosyası bulunamadı efendim."
+            else:
+                sum_res = pdf_tool.summarize_pdf(target_file, user_prompt=cleaned_input)
+                if not sum_res.get("success"):
+                    reply = f"⚠️ PDF okunamadı: {sum_res.get('error')}"
+                    speak = "PDF dosyası okunamadı efendim."
+                else:
+                    reply = sum_res.get("summary", "")
+                    speak = f"{Path(target_file).name} dosyasını inceledim ve özetini çıkardım efendim."
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "read_pdf", "target_file": target_file}
+
+        if action == "live_currency":
+            from core_jarvis.tools.finance_tool import finance_tool
+            amount = 1.0
+            from_curr = "USD"
+            to_curr = "TRY"
+            amt_match = re.search(r"(\d+(?:[.,]\d+)?)\s*(dolar|usd|euro|eur|sterlin|gbp)?", q_lower)
+            if amt_match and amt_match.group(1):
+                try:
+                    amount = float(amt_match.group(1).replace(",", "."))
+                except Exception:
+                    amount = 1.0
+
+            if any(k in q_lower for k in ["euro", "eur"]):
+                from_curr = "EUR"
+            elif any(k in q_lower for k in ["sterlin", "gbp", "pound"]):
+                from_curr = "GBP"
+            else:
+                from_curr = "USD"
+
+            res = finance_tool.convert_currency(amount, from_curr=from_curr, to_curr=to_curr)
+            reply = res.get("summary", f"{amount} {from_curr} hesaplandı.")
+            speak = f"{amount:g} {from_curr}, yaklaşık {res.get('converted_amount', 0)} Türk Lirası efendim."
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "live_currency", "result": res}
+
+        if action == "calculate_math":
+            from core_jarvis.tools.finance_tool import finance_tool
+            if any(k in q_lower for k in ["kdv", "kdv hesapla", "vergi"]):
+                m = re.search(r"(\d+(?:[.,]\d+)?)", q_lower)
+                amt = float(m.group(1).replace(",", ".")) if m else 1000.0
+                vat_res = finance_tool.calculate_vat_or_margin(amt, vat_rate=20.0)
+                reply = vat_res.get("summary", "")
+                speak = f"{amt:g} lira için KDV dahil tutar {vat_res.get('total_with_vat', 0)} lira efendim."
+            else:
+                expr = re.sub(r"^(?:hesapla[:\s]*|matematik[:\s]*)", "", cleaned_input, flags=re.IGNORECASE).strip()
+                math_res = finance_tool.evaluate_math(expr)
+                if not math_res.get("success"):
+                    reply = f"⚠️ Matematiksel hesaplama hatası: {math_res.get('error')}"
+                    speak = "Hesaplama yapılamadı efendim."
+                else:
+                    reply = math_res.get("summary", "")
+                    speak = f"Hesaplama sonucu {math_res.get('formatted')} efendim."
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "calculate_math"}
+
+        if action == "deepseek_reasoning":
+            from core_jarvis.tools.model_manager import model_manager
+            prompt_clean = re.sub(r"^(?:deepseek(?:-r1|\s*r1)?\s*(?:ile)?\s*(?:düşün|çöz|muhakeme\s*et)?[:\s]*)", "", cleaned_input, flags=re.IGNORECASE).strip()
+            res = model_manager.generate_with_role(
+                role="deep_reasoning",
+                prompt=f"Sen DeepSeek-R1 Derin Mantık ve Muhakeme uzmanısın. Kullanıcı sorusunu adım adım çöz ve Türkçe açıkla:\n{prompt_clean or cleaned_input}",
+                system_prompt="Sen Türkçe dilinde derin analiz, mantık ve matematik uzmanısın."
+            )
+            raw = res.get("response", "")
+            tags = model_manager.strip_thinking_tags(raw)
+            clean = tags["clean_reply"]
+            trace = tags["thinking_trace"]
+            reply = f"🧠 **DeepSeek-R1 14B Derin Muhakeme Analizi:**\n\n{clean}"
+            if trace:
+                reply += f"\n\n<details><summary>🔍 Adım Adım Düşünce Süreci (Thinking Trace)</summary>\n\n```text\n{trace[:1200]}\n```\n</details>"
+            speak = clean[:200] if len(clean) > 200 else clean
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "deepseek_reasoning", "model_used": res.get("model")}
+
+        if action == "nemo_analysis":
+            from core_jarvis.tools.model_manager import model_manager
+            prompt_clean = re.sub(r"^(?:(?:mistral-nemo|mistral|nemo)\s*(?:ile)?\s*(?:analiz\s*et|incele|çevir)?[:\s]*)", "", cleaned_input, flags=re.IGNORECASE).strip()
+            res = model_manager.generate_with_role(
+                role="long_context",
+                prompt=prompt_clean or cleaned_input,
+                system_prompt="Sen Mistral-NeMo 128k uzun bağlam ve çok dilli dokümantasyon uzmanısın. Profesyonel Türkçe yanıt ver."
+            )
+            clean = res.get("response", "").strip()
+            reply = f"🌐 **Mistral-NeMo 12B Analiz Raporu:**\n\n{clean}"
+            speak = clean[:200] if len(clean) > 200 else clean
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "nemo_analysis", "model_used": res.get("model")}
 
         # 15. DEFAULT: RICH NATURAL CONVERSATION WITH QWEN
         return self._generate_conversational_reply(cleaned_input, session_history=session_history)

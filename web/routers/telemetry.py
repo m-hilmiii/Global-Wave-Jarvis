@@ -165,3 +165,74 @@ async def api_jarvis_security_audit():
         "status": "success",
         "audit_trail": permission_guard.get_audit_trail(limit=50)
     }
+
+
+@router.get("/protocol_zero/status")
+async def api_jarvis_protocol_zero_status():
+    """Returns the current Protocol Zero (emergency lockdown) status."""
+    from core_jarvis.protocol_zero import protocol_zero
+    return {"status": "success", "protocol_zero": protocol_zero.get_status()}
+
+
+@router.post("/protocol_zero/activate")
+async def api_jarvis_protocol_zero_activate(request: Request):
+    """Engages Protocol Zero emergency lockdown immediately."""
+    from core_jarvis.protocol_zero import protocol_zero
+    data = await _safe_json(request)
+    reason = data.get("reason", "Web HUD üzerinden acil durum kilidi tetiklendi.")
+    res = await run_in_threadpool(protocol_zero.activate, reason=reason)
+    return {"status": "success", "result": res}
+
+
+@router.post("/protocol_zero/deactivate")
+async def api_jarvis_protocol_zero_deactivate():
+    """Releases Protocol Zero and restores nominal system status."""
+    from core_jarvis.protocol_zero import protocol_zero
+    res = await run_in_threadpool(protocol_zero.deactivate)
+    return {"status": "success", "result": res}
+
+
+@router.post("/system/hygiene")
+async def api_jarvis_system_hygiene(request: Request):
+    """Scans or cleans temporary render files, caches and orphaned locks."""
+    data = await _safe_json(request)
+    preview_only = bool(data.get("preview_only", True))
+    res = await run_in_threadpool(system_tool.clean_system_hygiene, preview_only=preview_only)
+    return {"status": "success", "result": res}
+
+
+@router.get("/finance/rates")
+async def api_jarvis_finance_rates():
+    """Returns live and cached foreign exchange rates."""
+    from core_jarvis.tools.finance_tool import finance_tool
+    res = await run_in_threadpool(finance_tool.get_live_rates)
+    return {"status": "success", "result": res}
+
+
+@router.post("/finance/calc")
+async def api_jarvis_finance_calc(request: Request):
+    """Safely evaluates a mathematical expression or currency conversion."""
+    from core_jarvis.tools.finance_tool import finance_tool
+    data = await _safe_json(request)
+    if "expression" in data:
+        res = await run_in_threadpool(finance_tool.evaluate_math, data["expression"])
+        return {"status": "success" if res.get("success") else "error", "result": res}
+    elif "amount" in data:
+        amount = float(data.get("amount", 1.0))
+        from_curr = data.get("from_currency", "USD")
+        to_curr = data.get("to_currency", "TRY")
+        res = await run_in_threadpool(finance_tool.convert_currency, amount, from_curr, to_curr)
+        return {"status": "success" if res.get("success") else "error", "result": res}
+    return JSONResponse({"status": "error", "message": "Geçersiz istek parametresi."}, status_code=status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/pdf/extract")
+async def api_jarvis_pdf_extract(request: Request):
+    """Extracts text and metadata from a local PDF document."""
+    from core_jarvis.tools.pdf_tool import pdf_tool
+    data = await _safe_json(request)
+    file_path = data.get("file_path", "")
+    if not file_path:
+        return JSONResponse({"status": "error", "message": "file_path zorunludur."}, status_code=status.HTTP_400_BAD_REQUEST)
+    res = await run_in_threadpool(pdf_tool.extract_text, file_path)
+    return {"status": "success" if res.get("success") else "error", "result": res}

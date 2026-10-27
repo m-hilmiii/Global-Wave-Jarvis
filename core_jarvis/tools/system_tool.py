@@ -1756,5 +1756,96 @@ for ($i = 0; $i -lt 8; $i++) {{
             "source": "Mevsimsel Yerel Tahmin Motoru"
         }
 
+    def clean_system_hygiene(self, preview_only: bool = True) -> Dict[str, Any]:
+        """
+        Akıllı Disk & Sistem Hijyen Robotu (Section 8.3 of JARVIS_CAPABILITIES_MASTER.md):
+        Safely identifies and purges temporary render scratch files, orphaned locks,
+        and obsolete cache items to prevent disk bloat and OneDrive WinError 32 lock issues.
+        Never touches user code, documents, database or config files.
+        """
+        import tempfile
+        candidates = []
+        total_bytes = 0
+
+        # 1. Check temp workspace directories
+        temp_dir = Path(tempfile.gettempdir())
+        target_temp_subdirs = [
+            temp_dir / "global_wave_workspace",
+            temp_dir / "jarvis_temp",
+            temp_dir / "jarvis_render",
+        ]
+        win_temp = Path("/mnt/c/Users/unalm/AppData/Local/Temp")
+        if win_temp.exists():
+            target_temp_subdirs.extend([
+                win_temp / "global_wave_workspace",
+                win_temp / "jarvis_temp",
+                win_temp / "jarvis_render"
+            ])
+
+        for sdir in target_temp_subdirs:
+            if sdir.exists() and sdir.is_dir():
+                try:
+                    for f in sdir.rglob("*"):
+                        if f.is_file():
+                            sz = f.stat().st_size
+                            candidates.append({"path": str(f), "size": sz, "category": "Render Geçici Dosyaları"})
+                            total_bytes += sz
+                except Exception:
+                    pass
+
+        # 2. Check .jarvis_cache for temporary scratch files older than 24h
+        cache_dir = WORKSPACE_DIR / ".jarvis_cache"
+        if cache_dir.exists():
+            safe_to_clean = ["temp_", "scratch_", "test_", "chunk_"]
+            for f in cache_dir.iterdir():
+                if f.is_file():
+                    fname = f.name
+                    if fname in ("knowledge_index.json", "protocol_zero_state.json", "jarvis_daemon.pid"):
+                        continue
+                    if any(fname.startswith(pfx) for pfx in safe_to_clean) or fname.endswith(".tmp") or fname.endswith(".log.old"):
+                        sz = f.stat().st_size
+                        candidates.append({"path": str(f), "size": sz, "category": "Eski Önbellek & Temp"})
+                        total_bytes += sz
+
+        # 3. Check for orphaned lock files
+        for lock_file in WORKSPACE_DIR.glob("*.lock"):
+            if lock_file.is_file():
+                sz = lock_file.stat().st_size
+                candidates.append({"path": str(lock_file), "size": sz, "category": "Artık Kilit Dosyaları (.lock)"})
+                total_bytes += sz
+
+        deleted_count = 0
+        deleted_bytes = 0
+        if not preview_only:
+            for item in candidates:
+                try:
+                    p = Path(item["path"])
+                    if p.exists():
+                        p.unlink()
+                        deleted_count += 1
+                        deleted_bytes += item["size"]
+                except Exception as e:
+                    logger.warning(f"Could not purge {item['path']}: {e}")
+
+        mb_freed = round((deleted_bytes if not preview_only else total_bytes) / (1024 * 1024), 2)
+        return {
+            "success": True,
+            "preview_only": preview_only,
+            "total_candidates": len(candidates),
+            "total_bytes": total_bytes,
+            "freed_mb": mb_freed,
+            "deleted_count": deleted_count if not preview_only else 0,
+            "categories": {
+                "render_temp": len([c for c in candidates if c["category"] == "Render Geçici Dosyaları"]),
+                "cache": len([c for c in candidates if c["category"] == "Eski Önbellek & Temp"]),
+                "locks": len([c for c in candidates if c["category"] == "Artık Kilit Dosyaları (.lock)"])
+            },
+            "summary_message": (
+                f"Sistem hijyen taraması tamamlandı: {len(candidates)} geçici dosya (~{mb_freed} MB) temizlenmeye hazır."
+                if preview_only else
+                f"Sistem hijyen temizliği tamamlandı: {deleted_count} geçici dosya silindi, {mb_freed} MB disk alanı kazanıldı."
+            )
+        }
+
 
 system_tool = SystemTool()

@@ -28,7 +28,7 @@ CACHE_DIR = WORKSPACE_DIR / ".jarvis_cache"
 INDEX_FILE = CACHE_DIR / "knowledge_index.json"
 
 # File Discovery & Blacklist Constraints
-SUPPORTED_EXTENSIONS = {".md", ".py", ".txt", ".json", ".csv", ".log", ".yaml", ".yml"}
+SUPPORTED_EXTENSIONS = {".md", ".py", ".txt", ".json", ".csv", ".log", ".yaml", ".yml", ".pdf"}
 EXCLUDED_DIRS = {
     ".git", ".venv", "venv", "__pycache__", "node_modules",
     ".jarvis_backups", ".jarvis_cache", "output", "temp", "dist", "build", ".pytest_cache",
@@ -310,8 +310,16 @@ class KnowledgeIndexer:
                     continue
 
                 # Read and chunk
-                with open(fpath, "r", encoding="utf-8", errors="replace") as f:
-                    content = f.read()
+                if fpath.suffix.lower() == ".pdf":
+                    try:
+                        from core_jarvis.tools.pdf_tool import pdf_tool
+                        pdf_res = pdf_tool.extract_text(str(fpath))
+                        content = pdf_res.get("text", "") if pdf_res.get("success") else ""
+                    except Exception:
+                        content = ""
+                else:
+                    with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                        content = f.read()
 
                 f_chunks = self.chunk_content(content, rel_str)
                 new_chunks.extend(f_chunks)
@@ -540,6 +548,13 @@ class KnowledgeIndexer:
         # Size guard: limit to 5 MB
         if target.stat().st_size > 5 * 1024 * 1024:
             return {"success": False, "error": "Dosya boyutu çok büyük (Maksimum 5 MB okunabilir)."}
+
+        if target.suffix.lower() == ".pdf":
+            try:
+                from core_jarvis.tools.pdf_tool import pdf_tool
+                return pdf_tool.summarize_pdf(str(target))
+            except Exception as pe:
+                return {"success": False, "error": f"PDF özetleme hatası: {pe}"}
 
         try:
             with open(target, "r", encoding="utf-8", errors="replace") as f:

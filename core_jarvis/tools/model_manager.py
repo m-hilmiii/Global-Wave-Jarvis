@@ -20,6 +20,7 @@ import sys
 import time
 import math
 import logging
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import requests
 
@@ -59,7 +60,7 @@ SPECIALIST_ARSENAL: List[Dict[str, Any]] = [
     {
         "role": "coding",
         "name": "qwen2.5-coder:14b",
-        "fallbacks": ["qwen2.5-coder:7b", "qwen3:14b", "qwen3:8b"],
+        "fallbacks": ["qwen2.5-coder:14b-instruct-q8_0", "qwen2.5-coder:7b", "qwen3:14b", "qwen3:8b"],
         "vram_gb": 9.0,
         "keep_alive": "15m",
         "heavy_14b": True,
@@ -75,13 +76,38 @@ SPECIALIST_ARSENAL: List[Dict[str, Any]] = [
         "heavy_14b": True,
         "title": "Derin Stratejist & Kurumsal Muhakeme Beyni (On-Demand)",
         "description": "90 günlük YouTube büyüme stratejisi, iş modelleri, derin felsefi ve mimari planlama."
+    },
+    {
+        "role": "deep_reasoning",
+        "name": "deepseek-r1:14b",
+        "fallbacks": ["deepseek-r1", "qwen3:14b", "qwen3:8b"],
+        "vram_gb": 9.3,
+        "keep_alive": "15m",
+        "heavy_14b": True,
+        "title": "Derin Muhakeme & Adım Adım Akıl Yürütme Motoru (DeepSeek-R1)",
+        "description": "<think>...</think> bloklarıyla matematik, algoritma ispatı ve derin mantıksal problem çözümü."
+    },
+    {
+        "role": "long_context",
+        "name": "mistral-nemo:12b",
+        "fallbacks": ["mistral-nemo", "qwen3:14b", "qwen3:8b"],
+        "vram_gb": 8.5,
+        "keep_alive": "15m",
+        "heavy_14b": False,
+        "title": "128k Uzun Bağlam & Çok Dilli Dokümantasyon Ajanı (Mistral-NeMo)",
+        "description": "128.000 token devasa pencereyle büyük PDF, uzun kod tabanları ve çok dilli çeviri."
     }
 ]
 
 # Legacy and semantic alias mappings
 ROLE_ALIASES = {
     "heavy_coder": "coding",
-    "heavy_reasoner": "reasoning"
+    "heavy_reasoner": "reasoning",
+    "deepseek": "deep_reasoning",
+    "deep_reasoner": "deep_reasoning",
+    "multilingual": "long_context",
+    "nemo": "long_context",
+    "long_context": "long_context"
 }
 
 CODING_KEYWORDS = [
@@ -131,10 +157,34 @@ class ModelManager:
             or bool(os.environ.get("JARVIS_TEST_MODE"))
         )
 
+    def _scan_disk_manifests(self) -> List[str]:
+        """Scans local Ollama manifests directory on disk as fallback when HTTP service is starting."""
+        candidate_dirs = [
+            Path.home() / ".ollama" / "models" / "manifests" / "registry.ollama.ai" / "library",
+            Path("/mnt/c/Users/unalm/.ollama/models/manifests/registry.ollama.ai/library"),
+            Path(os.environ.get("USERPROFILE", "C:\\Users\\Default")) / ".ollama" / "models" / "manifests" / "registry.ollama.ai" / "library",
+        ]
+        found = set()
+        for cdir in candidate_dirs:
+            if cdir.exists() and cdir.is_dir():
+                try:
+                    for model_dir in cdir.iterdir():
+                        if model_dir.is_dir():
+                            model_base = model_dir.name
+                            for tag_file in model_dir.iterdir():
+                                if tag_file.is_file():
+                                    found.add(f"{model_base}:{tag_file.name}")
+                except Exception:
+                    pass
+        return sorted(list(found))
+
     def get_installed_models(self) -> List[str]:
         """Returns list of model names currently installed in local Ollama with 3-second cache."""
         if self._is_testing():
-            return ["qwen3:8b", "bge-m3:latest", "qwen2.5-coder:14b", "qwen3:14b", "qwen2.5vl:7b"]
+            return [
+                "qwen3:8b", "bge-m3:latest", "qwen2.5-coder:14b", "qwen3:14b", "qwen2.5vl:7b",
+                "deepseek-r1:14b", "mistral-nemo:12b", "qwen2.5-coder:14b-instruct-q8_0", "llama3.1:8b"
+            ]
         now = time.time()
         if self._cached_installed and (now - self._last_installed_check < 3.0):
             return self._cached_installed
@@ -145,7 +195,15 @@ class ModelManager:
                 self._last_installed_check = now
                 return self._cached_installed
         except Exception as exc:
-            logger.debug(f"[ModelManager] Could not query installed models: {exc}")
+            logger.debug(f"[ModelManager] Could not query installed models via HTTP: {exc}")
+        
+        # Disk manifest fallback
+        disk_models = self._scan_disk_manifests()
+        if disk_models:
+            self._cached_installed = disk_models
+            self._last_installed_check = now
+            return self._cached_installed
+
         return self._cached_installed or []
 
     def get_running_models(self) -> List[Dict[str, Any]]:
@@ -189,6 +247,39 @@ class ModelManager:
                     return inst
 
         return default_fallback
+
+    def generate_with_role(
+        self,
+        role: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        timeout: float = 30.0
+    ) -> Dict[str, Any]:
+        """Executes generation using the designated specialist model role."""
+        model = self.resolve_model_for_role(role)
+        if self._is_testing():
+            return {
+                "success": True,
+                "model": model,
+                "response": f"[{model} Uzman Yanıtı]: İsteğiniz derinlemesine analiz edildi ve başarıyla tamamlandı.",
+                "role": role
+            }
+        try:
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "keep_alive": "5m"
+            }
+            if system_prompt:
+                payload["system"] = system_prompt
+            resp = self.session.post(f"{self.ollama_url}/api/generate", json=payload, timeout=timeout)
+            if resp.status_code == 200:
+                txt = resp.json().get("response", "")
+                return {"success": True, "model": model, "response": txt, "role": role}
+            return {"success": False, "model": model, "error": f"HTTP {resp.status_code}", "response": ""}
+        except Exception as exc:
+            return {"success": False, "model": model, "error": str(exc), "response": ""}
 
     def classify_task_domain(self, user_text: str) -> str:
         """

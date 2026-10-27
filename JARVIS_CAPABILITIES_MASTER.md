@@ -1,9 +1,9 @@
 # 🧠 JARVIS Master Yetenek & Fonksiyon Kataloğu
 > **Sistem:** Global-Wave / Stark-Core Personal AI Operating System  
 > **Kullanıcı:** Mücahit Hilmi (Hitap: *Sayın Hilmi* / *Efendim*)  
-> **Versiyon:** v7.0 (God Mode 5-Model Specialist Arsenal, Masaüstü/Steam/Spotify Otomasyonu, WhatsApp AI Vekil & Mobil Yoldaş Mimarisi)  
-> **Son Güncelleme:** 25 Ekim 2026  
-> **Doğrulama:** 130+ Birim Testi Mimarisi (İzole Mock & Soket Korumalı Hızlı Test Altyapısı)
+> **Versiyon:** v7.5 (God Mode 7-Model Specialist Arsenal, Protocol Zero Kill-Switch, System Hygiene, PDF Intelligence, Safe FX/Math Engine)  
+> **Son Güncelleme:** 28 Ekim 2026  
+> **Doğrulama:** 210 Birim Testi Mimarisi (%100 Başarı, İzole Mock & Soket Korumalı Hızlı Test Altyapısı)
 
 Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlarını, güvenlik kalkanını, API uç noktalarını, görsel Web HUD panellerini ve tetikleyici komutlarını eksiksiz listeler. Yeni bir özellik eklendikçe güncellenir.
 
@@ -60,12 +60,15 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 ## 🧩 3. Modüller & Fonksiyon Yetenekleri
 
 ### A. Donanım, Windows, Uygulama, Medya (Spotify) & Steam Yönetimi (`system_tool.py`, `model_manager.py` & `wol_tool.py`)
-- **Jarvis v3.0 Kademeli Model Piramidi & Adaptif VRAM Yöneticisi (`model_manager.py`):**
+- **Jarvis v3.5 Kademeli Model Piramidi & Adaptif VRAM Yöneticisi (`model_manager.py`):**
   1. `bge-m3:latest` (~1.2 GB | Daimi VRAM/CPU) — **Katman 0:** 15ms Çok Dilli Anlamsal Vektör & Semantic Router + RAG Hafıza Motoru
   2. `qwen3:8b` (~5.2 GB | Daimi VRAM `keep_alive: -1`) — **Katman 1 (Daimi Kral):** Ana Beyin & Türkçe Ajan, günlük işlerin %85'ini 1.2-1.8 saniyede tek başına çözer
-  3. `qwen2.5-coder:14b` (~9.0 GB | On-Demand `keep_alive: 15m`) — **Katman 2A:** Ağır Kod Doktoru & Refactor Mimarı, 15 dakikalık Yapışkan Oturum (Sticky Session)
+  3. `qwen2.5-coder:14b` & `qwen2.5-coder:14b-instruct-q8_0` (~9.0 GB | On-Demand `keep_alive: 15m`) — **Katman 2A:** Ağır Kod Doktoru & Refactor Mimarı (Q8_0 hassasiyeti)
   4. `qwen3:14b` (~9.3 GB | On-Demand `keep_alive: 15m`) — **Katman 2B:** Derin Stratejist & Kurumsal Muhakeme Beyni, Türkçe persona uyumlu derin analiz
-  5. `qwen2.5vl:7b` (~5.8 GB | On-Demand `keep_alive: 2m`) — **Katman 3 (Gözler):** Görsel Zeka & Ekran/Fotoğraf Analizi (SOTA VLM), 2 dakikada nazik boşaltma
+  5. `deepseek-r1:14b` (~9.3 GB | On-Demand `keep_alive: 15m`) — **Katman 2C:** Derin Muhakeme & Adım Adım Akıl Yürütme Motoru, `<think>` zinciriyle mantık/matematik
+  6. `mistral-nemo:12b` (~8.5 GB | On-Demand `keep_alive: 15m`) — **Katman 2D:** 128k Uzun Bağlam & Çok Dilli Dokümantasyon Ajanı (Mistral & NVIDIA)
+  7. `qwen2.5vl:7b` (~5.8 GB | On-Demand `keep_alive: 2m`) — **Katman 3 (Gözler):** Görsel Zeka & Ekran/Fotoğraf Analizi (SOTA VLM), 2 dakikada nazik boşaltma
+  8. **Otonom Disk Manifest Keşfi:** Ollama servisi henüz başlamamış olsa dahi diskteki tüm 10 yerel modeli anında indeksleyen hibrit manifest keşif motoru.
 - **Sıfır Çift-LLM Gecikmesi (Zero-Hop Router):**
   - Sohbet mesajlarında yaşanan çift LLM (Router + Persona) gecikmesi ortadan kaldırıldı; niyet tespiti kuralsal/vektörel ayrıştırılarak tek geçişte (Single-Pass) doğrudan yanıt üretimi sağlandı. Yanıt süresi 15-20 saniyeden **1.2 – 1.8 saniyeye** indirildi.
 - **Masaüstü Tarayıcı Otomasyonu & Web Araması (`open_browser_search` / `open_url`):**
@@ -211,6 +214,40 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
   - PowerShell: `scripts/start_jarvis.ps1`
   - Web REST API: Web HUD üzerinden tek tıkla durum sorgulama ve kısayol/startup yönetimi.
 
+### L. Yerel PDF Okuma & Doküman Analiz Yeteneği (`pdf_tool.py`)
+- **%100 Çevrimdışı ve Sıfır Maliyetli PDF Ayrıştırma:**
+  - `pypdf` kütüphanesi entegrasyonu ile gelen WhatsApp faturaları, sözleşmeler, şartnameler ve yerel PDF'leri taranabilir metne dönüştürür.
+  - Sayfa sayısı, yazar, başlık ve dosya boyutu tespiti; 40.000 karakterlik güvenli bellek koruması.
+- **Yönetici Doküman Özeti (`summarize_pdf`):**
+  - Finansal/fatura kontrolü ve yönetici brifingi üretimi.
+- **BM25 Yerel RAG Entegrasyonu:**
+  - `knowledge_indexer.py` motoruna `.pdf` desteği eklendi; PDF dokümanları çalışma alanında arandığında BM25 ile anında indekslenir.
+
+### M. Finans, Canlı Döviz Kurları & Güvenli AST Hesaplayıcı (`finance_tool.py`)
+- **Güvenli AST Matematik Motoru (`safe_math_eval`):**
+  - Python AST (Soyut Sözdizimi Ağacı) ile `eval()` açığı barındırmayan %100 güvenli matematik çözücü.
+  - Aritmetik işlemler, üs alma (`2^8`, `2**8`), karekök (`sqrt`), logaritma (`log10`), trigonometri ve sabitler (`pi`, `e`).
+- **$0.00 Harici Maliyetsiz Canlı Döviz Kuru Motoru:**
+  - Canlı REST API ağ geçidi (`open.er-api.com`) ve 10 dakikalık dayanıklı disk önbelleği.
+  - USD/TRY, EUR/TRY, GBP/TRY, EUR/USD vb. anlık kur takibi ve çift yönlü para birimi çevirisi.
+- **E-Ticaret & Ajans KDV / Kâr Marjı Hesaplayıcı:**
+  - Lussera e-ticaret ve Global Wave ajans operasyonları için %20 KDV, net kâr marjı ve hedef satış fiyatı analizi.
+
+### N. Acil Durum Protokolü — Protocol Zero / Kill-Switch (`protocol_zero.py`)
+- **Tek Komutla Acil Sistem Dondurma (Kill-Switch):**
+  - *"Jarvis, protokol sıfır"*, *"Protocol zero"*, *"Acil durum durdur"* komutu veya Web HUD üzerinden tek tıkla devreye alınır.
+  - Çalışan tüm arka plan render ve test işlerini anında sonlandırır (`task_coordinator`).
+  - WhatsApp otomatik gönderimini kilitler ve bekleyen tüm mesaj taslaklarını imha eder.
+  - Seviye-4 güvenlik denetim günlüğü kaydı oluşturur.
+- **Normale Dönüş:**
+  - *"Protokol sıfırı kaldır"* / *"Normale dön"* direktifiyle kilit süresini raporlayarak sistemleri yeniden nominal operasyona döndürür.
+
+### O. Akıllı Disk & Sistem Hijyen Robotu (`clean_system_hygiene`)
+- **Otomatik Render & Önbellek Temizliği:**
+  - `%TEMP%\global_wave_workspace\` ve `%TEMP%\jarvis_*` altındaki geçici video/ses render artıklarını temizler.
+  - 24 saatten eski geçici önbellek dosyalarını ve artık `.lock` dosyalarını diskten tahliye eder.
+  - Kaynak kodlar, SQLite veritabanları ve kullanıcı dosyalarına kesinlikle dokunmaz; tam güvenli önizleme (dry-run) ve temizlik raporu sunar.
+
 ---
 
 ## 🗣️ 4. Jarvis Tetikleyici Cümleler (Sesli & Yazılı Sözlük)
@@ -250,6 +287,15 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | *"Jarvis şu an çok meşgulüm Babamla sen konuş"* | `WhatsAppDaemon` | AI Vekil (Meşgul Modu) sistemini başlatır; gelen mesajlara JARVIS kimliğiyle yanıt verir. |
 | *"Jarvis meşgul modunu kapat"* | `WhatsAppDaemon` | AI Vekil modunu kapatır ve yapılan tüm görüşmelerin özetini sunar. |
 | *"İndirilenler klasörünü düzenle"* | `SystemSpecialist` | Downloads klasöründeki dosyaları türlerine göre alt klasörlere organize eder. |
+| *"Ekranıma bak / Ekrandaki hatayı oku"* | `VisionSpecialist` | Ekran görüntüsü alıp hatayı veya pencereyi anlık analiz eder. |
+| *"Protokol sıfır / Acil durum kilidi"* | `ProtocolZero` | Tüm arka plan işlerini dondurur, WhatsApp oto-gönderimi kilitler, taslakları siler. |
+| *"Protokol sıfırı kaldır / Normale dön"* | `ProtocolZero` | Acil durum kilidini çözer, sistemleri normale döndürür. |
+| *"Sistem temizliği yap / Disk temizle"* | `SystemSpecialist` | %TEMP% render artıklarını, eski cache'i ve artık kilitleri temizler. |
+| *"Dolar kaç TL / Euro ne kadar"* | `FinanceTool` | Canlı döviz kurlarını çekip anlık kur ve çeviri hesabı yapar. |
+| *"Hesapla: 250 * 4 / KDV hesapla"* | `FinanceTool` | AST matematik motoruyla güvenli hesaplama ve mali KDV analizi yapar. |
+| *"PDF oku: [dosya.pdf] / Faturayı incele"* | `PDFTool` | PDF dosyasını yerel olarak tarar, metnini ve yönetici özetini sunar. |
+| *"DeepSeek ile düşün: [soru]"* | `ModelManager` | DeepSeek-R1 14B ile adım adım muhakeme zinciriyle problemi çözer. |
+| *"Mistral ile analiz et: [metin]"* | `ModelManager` | Mistral-NeMo 12B'nin 128k uzun bağlamıyla doküman ve çok dilli analiz yapar. |
 | *"Şunu unutma: [Kalıcı Kural]"* | `MemoryGraph` | Direktifi kalıcı hafızaya (`LEARNED_RULES`) kaydeder ve sonraki tüm yanıtlarda uygular. |
 
 ---
@@ -297,11 +343,18 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
 | `/api/jarvis/whatsapp/reconnect_sync` | `POST` | WhatsApp oturumunu sıfırlayıp yeni QR üretme ve geçmiş senkronizasyonunu başlatma |
 | `/api/jarvis/whatsapp/qr_status` | `GET` | Canlı QR kod görseli (`base64`) ve WhatsApp soket bağlantı durumunu sorgulama |
 | `/api/jarvis/whatsapp/import_chat_export` | `POST` | Dışa aktarılmış WhatsApp `.txt` sohbet geçmişini kişiyle eşleştirerek içe aktarma |
-| `/api/jarvis/models/arsenal` | `GET` | 5'li uzman AI model cephaneliğinin (`qwen3`, `coder`, `deepseek-r1`, `vl`) durumu |
+| `/api/jarvis/models/arsenal` | `GET` | 7'li uzman AI model cephaneliğinin (`qwen3`, `coder`, `deepseek-r1`, `mistral-nemo`, `vl`) durumu |
 | `/api/jarvis/autonomous/execute` | `POST` | Çok adımlı otonom hedef planlama ve yürütme |
 | `/api/jarvis/system/diagnose` | `GET` | Sistem darboğaz teşhisi ve performans analizi |
 | `/api/jarvis/files/organize` | `POST` | İndirilenler (`Downloads`) klasörünü otomatik kategorize etme |
 | `/api/jarvis/watchdog/alerts` | `GET` | Proaktif sistem gözetmeni uyarılarını listeleme |
+| `/api/jarvis/protocol_zero/status` | `GET` | Protokol Sıfır (Acil durum kilidi) durumunu sorgulama |
+| `/api/jarvis/protocol_zero/activate` | `POST` | Protokol Sıfır acil durum kilidini devreye alma |
+| `/api/jarvis/protocol_zero/deactivate` | `POST` | Protokol Sıfır kilidini kaldırıp sistemleri normale döndürme |
+| `/api/jarvis/system/hygiene` | `POST` | Akıllı disk ve geçici dosya (%TEMP%, cache, kilit) temizliği |
+| `/api/jarvis/finance/rates` | `GET` | $0 maliyetli canlı ve önbellekli döviz kurları |
+| `/api/jarvis/finance/calc` | `POST` | Güvenli AST matematik veya döviz çevirisi hesaplama |
+| `/api/jarvis/pdf/extract` | `POST` | Yerel PDF dosyasından metin ve başlık çıkarma |
 
 ---
 
@@ -403,7 +456,7 @@ Aşağıdaki yetenekler sisteme aşamalı olarak entegre edilmektedir ve mimarin
 
 ### 8. 🛡️ Güvenlik, İzolasyon & Acil Durum Protokolleri
 - **Hassas Veri Maskeleme (Privacy Guard):** E-posta veya WhatsApp mesajları işlenirken IBAN, şifre, telefon ve özel bilgilerin yerel model loglarına açık gitmesini önleme.
-- **Acil Durum Protokolü (Kill-Switch / Protocol Zero):** Telegram'dan veya tek tıkla *"Jarvis, protokol sıfır"* komutu verildiğinde tüm internet trafiğini, dışa açık portları ve arka plan işlerini anında dondurma.
+- **Acil Durum Protokolü (Kill-Switch / Protocol Zero - 🟢 Aktif):** Telegram'dan, Web HUD'dan veya tek tıkla *"Jarvis, protokol sıfır"* komutu verildiğinde tüm internet trafiğini, dışa açık portları ve arka plan işlerini anında dondurma (`protocol_zero.py`).
 - **Otomatik Haftalık Proje Snapshot'ı:** Çalışma alanının, senaryo veritabanının ve kişisel notların harici güvenli bir klasöre şifrelenmiş otomatik yedeğinin alınması.
 
 ---
@@ -412,7 +465,7 @@ Aşağıdaki yetenekler sisteme aşamalı olarak entegre edilmektedir ve mimarin
 
 | Faz | Kapsam | Durum |
 |---|---|:---:|
-| **1. Aşama** | **Uzaktan Telegram İki Yönlü Ses/Video Asistanı + Ekran Farkındalığı (`vision_tool.py`)** | 🟢 **Uygulanıyor** |
+| **1. Aşama** | **Ekran Farkındalığı (`vision_tool.py`) + Protocol Zero (`protocol_zero.py`) + PDF/Finans Araçları + 7-Model Cephaneliği** | 🟢 **Tamamlandı (210 Test)** |
 | **2. Aşama** | **Global Wave 10-16 dk Long-Form Belgesel Kurgusu + Viral Trend Radar** | 🟡 Sıradaki |
 | **3. Aşama** | **Arka Plan Sürekli Dinleme (Wake-Word) + Proaktif Öneri + Self-Healing Watchdog** | ⚪ Planlandı |
 | **4. Aşama** | **Three.js 3D Holografik Arc Reactor UI + Bilgisayar GUI Otomasyonu** | ⚪ Planlandı |

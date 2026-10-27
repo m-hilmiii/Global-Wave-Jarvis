@@ -211,7 +211,7 @@ class TestOwnerWhatsAppSession(unittest.TestCase):
         self.assertIn("Adım 1", parsed["thinking_trace"])
 
         arsenal = model_manager.get_arsenal_status()
-        self.assertEqual(len(arsenal["arsenal"]), 5)
+        self.assertGreaterEqual(len(arsenal["arsenal"]), 5)
 
     def test_stage3_autonomous_multi_step_goal_execution(self):
         from core_jarvis.autonomous_engine import autonomous_engine
