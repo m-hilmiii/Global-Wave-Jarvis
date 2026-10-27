@@ -795,17 +795,44 @@ JSON ŞEMASI:
         """
         Generates an authentic, empathetic, non-repetitive human-like AI assistant response
         (Meta AI style) when Sayın Hilmi is busy and instructs JARVIS to talk on his behalf.
+        Analyzes contact relationship, closeness (samimiyet), and context (e.g. friend vs family vs formal).
         """
         s_low = (sender_name or "").lower()
-        is_mother = any(w in s_low for w in ["annem", "anne", "gülhan", "gulhan"])
-        is_father = any(w in s_low for w in ["babam", "baba", "yaşar", "yasar"])
+        inc_low = (incoming_text or "").lower()
 
-        salutation = "Gülhan Teyzeciğim" if is_mother else ("Yaşar Amcacığım" if is_father else sender_name.strip())
+        # Contact lookup for relationship & notes context
+        contact = None
+        if hasattr(self, "contacts") and self.contacts:
+            contact = self.contacts.find_contact(sender_name)
+
+        rel = (contact.get("relationship", "") if contact else "").lower()
+        notes = (contact.get("notes", "") if contact else "").lower()
+
+        is_mother = any(w in s_low or w in rel for w in ["annem", "anne", "gülhan", "gulhan"])
+        is_father = any(w in s_low or w in rel for w in ["babam", "baba", "yaşar", "yasar"])
+        is_friend = (
+            any(w in rel or w in notes or w in s_low for w in ["arkadaş", "arkadas", "kanka", "dost", "oda", "yurt", "kuzen", "furkan", "öğrenci", "uni", "üniversite"])
+            or any(w in inc_low for w in ["amk", "kanka", "aga", "reis", "lan", "bro", "olum", "valla", "eyv", "demi sen", "borsa", "coin", "alt cot", "sıkış var", "aralığa"])
+        )
+
+        if is_mother:
+            salutation = "Gülhan Teyzeciğim"
+            rel_category = "family_mother"
+        elif is_father:
+            salutation = "Yaşar Amcacığım"
+            rel_category = "family_father"
+        elif is_friend:
+            first_name = sender_name.split()[0] if sender_name else "Kanka"
+            salutation = first_name
+            rel_category = "close_friend"
+        else:
+            salutation = sender_name.strip()
+            rel_category = "formal"
 
         # Check if JARVIS has already spoken or introduced itself in the recent dialogue (last 10 messages)
         recent_outbound = [
             m for m in chat_history[-10:]
-            if m.get("from_me") and any(k in str(m.get("text", "")).lower() for k in ["jarvis", "asistan", "vekil", "mücahit", "teyzeciğim", "amcacığım"])
+            if m.get("from_me") and any(k in str(m.get("text", "")).lower() for k in ["jarvis", "asistan", "vekil", "mücahit", "teyzeciğim", "amcacığım", "kanka", "müco"])
         ]
         already_introduced = len(recent_outbound) > 0
 
@@ -823,8 +850,6 @@ JSON ŞEMASI:
         day_name = days_tr[now.weekday()]
         tomorrow_name = days_tr[(now.weekday() + 1) % 7]
         date_str = f"{now.day} {months_tr[now.month]} {now.year}, {day_name}, Saat: {now.strftime('%H:%M')}"
-
-        inc_low = (incoming_text or "").lower()
 
         # Check if recent dialogue has a looping question (e.g. asking to summarize news repeatedly)
         prev_has_loop = any(
@@ -881,21 +906,48 @@ JSON ŞEMASI:
                 f"- KESİNLİKLE 'Başka bir şey ister misiniz?' sorusunu sorma! Konuşmayı kibarca bitir."
             )
 
-        intro_rule = (
-            "DİKKAT: Daha önceki mesajlarda kendini zaten tanıttın!\n"
-            "- KESİNLİKLE 'Merhabalar, ben Mücahit'in yapay zeka asistanı JARVIS' DEME!\n"
-            "- KESİNLİKLE 'Mücahit şu an yoğun bir projede çalışmakta ama sizinle konuşmaya çok sevindi' gibi aynı kalıpları TEKRARLAMA!\n"
-            f"- Doğrudan {salutation} diye hitap ederek sorulan soruya veya söylenene samimi bir insan gibi cevap ver."
-            if already_introduced else
-            f"- Bu konuşmadaki İLK mesajın. Kibarca 1 defaya mahsus kendini tanıt:\n"
-            f"  'Merhabalar {salutation}, ben Mücahit'in yapay zeka asistanı JARVIS. Mücahit şu anda önemli bir çalışma üzerinde olduğu için kısa süreliğine meşgul, size ben yardımcı oluyorum...'"
-        )
+        if rel_category == "close_friend":
+            tone_protocol = f"""[KİŞİ ANALİZİ VE SAMİMİYET PROTOKOLÜ - YAKIN ARKADAŞ / ODA ARKADAŞI / KANKA]:
+- Muhatap ({sender_name}), Mücahit Hilmi'nin çok yakın arkadaşıdır ({rel or 'yakın arkadaş / oda arkadaşı / kripto / borsa'}).
+- KESİNLİKLE resmi veya kurumsal asistan dili KULLANMA! ('Merhabalar Sayın...', 'ben Mücahit\\'in yapay zeka asistanı JARVIS' gibi robotik kalıplar KESİNLİKLE YASAKTIR!).
+- Tamamen doğal, rahat, samimi arkadaş dilinde 1 veya en fazla 2 kısa cümle yaz.
+- Karşı tarafın konuşma konusuna (borsa, kripto, altcoin, oyun, okul, günlük sohbet) ayak uydur.
+- Eğer Mücahit meşgulse: 'Müconun biraz işi var kanka birazdan yazar' veya 'Müco kodla uğraşıyor kanka birazdan döner sana' gibi doğal bir arkadaş üslubu kullan.
+- ASLA destan yazma, normal WhatsApp arkadaş mesajı gibi kısa, öz ve sıcak yaz."""
+            intro_rule = (
+                "Daha önce konuştun. KESİNLİKLE selam/tanıtım yapma, doğrudan konuya arkadaşça cevap ver."
+                if already_introduced else
+                f"Arkadaşça samimi ol: 'Selam {salutation}, Müconun biraz işi var birazdan yazar sana kanka' tarzında samimi ve kısa tut."
+            )
+        elif rel_category in ("family_mother", "family_father"):
+            tone_protocol = f"""[KİŞİ ANALİZİ VE SAMİMİYET PROTOKOLÜ - AİLE / ANNE - BABA]:
+- Muhatap ({sender_name}), Mücahit'in ailesidir ({'Annesi Gülhan Hanım' if is_mother else 'Babası Yaşar Bey'}).
+- Hitap: {salutation}. Sıcak, saygılı, evlat sıcaklığında bir asistan dili kullan.
+- ASLA 'Anne Hanım' veya 'Baba Bey' deme. 1-2 cümlelik sıcak yanıtlar ver."""
+            intro_rule = (
+                f"Daha önce konuştun. Doğrudan {salutation} diye hitap ederek sorulan soruya veya söylenene samimi bir insan gibi cevap ver."
+                if already_introduced else
+                f"Bu konuşmadaki İLK mesajın. Kibarca 1 defaya mahsus kendini tanıt:\n"
+                f"  'Merhabalar {salutation}, ben Mücahit\\'in yapay zeka asistanı JARVIS. Mücahit şu anda önemli bir çalışma üzerinde olduğu için kısa süreliğine meşgul, size ben yardımcı oluyorum...'"
+            )
+        else:
+            tone_protocol = f"""[KİŞİ ANALİZİ VE SAMİMİYET PROTOKOLÜ - RESMİ / İŞ / TANIDIK]:
+- Muhatap: {sender_name}.
+- Kibar, profesyonel, saygılı ve yardımsever bir asistan üslubu kullan."""
+            intro_rule = (
+                f"Doğrudan {salutation} diye hitap ederek sorulan soruya veya söylenene samimi bir insan gibi cevap ver."
+                if already_introduced else
+                f"Bu konuşmadaki İLK mesajın. Kibarca 1 defaya mahsus kendini tanıt:\n"
+                f"  'Merhabalar {salutation}, ben Mücahit\\'in yapay zeka asistanı JARVIS. Mücahit şu anda önemli bir çalışma üzerinde olduğu için kısa süreliğine meşgul, size ben yardımcı oluyorum...'"
+            )
 
-        prompt = f"""Sen Mücahit Hilmi Ünal'ın kişisel yapay zeka operasyon asistanı JARVIS'sin.
-Mücahit Hilmi şu anda önemli bir çalışma üzerinde olduğu için WhatsApp'ta onun yerine {sender_name} ile sohbet ediyorsun.
+        prompt = f"""Sen Mücahit Hilmi Ünal'ın kişisel yapay zeka vekili JARVIS'sin.
+Mücahit Hilmi şu anda bilgisayar başında önemli bir çalışma üzerinde olduğu için WhatsApp'ta onun yerine {sender_name} ile sohbet ediyorsun.
 
 GERÇEK ZAMAN: {date_str} (Bugün günlerden: {day_name}, Yarın: {tomorrow_name})
 HİTAP: {salutation} (ASLA 'Anne Hanım', 'Sayın Annem', 'Baba Bey' veya 'Anneciğim' deme!)
+
+{tone_protocol}
 
 DİYALOG GEÇMİŞİ:
 {history_str}
@@ -906,8 +958,8 @@ GELEN SON MESAJ: "{incoming_text}"
 ÖNEMLİ KURALLAR:
 1. {intro_rule}
 2. ASLA her mesajın sonuna 'Size nasıl yardımcı olabilirim?', 'Başka bir şey de yardımcı olmamı ister misiniz?' kalıplarını ekleme! Sadece karşı taraf soru sorarsa yanıt ver.
-3. Asla robotik olma. Türkçeyi sıcak, doğal ve saygılı bir asistan gibi kullan. 1-2 cümleyi geçmeyen derli toplu mesaj yaz.
-4. ASLA OYALAMA VEYA BOŞ VAAT VERME: 'araştırıyorum', 'topluyorum', 'getiriyorum', 'özetleyeyim mi', 'biraz bekleyin' gibi boş vaatlerde bulunmak KESİNLİKLE YASAKTIR. Yapamayacağın, bilmediğin veya erişimin olmayan bir konu olduğunda DÜRÜST VE AÇIK OL: "{salutation}, ben Mücahit'in ajanda ve mesaj asistanıyım, canlı haber bültenine doğrudan erişimim bulunmuyor..." diyerek sınırlarını hemen netleştir.
+3. Asla robotik olma. 1-2 cümleyi geçmeyen derli toplu mesaj yaz.
+4. ASLA OYALAMA VEYA BOŞ VAAT VERME: 'araştırıyorum', 'topluyorum', 'getiriyorum', 'özetleyeyim mi', 'biraz bekleyin' gibi boş vaatlerde bulunmak KESİNLİKLE YASAKTIR.
 5. TEKRARLAYAN SORU DÖNGÜSÜ YASAK: Karşı tarafa peş peşe 'özetleyeyim mi?', 'ister misiniz?' gibi ucu açık sorular sorarak diyaloğu kilitleme.
 
 Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metnini yaz (tırnak işareti veya ek açıklama olmadan):"""
@@ -923,7 +975,18 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
 
         # Intelligent Contextual Fallback if Ollama is unreachable
         if not reply:
-            if any(w in inc_low for w in ["haber", "son dakika", "gündem", "gazete"]) or (prev_has_loop and any(w in inc_low for w in ["evet", "bekliyorum", "tamam"])):
+            if rel_category == "close_friend":
+                if any(w in inc_low for w in ["borsa", "coin", "alt cot", "para", "dolar", "clim", "tutturdum"]):
+                    reply = f"Borsada iyi yakalamışsın {salutation}, altcoinler bu ara biraz hantal ama toparlar inşallah. Müconun biraz işi var bilgisayarda, birazdan döner sana kanka."
+                elif any(w in inc_low for w in ["nerdesin", "napıyon", "napiyon", "naber", "ne haber"]):
+                    reply = f"İyidir {salutation}, Müco bilgisayar başında bir şeyleri toparlıyor, birazdan yazar sana kanka."
+                elif any(w in inc_low for w in ["teşekkür", "eyv", "eyvallah", "sağol", "sagol", "görüşürüz"]):
+                    reply = f"Eyvallah {salutation}, görüşürüz kanka!"
+                elif already_introduced:
+                    reply = f"Aynen öyle {salutation}, Müco birazdan bilgisayardan kafayı kaldırınca dönecek sana."
+                else:
+                    reply = f"Selam {salutation}, Müconun biraz işi var bilgisayar başında, birazdan döner sana kanka."
+            elif any(w in inc_low for w in ["haber", "son dakika", "gündem", "gazete"]) or (prev_has_loop and any(w in inc_low for w in ["evet", "bekliyorum", "tamam"])):
                 reply = f"Kusura bakmayın {salutation}, ben Mücahit'in ajanda ve mesaj asistanıyım; anlık canlı haber yayınına doğrudan erişimim bulunmuyor. Mücahit'e iletmek istediğiniz başka bir not veya konu varsa hemen kendisine iletmek üzere kaydedebilirim."
             elif any(w in inc_low for w in ["günlerden ne", "hangi gün", "bugün ne", "bugun ne"]):
                 reply = f"{salutation}, bugün günlerden {day_name} ({now.day} {months_tr[now.month]})."
@@ -949,8 +1012,8 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
         clean = parsed["clean_reply"].strip().strip('"')
 
         # Strict Post-Processing Sanitization:
-        # Strip repeated introductions if already introduced
-        if already_introduced:
+        # Strip repeated introductions if already introduced or if close friend
+        if already_introduced or rel_category == "close_friend":
             clean = re.sub(
                 r"^merhabalar,?\s+ben\s+mücahit['\w]*\s+yapay\s+zeka\s+asistanı\s+jarvis\.?\s*",
                 "",

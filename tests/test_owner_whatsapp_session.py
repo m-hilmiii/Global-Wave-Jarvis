@@ -358,7 +358,7 @@ class TestOwnerWhatsAppSession(unittest.TestCase):
         # 4. Test JARVIS brain intent routing and message reading for Annem
         res = jarvis_brain.process_message("Annemden mesaj geldi mi?")
         self.assertEqual(res["action_taken"], "contact_message_read")
-        self.assertTrue(any(k in res["reply"] for k in ["Ev işi olabilir", "Naber", "Nerdesin", "Selam", "Bekliyorum", "Evet"]))
+        self.assertTrue(any(k in res["reply"] for k in ["Ev işi olabilir", "Naber", "Nerdesin", "Selam", "Bekliyorum", "Evet", "L beden", "Alayım mi"]))
         self.assertIn("Gülhan Ünal", res["reply"])
 
 

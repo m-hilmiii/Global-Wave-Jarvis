@@ -33,10 +33,11 @@ echo   [5] Masaustu Kisayolu Olustur (Desktop Icon)
 echo   [6] Windows Baslangicina Ekle (Acilista Otomatik Baslat)
 echo   [7] Windows Baslangicindan Kaldir
 echo   [8] God Mode 5'li Uzman AI Modellerini Indir / Guncelle (RX 9060 XT)
+echo   [9] VoiceStudio Ses ve Dublaj Motorunu Baslat (Port 3900)
 echo   [0] Cikis
 echo.
 echo ==============================================================
-set /p choice="Seciminiz [1-8, 0]: "
+set /p choice="Seciminiz [1-9, 0]: "
 
 if "%choice%"=="1" goto opt_foreground
 if "%choice%"=="2" goto opt_background
@@ -46,6 +47,7 @@ if "%choice%"=="5" goto opt_shortcut
 if "%choice%"=="6" goto opt_startup_install
 if "%choice%"=="7" goto opt_startup_uninstall
 if "%choice%"=="8" goto opt_god_mode_models
+if "%choice%"=="9" goto opt_voicestudio
 if "%choice%"=="0" exit /b 0
 
 echo Gecersiz secim.
@@ -109,4 +111,10 @@ goto menu
 :opt_god_mode_models
 cls
 call setup_god_mode_models.bat
+goto menu
+
+
+:opt_voicestudio
+cls
+call start_voicestudio.bat
 goto menu

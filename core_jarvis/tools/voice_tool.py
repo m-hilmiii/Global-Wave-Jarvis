@@ -131,9 +131,39 @@ class JarvisVoiceTool:
 
         # Generate unique audio output file
         file_id = uuid.uuid4().hex[:8]
+        is_turkish_request = chosen_voice.lower().startswith("tr-") or (chosen_voice == self.default_voice and language == "tr")
+
+        # 0. VoiceStudio Local Engine (Zero-Cost, 100% Offline, Cloned Voice & Multilingual)
+        try:
+            from engine.voice_voicestudio import is_voicestudio_available, synthesize_chunk_voicestudio
+            if is_voicestudio_available():
+                out_audio = self.output_dir / f"jarvis_{file_id}.mp3"
+                vs_voice = chosen_voice if not chosen_voice.startswith("tr-") else "alloy"
+                target_lang = language or ("tr" if is_turkish_request else "en")
+                vs_success = synthesize_chunk_voicestudio(
+                    text=spoken_text,
+                    out_path=str(out_audio),
+                    voice=vs_voice,
+                    language=target_lang,
+                    speed=out_speed
+                )
+                if vs_success and out_audio.exists() and out_audio.stat().st_size > 500:
+                    est_dur = max(0.8, round(len(spoken_text.split()) / 2.5, 2))
+                    return {
+                        "success": True,
+                        "engine": "voicestudio-local-neural",
+                        "voice": vs_voice,
+                        "speed": out_speed,
+                        "language": target_lang,
+                        "duration_seconds": est_dur,
+                        "audio_url": f"/output/jarvis_voices/{out_audio.name}",
+                        "file_path": str(out_audio),
+                        "spoken_text": spoken_text
+                    }
+        except Exception as vs_exc:
+            logger.debug(f"[VoiceTool] VoiceStudio skip ({vs_exc}), continuing with other engines...")
 
         # 1. Native Turkish Neural TTS (Edge-TTS or gTTS for authentic Turkish)
-        is_turkish_request = chosen_voice.lower().startswith("tr-") or (chosen_voice == self.default_voice and language == "tr")
         if is_turkish_request and not chosen_voice.startswith("am_") and not chosen_voice.startswith("af_"):
             out_mp3 = self.output_dir / f"jarvis_{file_id}.mp3"
             # 1A. Try Microsoft Edge-TTS Neural

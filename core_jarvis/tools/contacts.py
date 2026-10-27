@@ -167,9 +167,26 @@ class ContactsManager:
         clean_name = name.strip()
         contacts = self.get_all()
         
-        # Check if existing contact matches name -> Update
+        # Digits extraction for phone matching
+        p_digits = "".join([c for c in clean_phone if c.isdigit()])
+        p_last10 = p_digits[-10:] if len(p_digits) >= 10 else p_digits
+
+        # Check if existing contact matches name OR phone (last 10 digits) -> Update
         for c in contacts:
-            if c["name"].lower() == clean_name.lower():
+            c_name = (c.get("name") or "").strip()
+            c_full = (c.get("full_name") or "").strip()
+            c_phones = [c.get("phone", "")] + list(c.get("alt_phones", []) or [])
+            
+            match_name = bool(clean_name and (c_name.lower() == clean_name.lower() or c_full.lower() == clean_name.lower()))
+            match_phone = False
+            if p_last10 and len(p_last10) >= 10:
+                for cp in c_phones:
+                    cp_digits = "".join([x for x in str(cp) if x.isdigit()])
+                    if cp_digits and len(cp_digits) >= 10 and cp_digits[-10:] == p_last10:
+                        match_phone = True
+                        break
+
+            if match_name or match_phone:
                 c["name"] = clean_name
                 c["phone"] = clean_phone
                 if relationship:
@@ -178,6 +195,8 @@ class ContactsManager:
                     c["notes"] = notes
                 if full_name:
                     c["full_name"] = full_name
+                elif not c.get("full_name") or c.get("full_name") == c_name or c.get("full_name") == c.get("phone"):
+                    c["full_name"] = clean_name
                 if lid:
                     c["lid"] = lid
                 self._save_all(contacts)
@@ -202,6 +221,47 @@ class ContactsManager:
         contacts.append(new_c)
         self._save_all(contacts)
         return new_c
+
+    def update_contact(self, identifier: str, name: Optional[str] = None, phone: Optional[str] = None, relationship: Optional[str] = None, notes: Optional[str] = None, full_name: Optional[str] = None, lid: Optional[str] = None) -> Optional[Dict]:
+        """Updates an existing contact by id, phone, or name."""
+        contacts = self.get_all()
+        target = None
+        target_idx = None
+        ident_clean = str(identifier).strip().lower()
+        ident_digits = "".join([x for x in ident_clean if x.isdigit()])
+        ident_last10 = ident_digits[-10:] if len(ident_digits) >= 10 else ""
+
+        for idx, c in enumerate(contacts):
+            c_id = str(c.get("id", "")).lower()
+            c_name = str(c.get("name", "")).lower()
+            c_full = str(c.get("full_name", "")).lower()
+            c_phones = [str(c.get("phone", ""))] + [str(ap) for ap in c.get("alt_phones", []) or []]
+            c_p10s = ["".join([x for x in cp if x.isdigit()])[-10:] for cp in c_phones if len("".join([x for x in cp if x.isdigit()])) >= 10]
+
+            if c_id == ident_clean or c_name == ident_clean or c_full == ident_clean or (ident_last10 and ident_last10 in c_p10s):
+                target = c
+                target_idx = idx
+                break
+
+        if not target:
+            return None
+
+        if name is not None and name.strip():
+            target["name"] = name.strip()
+        if phone is not None and phone.strip():
+            target["phone"] = "".join([c for c in phone if c.isdigit() or c == "+"])
+        if relationship is not None:
+            target["relationship"] = relationship.strip()
+        if notes is not None:
+            target["notes"] = notes.strip()
+        if full_name is not None and full_name.strip():
+            target["full_name"] = full_name.strip()
+        if lid is not None and lid.strip():
+            target["lid"] = lid.strip()
+
+        contacts[target_idx] = target
+        self._save_all(contacts)
+        return target
 
     def delete_contact(self, identifier: str) -> Optional[Dict]:
         """Deletes a contact by id, exact name, phone number, or fuzzy query (protecting c_owner)."""

@@ -81,6 +81,30 @@ async def api_jarvis_add_contact(request: Request):
     return {"status": "success", "contact": contact}
 
 
+@router.put("/contacts/{identifier}")
+@router.post("/contacts/update")
+async def api_jarvis_update_contact(request: Request, identifier: Optional[str] = None):
+    """Updates an existing contact's details (name, phone, relationship, notes)."""
+    data = await _safe_json(request)
+    target_id = identifier or data.get("identifier") or data.get("id") or data.get("phone")
+    if not target_id:
+        return JSONResponse({"status": "error", "message": "Güncellenecek kişi tanımlayıcısı zorunludur."}, status_code=status.HTTP_400_BAD_REQUEST)
+    
+    updated = await run_in_threadpool(
+        contacts_mgr.update_contact,
+        identifier=target_id,
+        name=data.get("name"),
+        phone=data.get("phone"),
+        relationship=data.get("relationship"),
+        notes=data.get("notes"),
+        full_name=data.get("full_name"),
+        lid=data.get("lid")
+    )
+    if updated:
+        return {"status": "success", "contact": updated}
+    return JSONResponse({"status": "error", "message": "Kişi bulunamadı."}, status_code=status.HTTP_404_NOT_FOUND)
+
+
 @router.delete("/contacts/{identifier}")
 async def api_jarvis_delete_contact(identifier: str):
     """Deletes a contact by identifier (cannot delete system owner)."""

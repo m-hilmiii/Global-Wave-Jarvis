@@ -402,6 +402,7 @@
                             <div>
                                 <div class="flex items-center space-x-2">
                                     <span id="cockpitTargetName" class="text-xs font-bold text-white tracking-wide">JARVIS Komuta Merkezi</span>
+                                    <button id="cockpitEditContactBtn" onclick="promptEditContact()" title="Kişi İsmini / Bilgisini Güncelle" class="text-slate-400 hover:text-amber-400 p-0.5 text-xs transition-colors"><i class="fa-solid fa-pen-to-square"></i></button>
                                     <span id="cockpitTargetBadge" class="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">AI Core</span>
                                 </div>
                                 <span id="cockpitTargetSubtitle" class="text-[11px] text-slate-400">Mücahit Hilmi • Doğrudan Yönetici Hattı</span>
@@ -438,6 +439,12 @@
                             <button id="chatDeleteForMeBtn" onclick="deleteLastMessage(false)" title="Mesajı benden sil (Yerel)" class="px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 text-[11px] font-mono flex items-center space-x-1 transition-all">
                                 <i class="fa-solid fa-eye-slash text-amber-400 text-[10px]"></i>
                                 <span class="hidden sm:inline">Benden Sil</span>
+                            </button>
+
+                            <!-- Delete Entire Chat -->
+                            <button id="chatDeleteEntireBtn" onclick="deleteEntireChat()" title="Bu kişinin tüm sohbet geçmişini sil" class="px-2 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-[11px] font-mono flex items-center space-x-1 transition-all">
+                                <i class="fa-solid fa-trash-can text-rose-400 text-[10px]"></i>
+                                <span class="hidden sm:inline">Sohbeti Sil</span>
                             </button>
 
                             <!-- Clear Feed -->
@@ -1718,6 +1725,76 @@
                 resetJarvisGreeting();
             } else {
                 appendChatMessage('JARVIS', 'Görünüm temizlendi. Mesajlar saklıdır.', 'jarvis');
+            }
+        }
+
+        async function deleteEntireChat() {
+            if (!activeTarget || activeTarget.id === 'jarvis') {
+                alert('Bu işlem WhatsApp sohbetleri içindir efendim.');
+                return;
+            }
+            const targetIdent = activeTarget.phone || activeTarget.id;
+            const targetName = activeTarget.name || targetIdent;
+            if (!confirm(`'${targetName}' kişisiyle olan tüm sohbet geçmişini silmek istediğinize emin misiniz?\n\nBu işlem yerel mesaj kayıtlarını kalıcı olarak temizler.`)) {
+                return;
+            }
+
+            try {
+                const res = await authFetch(`/api/jarvis/chats/${encodeURIComponent(targetIdent)}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    document.getElementById('cockpitChatFeed').innerHTML = '';
+                    await loadContactsAndChats();
+                    selectTarget('jarvis', 'JARVIS Komuta Merkezi', '');
+                    alert(`Sohbet geçmişi başarıyla silindi (${data.cleared_messages || 0} mesaj).`);
+                } else {
+                    alert('Sohbet silinemedi: ' + (data.message || 'Bilinmeyen hata'));
+                }
+            } catch (err) {
+                console.error("Delete chat error:", err);
+                alert('Sohbet silinirken hata oluştu.');
+            }
+        }
+
+        async function promptEditContact() {
+            if (!activeTarget || activeTarget.id === 'jarvis') {
+                alert('Bu işlem WhatsApp kişileri içindir efendim.');
+                return;
+            }
+            const currentName = activeTarget.name || '';
+            const newName = prompt(`'${currentName}' için yeni isim girin:`, currentName);
+            if (!newName || !newName.trim() || newName.trim() === currentName) {
+                return;
+            }
+            const newRel = prompt(`İlişki / Samimiyet derecesi (örn: Arkadaş, Kanka, Oda Arkadaşı, Aile, İş):`, "Yakın Arkadaş");
+
+            try {
+                const targetIdent = activeTarget.phone || activeTarget.id;
+                const res = await authFetch('/api/jarvis/contacts/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        identifier: targetIdent,
+                        phone: activeTarget.phone || targetIdent,
+                        name: newName.trim(),
+                        relationship: (newRel || '').trim()
+                    })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    activeTarget.name = newName.trim();
+                    const nameEl = document.getElementById('cockpitTargetName');
+                    if (nameEl) nameEl.innerText = newName.trim();
+                    await loadContactsAndChats();
+                    alert(`Kişi başarıyla güncellendi: ${newName.trim()}`);
+                } else {
+                    alert('Güncelleme başarısız: ' + (data.message || 'Hata'));
+                }
+            } catch (err) {
+                console.error("Edit contact error:", err);
+                alert('Bağlantı hatası oluştu.');
             }
         }
 

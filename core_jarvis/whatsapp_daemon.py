@@ -77,6 +77,13 @@ class WhatsAppDaemon:
         self.ai_delegate_targets: List[str] = []
         self.ai_delegate_logs: List[Dict[str, Any]] = []
 
+        # AI Delegate Anti-Spam & Debouncing
+        self._delegate_buffers: Dict[str, List[str]] = {}
+        self._delegate_timers: Dict[str, threading.Timer] = {}
+        self._delegate_last_reply: Dict[str, float] = {}
+        self._owner_active_chats: Dict[str, float] = {}
+        self._delegate_lock = threading.Lock()
+
         # Fast lookup maps for Baileys LID <-> PN & pushnames
         self._lid_to_pn: Dict[str, str] = {}
         self._pn_to_lid: Dict[str, str] = {}
@@ -811,6 +818,20 @@ class WhatsAppDaemon:
         if is_history or is_jarvis_echo:
             return
 
+        # 0. Owner manual activity tracking -> Cancel any pending AI delegate messages for this chat
+        if from_me and not is_history and not is_jarvis_echo:
+            target_key = self._get_canonical_target_key(chat_jid or primary_jid, phone, sender_name)
+            self._owner_active_chats[target_key] = time.time()
+            with self._delegate_lock:
+                timer = self._delegate_timers.pop(target_key, None)
+                if timer:
+                    try:
+                        timer.cancel()
+                    except Exception:
+                        pass
+                self._delegate_buffers.pop(target_key, None)
+            logger.info(f"[AIDelegate] Owner manually texted in chat '{target_key}'. Cancelled pending AI auto-replies.")
+
         from core_jarvis.owner_session import owner_session
         is_self_chat = owner_session.is_owner_self_chat(chat_jid, sender_jid)
         is_broadcast_or_channel = any(
@@ -825,13 +846,39 @@ class WhatsAppDaemon:
                 args=(chat_jid or primary_jid, owner_session.owner_phone, text, is_audio, raw_voice_text, media_info, is_self_chat),
                 daemon=True
             ).start()
-        # 2. External Incoming Message while AI Delegate (Meşgul Modu) is active
+        # 2. External Incoming Message while AI Delegate (Meşgul Modu) is active (with anti-spam debouncing)
         elif not from_me and not is_broadcast_or_channel and self.ai_delegate_active and self.is_target_delegated(sender_name, phone, primary_jid):
-            threading.Thread(
-                target=self._process_delegate_message,
-                args=(primary_jid, phone, sender_name, text),
-                daemon=True
-            ).start()
+            target_key = self._get_canonical_target_key(primary_jid, phone, sender_name)
+
+            # Check if owner manually intervened within last 180s (3 minutes)
+            last_owner_ts = self._owner_active_chats.get(target_key, 0)
+            if (time.time() - last_owner_ts) < 180.0:
+                logger.info(f"[AIDelegate] Auto-reply suppressed for {sender_name}: owner manually active in chat {time.time()-last_owner_ts:.1f}s ago.")
+                return
+
+            # Debounce: Buffer rapid messages and dispatch as 1 combined reply
+            with self._delegate_lock:
+                if target_key not in self._delegate_buffers:
+                    self._delegate_buffers[target_key] = []
+                self._delegate_buffers[target_key].append(text)
+
+                old_timer = self._delegate_timers.get(target_key)
+                if old_timer:
+                    try:
+                        old_timer.cancel()
+                    except Exception:
+                        pass
+
+                debounce_sec = 0.1 if self._is_test_mode() else 3.5
+                timer = threading.Timer(
+                    debounce_sec,
+                    self._on_delegate_debounce_done,
+                    args=(primary_jid, phone, sender_name, target_key)
+                )
+                timer.daemon = True
+                self._delegate_timers[target_key] = timer
+                timer.start()
+                logger.info(f"[AIDelegate] Buffered message from {sender_name} (Buffer count: {len(self._delegate_buffers[target_key])}). Debouncing for {debounce_sec}s.")
 
     def _handle_history_batch(self, raw_messages: List[Dict[str, Any]]):
         """Processes bulk history messages from Baileys messaging-history.set in a single atomic write."""
@@ -1289,6 +1336,48 @@ class WhatsAppDaemon:
                 return True
         return False
 
+    def _get_canonical_target_key(self, jid: str, phone: str = "", sender_name: str = "") -> str:
+        """Produces a stable 10-digit phone or canonical JID for deduplication & state tracking."""
+        digits = "".join([c for c in (phone or "") if c.isdigit()])
+        if len(digits) >= 10:
+            return digits[-10:]
+        jid_s = str(jid or "").strip().lower()
+        if jid_s:
+            j_digits = "".join([c for c in jid_s.split("@")[0] if c.isdigit()])
+            if len(j_digits) >= 10:
+                return j_digits[-10:]
+            return jid_s
+        return (sender_name or "").strip().lower()
+
+    def _on_delegate_debounce_done(self, jid: str, phone: str, sender_name: str, target_key: str):
+        """Dispatches combined buffered messages as a single contextual turn to jarvis_brain."""
+        with self._delegate_lock:
+            self._delegate_timers.pop(target_key, None)
+            msgs = self._delegate_buffers.pop(target_key, [])
+
+        if not msgs:
+            return
+
+        # Double check owner activity
+        last_owner_ts = self._owner_active_chats.get(target_key, 0)
+        if (time.time() - last_owner_ts) < 180.0:
+            logger.info(f"[AIDelegate] Discarded buffered messages for {sender_name}: owner intervened during debounce window.")
+            return
+
+        # Cooldown check (minimum 5s between AI replies in non-test mode)
+        last_reply_ts = self._delegate_last_reply.get(target_key, 0)
+        if not self._is_test_mode() and (time.time() - last_reply_ts) < 5.0:
+            logger.info(f"[AIDelegate] Cooldown active for {sender_name} ({time.time()-last_reply_ts:.1f}s ago). Suppressing.")
+            return
+
+        combined_text = "\n".join([m.strip() for m in msgs if m.strip()])
+        if not combined_text:
+            return
+
+        self._delegate_last_reply[target_key] = time.time()
+        logger.info(f"[AIDelegate] Debounce timer expired for {sender_name}. Dispatching {len(msgs)} bundled message(s) as single turn.")
+        self._process_delegate_message(jid, phone, sender_name, combined_text)
+
     def _process_delegate_message(self, jid: str, phone: str, sender_name: str, text: str):
         """Processes incoming message in AI Delegate mode, replying authentically as JARVIS."""
         if not jid or "@newsletter" in jid or "@broadcast" in jid or "newsletter" in jid.lower():
@@ -1739,9 +1828,45 @@ class WhatsAppDaemon:
                 "unread_count": unread
             })
 
+        # Deduplicate overview so no two items share the exact same 10-digit phone or JID
+        deduped_overview: List[Dict[str, Any]] = []
+        seen_keys: Dict[str, int] = {}
+
+        for item in overview:
+            raw_phone = item.get("phone", "")
+            p_digits = "".join([c for c in str(raw_phone) if c.isdigit()])
+            p_key = p_digits[-10:] if len(p_digits) >= 10 else ""
+            jid_key = str(item.get("id", "")).strip().lower()
+
+            canonical_key = p_key or jid_key
+            if not canonical_key:
+                deduped_overview.append(item)
+                continue
+
+            if canonical_key in seen_keys:
+                existing_idx = seen_keys[canonical_key]
+                existing_item = deduped_overview[existing_idx]
+
+                curr_name = (item.get("short_name") or item.get("name") or "").strip()
+                exist_name = (existing_item.get("short_name") or existing_item.get("name") or "").strip()
+                curr_is_num = curr_name.replace("+", "").replace(" ", "").isdigit()
+                exist_is_num = exist_name.replace("+", "").replace(" ", "").isdigit()
+
+                if not curr_is_num and exist_is_num:
+                    deduped_overview[existing_idx] = item
+                else:
+                    if self._normalize_timestamp(item.get("timestamp", 0)) > self._normalize_timestamp(existing_item.get("timestamp", 0)):
+                        existing_item["last_text"] = item.get("last_text")
+                        existing_item["last_time"] = item.get("last_time")
+                        existing_item["timestamp"] = item.get("timestamp")
+                    existing_item["unread_count"] = max(existing_item.get("unread_count", 0), item.get("unread_count", 0))
+            else:
+                seen_keys[canonical_key] = len(deduped_overview)
+                deduped_overview.append(item)
+
         # Sort so contacts with recent messages are strictly at the top
-        overview.sort(key=lambda x: self._normalize_timestamp(x.get("timestamp", 0)), reverse=True)
-        return overview
+        deduped_overview.sort(key=lambda x: self._normalize_timestamp(x.get("timestamp", 0)), reverse=True)
+        return deduped_overview
 
     def get_chat_history(self, contact_query: str) -> List[Dict[str, Any]]:
         """Returns all chronological messages for a specific contact with strict multi-pass resolution."""
@@ -1928,14 +2053,45 @@ class WhatsAppDaemon:
         """Removes all messages for a specific contact from local inbox cache."""
         history = self.get_chat_history(contact_query)
         msg_ids = {m.get("id") for m in history if m.get("id")}
-        if not msg_ids:
-            return 0
+
+        q_digits = "".join([c for c in contact_query if c.isdigit()])
+        q_p10 = q_digits[-10:] if len(q_digits) >= 10 else ""
 
         with self.lock:
             inbox = self._read_inbox_locked()
-            remaining = [m for m in inbox if m.get("id") not in msg_ids]
-            cleared_count = len(inbox) - len(remaining)
+            remaining = []
+            cleared_count = 0
+            for m in inbox:
+                m_id = m.get("id")
+                m_phone = "".join([c for c in str(m.get("phone", "")) if c.isdigit()])
+                m_jid = str(m.get("chat_jid", "")).lower()
+
+                matches = False
+                if m_id and m_id in msg_ids:
+                    matches = True
+                elif q_p10 and len(m_phone) >= 10 and m_phone[-10:] == q_p10:
+                    matches = True
+                elif contact_query.lower() in m_jid or m_jid.startswith(contact_query.lower()):
+                    matches = True
+
+                if matches:
+                    cleared_count += 1
+                else:
+                    remaining.append(m)
+
             self._atomic_write_inbox(remaining)
+
+            # Clear any pending debouncers/buffers for this contact
+            target_key = self._get_canonical_target_key("", contact_query, contact_query)
+            with self._delegate_lock:
+                timer = self._delegate_timers.pop(target_key, None)
+                if timer:
+                    try:
+                        timer.cancel()
+                    except Exception:
+                        pass
+                self._delegate_buffers.pop(target_key, None)
+
             logger.info(f"[Daemon] Cleared {cleared_count} messages for chat '{contact_query}'")
             return cleared_count
 

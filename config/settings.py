@@ -46,7 +46,11 @@ DEFAULT_CONFIG = {
     "font_name": "Arial",
     "allow_remote_ollama": False,
     "strict_local": False,
-    "auto_dispatch_whatsapp": False
+    "auto_dispatch_whatsapp": False,
+    # VoiceStudio Local Engine Defaults
+    "voicestudio_host": os.environ.get("VOICESTUDIO_URL", "http://127.0.0.1:3900"),
+    "voicestudio_voice": "alloy",
+    "voicestudio_enabled": True
 }
 
 ALLOWED_SETTING_KEYS = {
@@ -69,7 +73,10 @@ ALLOWED_SETTING_KEYS = {
     "font_name",
     "allow_remote_ollama",
     "strict_local",
-    "auto_dispatch_whatsapp"
+    "auto_dispatch_whatsapp",
+    "voicestudio_host",
+    "voicestudio_voice",
+    "voicestudio_enabled"
 }
 
 def parse_bool(v) -> bool:

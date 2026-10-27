@@ -167,6 +167,59 @@ ZeynepTest,,KayaTest,+90544 111 22 33
         db_contacts = get_all_contacts_from_db()
         self.assertGreaterEqual(len(db_contacts), 2)
 
+    def test_add_contact_updates_existing_matching_phone(self):
+        """Verifies adding a contact with the same phone updates in place instead of creating duplicates."""
+        # Add initial raw phone contact
+        c1 = self.mgr.add_contact("05334180028", "05334180028", lid="93815356534937")
+        self.assertEqual(c1["name"], "05334180028")
+
+        # Now add real named contact with same phone
+        c2 = self.mgr.add_contact("Furkan Oda Yurt", "05334180028", relationship="Oda Arkadaşı")
+        self.assertEqual(c2["name"], "Furkan Oda Yurt")
+        self.assertEqual(c2["relationship"], "Oda Arkadaşı")
+        self.assertEqual(c2["lid"], "93815356534937")
+
+        # Total contacts with this phone must be strictly 1
+        all_c = self.mgr.get_all()
+        furkan_matches = [c for c in all_c if "5334180028" in c.get("phone", "")]
+        self.assertEqual(len(furkan_matches), 1)
+        self.assertEqual(furkan_matches[0]["name"], "Furkan Oda Yurt")
+
+    def test_update_contact_by_identifier(self):
+        """Verifies explicit contact updates by ID or phone."""
+        self.mgr.add_contact("Eski İsim", "05559876543")
+        updated = self.mgr.update_contact("05559876543", name="Yeni İsim", relationship="Kanka", notes="Borsa uzmanı")
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated["name"], "Yeni İsim")
+        self.assertEqual(updated["relationship"], "Kanka")
+        self.assertEqual(updated["notes"], "Borsa uzmanı")
+
+    def test_close_friend_persona_delegation(self):
+        """Verifies that a close friend (e.g. Furkan) gets a casual, non-robotic, friend-tailored response."""
+        res = jarvis_brain.generate_delegate_reply(
+            sender_name="Furkan Oda Yurt",
+            incoming_text="borsa borunu tutturdum bende alt cot ta yavaş kalıyot ama sıkış var aralığa bitirirzzz",
+            chat_history=[
+                {"from_me": False, "text": "borsa borunu tutturdum bende"},
+                {"from_me": False, "text": "alt cot ta yavaş kalıyot"}
+            ]
+        )
+        self.assertNotIn("Merhabalar Sayın", res)
+        self.assertNotIn("ben Mücahit'in yapay zeka asistanı JARVIS", res)
+        self.assertTrue(len(res) > 5)
+
+    def test_ai_delegate_owner_intervention_detection(self):
+        """Verifies that owner manual messaging cancels pending delegate auto-replies."""
+        from core_jarvis.whatsapp_daemon import whatsapp_daemon
+        import time
+
+        target_key = whatsapp_daemon._get_canonical_target_key("905334180028@s.whatsapp.net", "05334180028", "Furkan")
+        self.assertEqual(target_key, "5334180028")
+
+        # Simulate owner sending a message
+        whatsapp_daemon._owner_active_chats[target_key] = time.time()
+        self.assertLess(time.time() - whatsapp_daemon._owner_active_chats[target_key], 2.0)
+
 
 if __name__ == "__main__":
     unittest.main()
