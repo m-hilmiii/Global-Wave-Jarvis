@@ -1301,6 +1301,40 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
         elif any(k in q_lower for k in ["mistral ile", "mistral-nemo ile", "nemo ile"]):
             decision = {"action": "nemo_analysis", "user_instruction": cleaned_input}
         elif any(k in q_lower for k in [
+            "ses kaydını oku", "ses kaydini oku", "ses kaydını dinle", "ses kaydini dinle",
+            "sesli mesajı oku", "sesli mesaji oku", "sesli mesajı dinle", "sesli mesaji dinle",
+            "ses kaydında ne diyor", "ses kaydinda ne diyor", "ses kaydını özetle", "ses kaydini ozetle",
+            "sesli mesajda ne diyor", "gelen ses kaydı", "gelen ses kaydi", "ses kaydı ne", "ses kaydını çöz"
+        ]):
+            target = ""
+            for name in ["annem", "anne", "babam", "baba", "adem", "emir", "ahmet", "furkan", "can"]:
+                if name in q_lower:
+                    target = name
+                    break
+            decision = {"action": "analyze_voice_note", "target_person": target, "user_instruction": cleaned_input}
+        elif any(k in q_lower for k in [
+            "fotoğrafı analiz et", "fotografi analiz et", "fotoğrafı incele", "fotografi incele",
+            "fotoğrafta ne var", "fotografta ne var", "resmi incele", "resmi analiz et", "resimde ne var",
+            "gelen fotoğraf", "gelen resim", "son fotoğraf", "son resmi", "görseli analiz et", "görseli incele",
+            "fotoğrafta ne yazıyor", "fotografta ne yaziyor"
+        ]):
+            target = ""
+            for name in ["annem", "anne", "babam", "baba", "adem", "emir", "ahmet", "furkan", "can"]:
+                if name in q_lower:
+                    target = name
+                    break
+            decision = {"action": "analyze_image_media", "target_person": target, "user_instruction": cleaned_input}
+        elif any(k in q_lower for k in [
+            "videoyu analiz et", "videoyu incele", "videoda ne var", "videoda ne diyor",
+            "videoda ne anlatılıyor", "videoda ne anlatiliyor", "gelen videoyu", "gelen video", "son video", "son videoyu"
+        ]):
+            target = ""
+            for name in ["annem", "anne", "babam", "baba", "adem", "emir", "ahmet", "furkan", "can"]:
+                if name in q_lower:
+                    target = name
+                    break
+            decision = {"action": "analyze_video_media", "target_person": target, "user_instruction": cleaned_input}
+        elif any(k in q_lower for k in [
             "mesaj geldi mi", "mesaj var mı", "mesaj var mi", "mesajları oku", "mesajlari oku",
             "mesajı oku", "mesaji oku", "ne yazmış", "ne yazmis", "okunmamış mesaj", "okunmamis mesaj",
             "gelen kutusu", "gelen kutusunu"
@@ -1456,7 +1490,8 @@ Lütfen doğrudan WhatsApp'tan karşı tarafa gönderilecek Türkçe mesaj metni
         if action not in (
             "nemo_analysis", "deepseek_reasoning", "read_pdf", "screen_inspect",
             "system_hygiene", "protocol_zero_engage", "protocol_zero_release",
-            "live_currency", "calculate_math", "diagnose_pc", "model_arsenal"
+            "live_currency", "calculate_math", "diagnose_pc", "model_arsenal",
+            "analyze_voice_note", "analyze_image_media", "analyze_video_media"
         ) and (
             any(k in q_lower for k in ["konuşmaları analiz", "mesajları analiz", "sohbeti analiz", "konuşmaları özetle", "mesajları özetle", "konuşmaları incele"])
             or (target_hint and any(k in q_lower for k in ["analiz et", "analiz yap", "incele"]))
@@ -2479,6 +2514,93 @@ Cevabını doğrudan bu başlıklarla, samimi ama net ve dürüst bir dille ver.
             speak = clean[:200] if len(clean) > 200 else clean
             self._record_turn(user_text, reply)
             return {"reply": reply, "speak_text": speak, "action_taken": "nemo_analysis", "model_used": res.get("model")}
+
+        if action == "analyze_voice_note":
+            from core_jarvis.tools.media_analyst import media_analyst
+            recent_notes = media_analyst.get_recent_voice_notes(contact_name=target_hint or None, limit=3)
+            target_audio = None
+            sender_name = target_hint or "Kişi"
+            if recent_notes:
+                target_audio = recent_notes[0]["file_path"]
+                sender_name = recent_notes[0]["sender_name"] or target_hint or "Kişi"
+            else:
+                audio_files = sorted(list(media_analyst.media_dir.glob("*.ogg")) + list(media_analyst.media_dir.glob("*.opus")) + list(media_analyst.media_dir.glob("*.mp3")), key=lambda f: f.stat().st_mtime, reverse=True)
+                if audio_files:
+                    target_audio = str(audio_files[0])
+
+            if not target_audio:
+                reply = "⚠️ Dinlenebilecek veya çözümlenebilecek bir ses kaydı bulunamadı efendim."
+                speak = "Ses kaydı bulunamadı efendim."
+            else:
+                res = media_analyst.transcribe_audio(target_audio)
+                if not res.get("success"):
+                    reply = f"⚠️ Ses kaydı çözümlenirken hata oluştu: {res.get('error')}"
+                    speak = "Ses kaydı çözümlenemedi efendim."
+                else:
+                    text_content = res.get("text", "")
+                    dur = res.get("duration_seconds", 0)
+                    reply = (
+                        f"🎤 **{sender_name} Tarafından Gönderilen Ses Kaydı ({dur} sn):**\n\n"
+                        f"> \"{text_content or '[Konuşma tespit edilemedi veya ses çok kısık]'}\"\n\n"
+                        f"💡 *Dil:* {str(res.get('language')).upper()} | *Kelime:* {res.get('word_count')} adet"
+                    )
+                    speak = f"{sender_name} ses kaydında şöyle diyor: {text_content[:200]}"
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "analyze_voice_note", "audio_path": target_audio}
+
+        if action == "analyze_image_media":
+            from core_jarvis.tools.media_analyst import media_analyst
+            recent_imgs = media_analyst.get_recent_images(contact_name=target_hint or None, limit=3)
+            target_img = None
+            sender_name = target_hint or ""
+            if recent_imgs:
+                target_img = recent_imgs[0]["file_path"]
+                sender_name = recent_imgs[0]["sender_name"]
+            else:
+                img_files = sorted(list(media_analyst.media_dir.glob("*.jpg")) + list(media_analyst.media_dir.glob("*.jpeg")) + list(media_analyst.media_dir.glob("*.png")), key=lambda f: f.stat().st_mtime, reverse=True)
+                if img_files:
+                    target_img = str(img_files[0])
+
+            if not target_img:
+                reply = "⚠️ Analiz edilecek bir fotoğraf veya görsel bulunamadı efendim."
+                speak = "Görsel bulunamadı efendim."
+            else:
+                res = media_analyst.analyze_photo(target_img, user_prompt=cleaned_input)
+                meta = res.get("metadata", {})
+                analysis = res.get("analysis", "")
+                who_sent = f"{sender_name} tarafından gönderilen " if sender_name else ""
+                reply = (
+                    f"🖼️ **WhatsApp Görsel Analiz Raporu ({who_sent}{Path(target_img).name}):**\n\n"
+                    f"• **Çözünürlük:** {meta.get('width', '?')}x{meta.get('height', '?')} ({meta.get('file_size_kb', '?')} KB)\n"
+                    f"• **Detaylı İnceleme & OCR:**\n{analysis}"
+                )
+                speak = analysis[:220] if len(analysis) > 220 else analysis
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "analyze_image_media", "image_path": target_img}
+
+        if action == "analyze_video_media":
+            from core_jarvis.tools.media_analyst import media_analyst
+            recent_vids = media_analyst.get_recent_videos(contact_name=target_hint or None, limit=3)
+            target_vid = None
+            sender_name = target_hint or ""
+            if recent_vids:
+                target_vid = recent_vids[0]["file_path"]
+                sender_name = recent_vids[0]["sender_name"]
+            else:
+                vid_files = sorted(list(media_analyst.media_dir.glob("*.mp4")) + list(media_analyst.media_dir.glob("*.mov")), key=lambda f: f.stat().st_mtime, reverse=True)
+                if vid_files:
+                    target_vid = str(vid_files[0])
+
+            if not target_vid:
+                reply = "⚠️ Analiz edilecek bir video bulunamadı efendim."
+                speak = "Video bulunamadı efendim."
+            else:
+                res = media_analyst.analyze_video(target_vid, user_prompt=cleaned_input)
+                reply = res.get("summary", "Video analizi tamamlandı.")
+                transcript = res.get("audio_transcript", "")
+                speak = f"Videoyu inceledim efendim. Süre {res.get('duration_seconds')} saniye. " + (f"Videoda konuşulanlar: {transcript[:150]}" if transcript else "Ses kaydında belirgin konuşma yok.")
+            self._record_turn(user_text, reply)
+            return {"reply": reply, "speak_text": speak, "action_taken": "analyze_video_media", "video_path": target_vid}
 
         # 15. DEFAULT: RICH NATURAL CONVERSATION WITH QWEN
         return self._generate_conversational_reply(cleaned_input, session_history=session_history)

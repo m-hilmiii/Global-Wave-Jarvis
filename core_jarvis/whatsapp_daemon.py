@@ -623,7 +623,16 @@ class WhatsAppDaemon:
 
         effective_msg = raw_voice_text if (is_audio and raw_voice_text) else text
         if not effective_msg:
-            return
+            if media_info:
+                m_type = media_info.get("media_type")
+                if m_type == "image":
+                    effective_msg = "Bu fotoğrafı analiz et"
+                elif m_type == "video":
+                    effective_msg = "Bu videoyu analiz et"
+                elif m_type == "document":
+                    effective_msg = "Bu dokümanı özetle"
+            if not effective_msg:
+                return
 
         reply_target = owner_session.owner_phone if (phone == "me" or not phone or owner_session.is_owner(phone)) else phone
 
@@ -673,13 +682,28 @@ class WhatsAppDaemon:
                 is_trig, clean_cmd = owner_session.is_trigger_message(effective_msg)
                 task_text = (clean_cmd if is_trig and clean_cmd else effective_msg)
 
-            # Multimodal Image Inspection via VisionTool if owner sent an image
+            # Multimodal Image Inspection via MediaAnalyst if owner sent an image
             if media_info and media_info.get("media_type") == "image":
-                from core_jarvis.tools.vision_tool import vision_tool
+                from core_jarvis.tools.media_analyst import media_analyst
                 img_path = MEDIA_DIR / media_info.get("file_name", "")
-                vis_res = vision_tool.analyze_image(str(img_path), prompt=task_text or "Bu görseli analiz et")
-                vis_reply = f"🖼️ **Görsel Analizi (JARVIS Vision):**\n\n{vis_res.get('analysis')}"
-                self.send_message(reply_target, vis_reply)
+                img_res = media_analyst.analyze_photo(str(img_path), user_prompt=task_text or "Bu görseldeki nesneleri ve detayları açıkla")
+                self.send_message(reply_target, img_res.get("summary", "Görsel incelendi efendim."))
+                return
+
+            # Multimodal Video Inspection via MediaAnalyst if owner sent a video
+            if media_info and media_info.get("media_type") == "video":
+                from core_jarvis.tools.media_analyst import media_analyst
+                vid_path = MEDIA_DIR / media_info.get("file_name", "")
+                vid_res = media_analyst.analyze_video(str(vid_path), user_prompt=task_text or "Bu videoda neler olduğunu açıkla")
+                self.send_message(reply_target, vid_res.get("summary", "Video incelendi efendim."))
+                return
+
+            # Document / PDF Inspection if owner sent a document
+            if media_info and media_info.get("media_type") == "document" and (media_info.get("file_name", "").endswith(".pdf") or "pdf" in media_info.get("mimetype", "")):
+                from core_jarvis.tools.pdf_tool import pdf_tool
+                doc_path = MEDIA_DIR / media_info.get("file_name", "")
+                pdf_res = pdf_tool.summarize_pdf(str(doc_path), user_prompt=task_text or "")
+                self.send_message(reply_target, pdf_res.get("summary", "PDF dokümanı incelendi efendim."))
                 return
 
             # Revision 4: Fast system command bypass

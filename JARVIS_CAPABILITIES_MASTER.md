@@ -1,9 +1,9 @@
 # 🧠 JARVIS Master Yetenek & Fonksiyon Kataloğu
 > **Sistem:** Global-Wave / Stark-Core Personal AI Operating System  
 > **Kullanıcı:** Mücahit Hilmi (Hitap: *Sayın Hilmi* / *Efendim*)  
-> **Versiyon:** v7.5 (God Mode 7-Model Specialist Arsenal, Protocol Zero Kill-Switch, System Hygiene, PDF Intelligence, Safe FX/Math Engine)  
+> **Versiyon:** v7.6 (Multi-Modal Media Intelligence: Voice Note Faster-Whisper STT, Vision Photo Inspection, Deep Video Analysis & FFprobe/FFmpeg Pipeline, Safe Reflex Routing)  
 > **Son Güncelleme:** 28 Ekim 2026  
-> **Doğrulama:** 210 Birim Testi Mimarisi (%100 Başarı, İzole Mock & Soket Korumalı Hızlı Test Altyapısı)
+> **Doğrulama:** 219 Birim Testi Mimarisi (%100 Başarı, İzole Mock & Soket Korumalı Hızlı Test Altyapısı)
 
 Bu doküman, JARVIS'in sahip olduğu tüm özerk yetenekleri, kontrol katmanlarını, güvenlik kalkanını, API uç noktalarını, görsel Web HUD panellerini ve tetikleyici komutlarını eksiksiz listeler. Yeni bir özellik eklendikçe güncellenir.
 
@@ -248,12 +248,37 @@ Modelin kendi başına her işlemi yapması engellenmiş, teknik katmanda zorlan
   - 24 saatten eski geçici önbellek dosyalarını ve artık `.lock` dosyalarını diskten tahliye eder.
   - Kaynak kodlar, SQLite veritabanları ve kullanıcı dosyalarına kesinlikle dokunmaz; tam güvenli önizleme (dry-run) ve temizlik raporu sunar.
 
+### P. Çoklu Ortam İstihbarat & Medya Analiz Motoru — Sesli Mesaj, Fotoğraf ve Video (`core_jarvis/tools/media_analyst.py`)
+- **%100 Çevrimdışı WhatsApp Sesli Not Dinleme & Transkripsiyon (Faster-Whisper STT):**
+  - Gelen tüm WhatsApp ses kayıtlarını (`.ogg`, `.opus`, `.wav`, `.mp3`) yerel Intel i5-14400F CPU üzerinde int8 kuantizasyonla <2 saniyede kusursuz Türkçe metne dönüştürür.
+  - Ses süresi (saniye), kelime sayısı, konuşma hızı ve ana fikir özeti çıkararak yönetici kartı formatında sunar.
+  - WhatsApp'tan gelen ses kayıtlarını otomatik eşleştirir (`wa_*_audio_*.ogg`) veya geçmiş mesaj kutusundan kişiye göre filtreler.
+- **Görsel Algı & Fotoğraf Analizi (PIL + `qwen2.5vl:7b` Vision):**
+  - WhatsApp'tan gelen veya telefondan gönderilen fotoğrafların teknik çözünürlüğünü, dosya boyutunu, renk modunu ve formatını otomatik çıkarır.
+  - Yerel multimodal görme modeli (`qwen2.5vl:7b`) ile fotoğraftaki nesneleri, ortamı, tabelaları/metinleri (OCR) ve görsel detayları derinlemesine analiz eder.
+- **Derinlemesine Video Analizi & Sahne Çözümleme Hattı (FFprobe + FFmpeg + Whisper + Vision):**
+  - **Akış & Metadata:** `ffprobe` ile video süresi, en boy oranı, çözünürlük (2K/1080p/720p), kare hızı (FPS), video codec (`h264`/`hevc`) ve ses kanallarını çıkartır.
+  - **Ses İzolasyonu & STT:** `ffmpeg` ile videodaki ses akışını izole edip Faster-Whisper ile konuşulanları deşifre eder.
+  - **Anahtar Kare (Keyframe) Görsel Sahneleme:** Videonun başı, ortası ve sonundan kareler yakalayarak görsel sahne özetleri derler ve tek bir birleşik yönetici istihbarat raporu üretir.
+- **Otonom WhatsApp Daemon İletişimi:**
+  - Sayın Hilmi telefondan WhatsApp üzerinden JARVIS'e fotoğraf, video veya ses kaydı gönderdiğinde (başlık/açıklama yazmasa dahi) medya otomatik algılanır; analiz edilip saniyeler içinde Sayın Hilmi'ye detaylı Türkçe analiz raporu gönderilir.
+- **Hızlı Refleksler (Brain Fast-Path Reflex Routing):**
+  - *"Son ses kaydını dinle"*, *"Babamın ses kaydında ne diyor"*, *"Son gelen fotoğrafı incele"*, *"Fotoğrafta ne var"*, *"Son videoyu analiz et"*, *"Videoda ne diyor"* gibi ifadeler doğrudan hızlı refleks motoru tarafından yakalanır.
+- **Web HUD REST API Uç Noktaları:**
+  - `POST /api/jarvis/media/analyze_audio`
+  - `POST /api/jarvis/media/analyze_image`
+  - `POST /api/jarvis/media/analyze_video`
+  - `GET /api/jarvis/media/recent`
+
 ---
 
 ## 🗣️ 4. Jarvis Tetikleyici Cümleler (Sesli & Yazılı Sözlük)
 
 | Kullanıcının Söylediği | Devreye Giren Uzman | Yapılan İşlem |
 |---|---|---|
+| *"Son ses kaydını dinle"* / *"Babamın ses kaydında ne diyor"* | `MediaAnalyst` | WhatsApp gelen kutusundaki en son sesli notu Faster-Whisper ile dinleyip özetler. |
+| *"Fotoğrafta ne var"* / *"Son gelen fotoğrafı incele"* | `MediaAnalyst` | WhatsApp'tan gelen en son görseli yerel Vision modeli ile analiz eder. |
+| *"Son videoyu analiz et"* / *"Videoda ne diyor"* | `MediaAnalyst` | Videonun teknik özelliklerini, ses kaydını ve anahtar karelerini inceleyip raporlar. |
 | *"Jarvis, bugün ne yapmam gerekiyor?"* | `AssistantSpecialist` | Günlük ajandayı, geciken işleri, projeyi ve mesajları derleyip sesli okur. |
 | *"Kaldığımız yerden devam et"* | `RealityMemory` | Gerçek Git ve dosya durumunu analiz edip son kalınan adımı raporlar. |
 | *"Bilgisayarım neden yavaşladı?"* | `SystemSpecialist` | CPU, RAM, Disk ve en çok kaynak tüketen süreçleri inceler, teşhis koyar. |

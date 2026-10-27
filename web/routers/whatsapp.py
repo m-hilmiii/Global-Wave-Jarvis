@@ -281,3 +281,73 @@ async def api_jarvis_set_ai_delegate(request: Request):
         "active": whatsapp_daemon.ai_delegate_active,
         "targets": whatsapp_daemon.ai_delegate_targets
     }
+
+
+@router.post("/media/analyze_audio")
+async def api_jarvis_media_analyze_audio(request: Request):
+    """Transcribes an audio note via Whisper and provides duration/summary."""
+    from core_jarvis.tools.media_analyst import media_analyst
+    data = await _safe_json(request)
+    audio_path = data.get("file_path", "")
+    if not audio_path:
+        # Pick most recent voice note if not specified
+        notes = media_analyst.get_recent_voice_notes(limit=1)
+        if notes:
+            audio_path = notes[0]["file_path"]
+        else:
+            return JSONResponse({"status": "error", "message": "Ses dosyası yolu belirtilmedi ve kayıtlı sesli mesaj bulunamadı."}, status_code=status.HTTP_400_BAD_REQUEST)
+    res = await run_in_threadpool(media_analyst.transcribe_audio, audio_path)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+
+@router.post("/media/analyze_image")
+async def api_jarvis_media_analyze_image(request: Request):
+    """Analyzes a WhatsApp photo using Qwen2.5-VL vision model and PIL."""
+    from core_jarvis.tools.media_analyst import media_analyst
+    data = await _safe_json(request)
+    img_path = data.get("file_path", "")
+    prompt = data.get("prompt", "Bu görseli detaylıca analiz et")
+    if not img_path:
+        imgs = media_analyst.get_recent_images(limit=1)
+        if imgs:
+            img_path = imgs[0]["file_path"]
+        else:
+            return JSONResponse({"status": "error", "message": "Görsel dosyası yolu belirtilmedi ve kayıtlı fotoğraf bulunamadı."}, status_code=status.HTTP_400_BAD_REQUEST)
+    res = await run_in_threadpool(media_analyst.analyze_photo, img_path, user_prompt=prompt)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+
+@router.post("/media/analyze_video")
+async def api_jarvis_media_analyze_video(request: Request):
+    """Analyzes a video: probes specs, transcribes audio, inspects keyframes."""
+    from core_jarvis.tools.media_analyst import media_analyst
+    data = await _safe_json(request)
+    vid_path = data.get("file_path", "")
+    prompt = data.get("prompt", "Bu videoda neler olduğunu açıkla")
+    if not vid_path:
+        vids = media_analyst.get_recent_videos(limit=1)
+        if vids:
+            vid_path = vids[0]["file_path"]
+        else:
+            return JSONResponse({"status": "error", "message": "Video dosyası yolu belirtilmedi ve kayıtlı video bulunamadı."}, status_code=status.HTTP_400_BAD_REQUEST)
+    res = await run_in_threadpool(media_analyst.analyze_video, vid_path, user_prompt=prompt)
+    return {"status": "success" if res.get("success") else "error", "result": res}
+
+
+@router.get("/media/recent")
+async def api_jarvis_media_recent(request: Request):
+    """Lists recent media files received from WhatsApp (audio, image, video)."""
+    from core_jarvis.tools.media_analyst import media_analyst
+    media_type = request.query_params.get("type", "all")
+    contact = request.query_params.get("contact")
+    limit = int(request.query_params.get("limit", 10))
+
+    results = {}
+    if media_type in ("all", "audio"):
+        results["voice_notes"] = media_analyst.get_recent_voice_notes(contact_name=contact, limit=limit)
+    if media_type in ("all", "image"):
+        results["images"] = media_analyst.get_recent_images(contact_name=contact, limit=limit)
+    if media_type in ("all", "video"):
+        results["videos"] = media_analyst.get_recent_videos(contact_name=contact, limit=limit)
+
+    return {"status": "success", "results": results}
